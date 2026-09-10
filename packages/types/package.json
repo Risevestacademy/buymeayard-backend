@@ -1,0 +1,17 @@
+{
+  "name": "@buymeayard/types",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "@buymeayard/config": "workspace:*",
+    "typescript": "^5.7.0"
+  }
+}

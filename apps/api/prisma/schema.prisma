@@ -1,0 +1,545 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// --------------------------------------------------------
+// IDENTITY & BETTER-AUTH MODELS
+// --------------------------------------------------------
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  name          String?
+  image         String?
+  status        String    @default("ACTIVE") // ACTIVE, SUSPENDED, BANNED, DEACTIVATED
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Better Auth Relations
+  sessions      Session[]
+  accounts      AuthAccount[]
+
+  // Domain Relations
+  roles          UserRole[]
+  creatorProfile CreatorProfile?
+  supports       Support[]       @relation("SupporterSupports")
+  follows        Follow[]        @relation("SupporterFollows")
+  notifications  Notification[]
+  entitlements   PostEntitlement[]
+  reports        ContentReport[] @relation("ReporterReports")
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model AuthAccount {
+  id           String    @id @default(uuid())
+  userId       String
+  accountId    String
+  providerId   String
+  accessToken  String?
+  refreshToken String?
+  idToken      String?
+  expiresAt    DateTime?
+  password     String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([providerId, accountId])
+  @@map("auth_accounts")
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([identifier, value])
+  @@map("verifications")
+}
+
+model Role {
+  id        String     @id @default(uuid())
+  name      String     @unique // SUPPORTER, CREATOR, ADMIN, SUPER_ADMIN, MODERATOR, FINANCE, SUPPORT
+  createdAt DateTime   @default(now())
+  users     UserRole[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+// --------------------------------------------------------
+// CREATOR PROFILE & MENU
+// --------------------------------------------------------
+
+model CreatorProfile {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  username    String   @unique
+  displayName String
+  bio         String?
+  avatarUrl   String?
+  coverUrl    String?
+  categoryId  String?
+  status      String   @default("REGISTERED") // REGISTERED, PROFILE_CREATED, KYC_PENDING, VERIFIED, ACTIVE, SUSPENDED, BANNED, DEACTIVATED
+  kycStatus   String   @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category       CreatorCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  socialLinks    CreatorSocialLink[]
+  materials      CreatorMaterial[]
+  supports       Support[]            @relation("CreatorSupports")
+  payouts        Payout[]
+  payoutMethods  PayoutMethod[]
+  posts          Post[]
+  followers      Follow[]             @relation("CreatorFollowers")
+  kycSubmissions KycSubmission[]
+
+  @@index([username])
+  @@index([categoryId])
+  @@map("creator_profiles")
+}
+
+model CreatorCategory {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  slug      String   @unique
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creators CreatorProfile[]
+
+  @@map("creator_categories")
+}
+
+model CreatorSocialLink {
+  id        String   @id @default(uuid())
+  creatorId String
+  platform  String   // twitter, instagram, youtube, tiktok, etc.
+  url       String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@map("creator_social_links")
+}
+
+// --------------------------------------------------------
+// MATERIALS CATALOGUE & CREATOR MENU
+// --------------------------------------------------------
+
+model Material {
+  id           String   @id @default(uuid())
+  name         String   // Ankara, Lace, Aso-oke, Adire
+  slug         String   @unique
+  description  String?
+  imageUrl     String?
+  defaultPrice Int      @default(0) // Minor units (kobo)
+  currency     String   @default("NGN")
+  status       String   @default("ACTIVE")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  creatorMaterials CreatorMaterial[]
+
+  @@map("materials")
+}
+
+model CreatorMaterial {
+  id          String   @id @default(uuid())
+  creatorId   String
+  materialId  String
+  price       Int      // Minor units (kobo)
+  currency    String   @default("NGN")
+  displayName String?
+  description String?
+  status      String   @default("ACTIVE") // ACTIVE, INACTIVE
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator      CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  material     Material       @relation(fields: [materialId], references: [id], onDelete: Cascade)
+  supportItems SupportItem[]
+
+  @@unique([creatorId, materialId])
+  @@index([creatorId])
+  @@map("creator_materials")
+}
+
+// --------------------------------------------------------
+// SUPPORTS & PAYMENTS
+// --------------------------------------------------------
+
+model Support {
+  id            String   @id @default(uuid())
+  supporterId   String
+  creatorId     String
+  subtotal      Int      // Minor units
+  platformFee   Int      // Minor units
+  creatorAmount Int      // Minor units
+  totalAmount   Int      // Minor units (creatorAmount + platformFee)
+  currency      String   @default("NGN")
+  message       String?
+  isAnonymous   Boolean  @default(false)
+  status        String   @default("CREATED") // CREATED, PAYMENT_PENDING, PAID, COMPLETED, PAYMENT_FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  supporter User           @relation("SupporterSupports", fields: [supporterId], references: [id], onDelete: Cascade)
+  creator   CreatorProfile @relation("CreatorSupports", fields: [creatorId], references: [id], onDelete: Cascade)
+  items     SupportItem[]
+  payment   Payment?
+
+  @@index([creatorId])
+  @@index([supporterId])
+  @@index([createdAt])
+  @@map("supports")
+}
+
+model SupportItem {
+  id                   String   @id @default(uuid())
+  supportId            String
+  creatorMaterialId    String
+  materialNameSnapshot String   // Historical snapshot of material name
+  unitPrice            Int      // Historical price snapshot in minor units
+  quantity             Int      // Must be > 0
+  totalPrice           Int      // unitPrice * quantity
+  currency             String   @default("NGN")
+  createdAt            DateTime @default(now())
+
+  support         Support         @relation(fields: [supportId], references: [id], onDelete: Cascade)
+  creatorMaterial CreatorMaterial @relation(fields: [creatorMaterialId], references: [id], onDelete: Restrict)
+
+  @@map("support_items")
+}
+
+model Payment {
+  id                   String    @id @default(uuid())
+  supportId            String    @unique
+  provider             String    @default("PAYSTACK")
+  providerReference    String
+  providerTransactionId String?
+  amount               Int       // Minor units
+  currency             String    @default("NGN")
+  status               String    @default("PENDING") // PENDING, PROCESSING, SUCCESS, FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
+  paidAt               DateTime?
+  metadata             Json?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  support Support        @relation(fields: [supportId], references: [id], onDelete: Cascade)
+  events  PaymentEvent[]
+  refunds Refund[]
+
+  @@unique([provider, providerReference])
+  @@index([providerReference])
+  @@index([status])
+  @@map("payments")
+}
+
+model PaymentEvent {
+  id              String   @id @default(uuid())
+  paymentId       String
+  provider        String   @default("PAYSTACK")
+  eventType       String
+  providerEventId String
+  payload         Json
+  processedAt     DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerEventId])
+  @@map("payment_events")
+}
+
+model Refund {
+  id                String   @id @default(uuid())
+  paymentId         String
+  amount            Int      // Minor units
+  currency          String   @default("NGN")
+  reason            String?
+  providerReference String?
+  status            String   @default("PENDING")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@map("refunds")
+}
+
+// --------------------------------------------------------
+// FINANCIAL LEDGER & PAYOUTS
+// --------------------------------------------------------
+
+model Account {
+  id        String   @id @default(uuid())
+  ownerType String   // CREATOR, PLATFORM
+  ownerId   String   // creatorId or 'PLATFORM'
+  currency  String   @default("NGN")
+  status    String   @default("ACTIVE")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries LedgerEntry[]
+  payouts Payout[]
+
+  @@unique([ownerType, ownerId, currency])
+  @@map("accounts")
+}
+
+model LedgerEntry {
+  id            String   @id @default(uuid())
+  accountId     String
+  transactionId String
+  entryType     String   // SUPPORT_PAYMENT, PLATFORM_FEE, PAYOUT_RESERVATION, PAYOUT_COMPLETED, PAYOUT_REVERSED, REFUND, ADJUSTMENT
+  direction     String   // CREDIT, DEBIT
+  amount        Int      // Minor units (positive integer)
+  currency      String   @default("NGN")
+  reference     String
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId])
+  @@index([transactionId])
+  @@index([createdAt])
+  @@map("ledger_entries")
+}
+
+model Payout {
+  id                String    @id @default(uuid())
+  creatorId         String
+  accountId         String
+  amount            Int       // Minor units
+  currency          String    @default("NGN")
+  status            String    @default("REQUESTED") // REQUESTED, PENDING, PROCESSING, SUCCESS, FAILED, CANCELLED
+  provider          String    @default("PAYSTACK")
+  providerReference String?
+  requestedAt       DateTime  @default(now())
+  processedAt       DateTime?
+  failureReason     String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  account Account        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([creatorId])
+  @@index([status])
+  @@map("payouts")
+}
+
+model PayoutMethod {
+  id                String   @id @default(uuid())
+  creatorId         String
+  type              String   @default("BANK_ACCOUNT")
+  provider          String   @default("PAYSTACK")
+  accountIdentifier String   // Bank account number or recipient code
+  accountName       String
+  bankName          String
+  status            String   @default("ACTIVE")
+  isDefault         Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@map("payout_methods")
+}
+
+// --------------------------------------------------------
+// CONTENT & MEDIA
+// --------------------------------------------------------
+
+model Post {
+  id          String    @id @default(uuid())
+  creatorId   String
+  title       String
+  body        String
+  visibility  String    @default("PUBLIC") // PUBLIC, EXCLUSIVE
+  status      String    @default("DRAFT")  // DRAFT, PUBLISHED, ARCHIVED
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  creator      CreatorProfile    @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  media        PostMedia[]
+  entitlements PostEntitlement[]
+
+  @@index([creatorId])
+  @@index([publishedAt])
+  @@map("posts")
+}
+
+model Media {
+  id         String   @id @default(uuid())
+  ownerId    String
+  ownerType  String   // CREATOR, POST
+  storageKey String
+  mimeType   String
+  mediaType  String   // image, video, audio
+  fileSize   Int
+  status     String   @default("ACTIVE")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  posts PostMedia[]
+
+  @@map("media")
+}
+
+model PostMedia {
+  postId   String
+  mediaId  String
+  position Int    @default(0)
+
+  post  Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  media Media @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+
+  @@id([postId, mediaId])
+  @@map("post_media")
+}
+
+model PostEntitlement {
+  id          String    @id @default(uuid())
+  postId      String
+  supporterId String
+  grantedBy   String    // SUPPORT, ADMIN, GIFT
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  post      Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  supporter User @relation(fields: [supporterId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, supporterId])
+  @@map("post_entitlements")
+}
+
+// --------------------------------------------------------
+// SOCIAL, NOTIFICATIONS, KYC, MODERATION & AUDIT
+// --------------------------------------------------------
+
+model Follow {
+  supporterId String
+  creatorId   String
+  createdAt   DateTime @default(now())
+
+  supporter User           @relation("SupporterFollows", fields: [supporterId], references: [id], onDelete: Cascade)
+  creator   CreatorProfile @relation("CreatorFollowers", fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@id([supporterId, creatorId])
+  @@index([creatorId])
+  @@index([supporterId])
+  @@map("follows")
+}
+
+model Notification {
+  id        String    @id @default(uuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  data      Json?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+model KycSubmission {
+  id                String    @id @default(uuid())
+  creatorId         String
+  provider          String    @default("DEFAULT")
+  providerReference String?
+  status            String    @default("PENDING") // PENDING, VERIFIED, REJECTED, NEEDS_REVIEW
+  submittedAt       DateTime  @default(now())
+  reviewedAt        DateTime?
+  metadata          Json?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@map("kyc_submissions")
+}
+
+model ContentReport {
+  id          String    @id @default(uuid())
+  reporterId  String
+  contentId   String
+  reason      String
+  description String?
+  status      String    @default("PENDING") // PENDING, UNDER_REVIEW, RESOLVED, REJECTED
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  reporter User @relation("ReporterReports", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@map("content_reports")
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  actorId       String?
+  action        String
+  resourceType  String
+  resourceId    String
+  previousState Json?
+  newState      Json?
+  metadata      Json?
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  @@index([actorId])
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

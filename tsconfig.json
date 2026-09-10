@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "baseUrl": ".",
+    "paths": {
+      "@buymeayard/types": ["packages/types/src"],
+      "@buymeayard/config": ["packages/config"]
+    },
+    "skipLibCheck": true
+  },
+  "references": [
+    { "path": "./packages/types" },
+    { "path": "./apps/api" }
+  ],
+  "files": []
+}
