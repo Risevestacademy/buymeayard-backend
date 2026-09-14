@@ -55,6 +55,42 @@ describe('UsersService', () => {
     });
   });
 
+  describe('getPublicProfile', () => {
+    it('should return safe public profile without sensitive fields', async () => {
+      const mockUser = {
+        id: 'user-1',
+        name: 'Ade',
+        image: 'https://example.com/avatar.jpg',
+        creatorProfile: {
+          id: 'creator-1',
+          username: 'adeola',
+          displayName: 'Adeola',
+          status: 'ACTIVE',
+        },
+        createdAt: new Date(),
+      };
+
+      (prismaService.user!.findUnique as jest.Mock).mockResolvedValue(mockUser);
+
+      const result = await usersService.getPublicProfile('user-1');
+      expect(result.id).toBe('user-1');
+      expect(result.name).toBe('Ade');
+      expect(result.creatorProfile?.username).toBe('adeola');
+      // Assert sensitive fields are undefined in public profile
+      expect((result as any).email).toBeUndefined();
+      expect((result as any).roles).toBeUndefined();
+      expect((result as any).status).toBeUndefined();
+    });
+
+    it('should throw NotFoundException if user does not exist', async () => {
+      (prismaService.user!.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        usersService.getPublicProfile('non-existent'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('updateProfile', () => {
     it('should update user fields and return updated profile', async () => {
       (prismaService.user!.findUnique as jest.Mock).mockResolvedValue({

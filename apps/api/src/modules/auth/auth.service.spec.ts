@@ -7,6 +7,7 @@ const mockBetterAuthInstance = {
     getSession: jest.fn(),
     signUpEmail: jest.fn(),
     signInEmail: jest.fn(),
+    signOut: jest.fn(),
   },
 };
 
@@ -88,9 +89,15 @@ describe('AuthService', () => {
   });
 
   describe('signUpEmail', () => {
-    it('should call signUpEmail on betterAuth api', async () => {
-      const mockResult = { user: { id: 'u3', email: 'test@example.com' } };
-      mockBetterAuthInstance.api.signUpEmail.mockResolvedValue(mockResult);
+    it('should call signUpEmail on betterAuth api with asResponse: true', async () => {
+      const mockWebResponse = new Response(
+        JSON.stringify({ user: { id: 'u3' } }),
+        {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+      mockBetterAuthInstance.api.signUpEmail.mockResolvedValue(mockWebResponse);
 
       const result = await service.signUpEmail({
         email: 'test@example.com',
@@ -98,33 +105,59 @@ describe('AuthService', () => {
         name: 'Test User',
       });
 
-      expect(result).toEqual(mockResult);
+      expect(result).toEqual(mockWebResponse);
       expect(mockBetterAuthInstance.api.signUpEmail).toHaveBeenCalledWith({
         body: {
           email: 'test@example.com',
           password: 'Password123!',
           name: 'Test User',
         },
+        asResponse: true,
       });
     });
   });
 
   describe('signInEmail', () => {
-    it('should call signInEmail on betterAuth api', async () => {
-      const mockResult = { user: { id: 'u4', email: 'test@example.com' } };
-      mockBetterAuthInstance.api.signInEmail.mockResolvedValue(mockResult);
+    it('should call signInEmail on betterAuth api with asResponse: true', async () => {
+      const mockWebResponse = new Response(
+        JSON.stringify({ user: { id: 'u4' } }),
+        {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+      mockBetterAuthInstance.api.signInEmail.mockResolvedValue(mockWebResponse);
 
       const result = await service.signInEmail({
         email: 'test@example.com',
         password: 'Password123!',
       });
 
-      expect(result).toEqual(mockResult);
+      expect(result).toEqual(mockWebResponse);
       expect(mockBetterAuthInstance.api.signInEmail).toHaveBeenCalledWith({
         body: {
           email: 'test@example.com',
           password: 'Password123!',
         },
+        asResponse: true,
+      });
+    });
+  });
+
+  describe('signOut', () => {
+    it('should call signOut on betterAuth api with asResponse: true', async () => {
+      const mockWebResponse = new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+      mockBetterAuthInstance.api.signOut.mockResolvedValue(mockWebResponse);
+
+      const result = await service.signOut();
+
+      expect(result).toEqual(mockWebResponse);
+      expect(mockBetterAuthInstance.api.signOut).toHaveBeenCalledWith({
+        headers: expect.any(Headers),
+        asResponse: true,
       });
     });
   });
