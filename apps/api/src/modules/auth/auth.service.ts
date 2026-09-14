@@ -43,22 +43,39 @@ export class AuthService implements OnModuleInit {
     email: string;
     password: string;
     name?: string;
-  }) {
+    headers?: Headers;
+  }): Promise<globalThis.Response> {
     return this.getAuth().api.signUpEmail({
       body: {
         email: params.email,
         password: params.password,
         name: params.name || params.email.split('@')[0],
       },
+      ...(params.headers ? { headers: params.headers } : {}),
+      asResponse: true,
     });
   }
 
-  async signInEmail(params: { email: string; password: string }) {
+  async signInEmail(params: {
+    email: string;
+    password: string;
+    headers?: Headers;
+  }): Promise<globalThis.Response> {
     return this.getAuth().api.signInEmail({
       body: {
         email: params.email,
         password: params.password,
       },
+      ...(params.headers ? { headers: params.headers } : {}),
+      asResponse: true,
+    });
+  }
+
+  async signOut(params?: { headers?: Headers }): Promise<globalThis.Response> {
+    const headers = params?.headers || new Headers();
+    return this.getAuth().api.signOut({
+      headers,
+      asResponse: true,
     });
   }
 }

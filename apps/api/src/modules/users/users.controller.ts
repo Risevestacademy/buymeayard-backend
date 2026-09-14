@@ -8,6 +8,7 @@ import {
 import { UsersService } from './users.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UserRole } from '@buymeayard/types';
 
 @ApiTags('users')
 @ApiBearerAuth()
@@ -33,9 +34,24 @@ export class UsersController {
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get user profile by user ID' })
-  @ApiResponse({ status: 200, description: 'User found' })
-  async getUserById(@Param('id') id: string) {
-    return this.usersService.findByIdWithRoles(id);
+  @ApiOperation({
+    summary:
+      'Get user profile (full details for self/admin, public profile for others)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'User profile retrieved successfully',
+  })
+  async getUserById(@Param('id') id: string, @CurrentUser() currentUser: any) {
+    const isSelf = currentUser?.id === id;
+    const isAdmin =
+      currentUser?.roles?.includes(UserRole.ADMIN) ||
+      currentUser?.roles?.includes(UserRole.SUPER_ADMIN);
+
+    if (isSelf || isAdmin) {
+      return this.usersService.findByIdWithRoles(id);
+    }
+
+    return this.usersService.getPublicProfile(id);
   }
 }
