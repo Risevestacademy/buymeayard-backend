@@ -20,6 +20,7 @@
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
+    "@better-auth/infra": "^0.4.9",
     "@buymeayard/types": "workspace:*",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.0",
