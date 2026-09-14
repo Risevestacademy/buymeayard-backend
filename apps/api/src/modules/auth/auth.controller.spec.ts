@@ -22,10 +22,13 @@ describe('AuthController', () => {
     getAuth: jest.Mock;
   };
 
-  const createMockReqRes = () => {
-    const req = { headers: { host: 'localhost:4000' } } as any;
+  const createMockReqRes = (headers: Record<string, string> = {}) => {
+    const req = {
+      headers: { host: 'localhost:4000', ...headers },
+    } as any;
     const res = {
       setHeader: jest.fn(),
+      removeHeader: jest.fn(),
       status: jest.fn().mockReturnThis(),
     } as any;
     return { req, res };
@@ -58,7 +61,7 @@ describe('AuthController', () => {
   });
 
   describe('register', () => {
-    it('should call signUpEmail, forward set-cookie headers, and return response payload', async () => {
+    it('should forward set-cookie headers for web browser requests (no mobile header)', async () => {
       const dto = {
         email: 'alice@example.com',
         password: 'Password123!',
@@ -91,6 +94,49 @@ describe('AuthController', () => {
       });
     });
 
+    it('should suppress cookies and return token in JSON response for mobile requests (x-client-type: mobile)', async () => {
+      const dto = {
+        email: 'alice@example.com',
+        password: 'Password123!',
+        name: 'Alice',
+      };
+      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
+
+      const webHeaders = new Headers();
+      webHeaders.set(
+        'set-cookie',
+        'better-auth.session_token=token123; Path=/; HttpOnly',
+      );
+      webHeaders.set('content-type', 'application/json');
+
+      const mockWebResponse = new Response(
+        JSON.stringify({ user: { id: 'u1', email: 'alice@example.com' } }),
+        { status: 201, headers: webHeaders },
+      );
+      authService.signUpEmail.mockResolvedValue(mockWebResponse);
+
+      const result = await controller.register(dto, req, res);
+
+      // Verify cookies are suppressed
+      expect(res.removeHeader).toHaveBeenCalledWith('set-cookie');
+      expect(res.setHeader).not.toHaveBeenCalledWith(
+        'set-cookie',
+        expect.anything(),
+      );
+
+      // Verify token is in JSON response
+      expect(result).toEqual({
+        token: 'token123',
+        user: { id: 'u1', email: 'alice@example.com' },
+      });
+
+      // Verify Bearer authorization header is set
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'authorization',
+        'Bearer token123',
+      );
+    });
+
     it('should throw HttpException when better-auth returns an error response', async () => {
       const dto = {
         email: 'alice@example.com',
@@ -115,7 +161,7 @@ describe('AuthController', () => {
   });
 
   describe('login', () => {
-    it('should call signInEmail, propagate session cookie, and return payload', async () => {
+    it('should propagate session cookie for web frontend', async () => {
       const dto = { email: 'alice@example.com', password: 'Password123!' };
       const { req, res } = createMockReqRes();
 
@@ -141,10 +187,41 @@ describe('AuthController', () => {
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
       expect(result).toEqual({ user: { id: 'u1' }, token: 'token456' });
     });
+
+    it('should return token in JSON and omit cookies for mobile requests (x-platform: ios)', async () => {
+      const dto = { email: 'alice@example.com', password: 'Password123!' };
+      const { req, res } = createMockReqRes({ 'x-platform': 'ios' });
+
+      const webHeaders = new Headers();
+      webHeaders.set(
+        'set-cookie',
+        'better-auth.session_token=token456; Path=/; HttpOnly',
+      );
+      webHeaders.set('content-type', 'application/json');
+
+      const mockWebResponse = new Response(
+        JSON.stringify({ user: { id: 'u1' }, token: 'token456' }),
+        { status: 200, headers: webHeaders },
+      );
+      authService.signInEmail.mockResolvedValue(mockWebResponse);
+
+      const result = await controller.login(dto, req, res);
+
+      expect(res.removeHeader).toHaveBeenCalledWith('set-cookie');
+      expect(res.setHeader).not.toHaveBeenCalledWith(
+        'set-cookie',
+        expect.anything(),
+      );
+      expect(result).toEqual({ token: 'token456', user: { id: 'u1' } });
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'authorization',
+        'Bearer token456',
+      );
+    });
   });
 
   describe('logout', () => {
-    it('should call signOut, forward cookie clearance, and return success', async () => {
+    it('should forward cookie clearance for web frontend', async () => {
       const { req, res } = createMockReqRes();
 
       const webHeaders = new Headers();
@@ -165,6 +242,29 @@ describe('AuthController', () => {
       ]);
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
       expect(result).toEqual({ success: true });
+    });
+
+    it('should omit cookies for mobile logout', async () => {
+      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
+
+      const webHeaders = new Headers();
+      webHeaders.set('set-cookie', 'better-auth.session_token=; Max-Age=0');
+      webHeaders.set('content-type', 'application/json');
+
+      const mockWebResponse = new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: webHeaders,
+      });
+      authService.signOut.mockResolvedValue(mockWebResponse);
+
+      const result = await controller.logout(req, res);
+
+      expect(res.removeHeader).toHaveBeenCalledWith('set-cookie');
+      expect(res.setHeader).not.toHaveBeenCalledWith(
+        'set-cookie',
+        expect.anything(),
+      );
+      expect(result).toEqual({ token: null, success: true });
     });
   });
 
