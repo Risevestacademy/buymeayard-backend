@@ -7,6 +7,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { UserRole } from '@buymeayard/types';
 import { ROLES_KEY } from '../decorators/roles.decorator';
+import { ErrorCodes } from '../errors/error-codes';
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -25,7 +26,7 @@ export class RolesGuard implements CanActivate {
     const { user } = context.switchToHttp().getRequest();
     if (!user) {
       throw new ForbiddenException({
-        code: 'FORBIDDEN',
+        code: ErrorCodes.FORBIDDEN,
         message: 'No user authenticated to check permissions',
       });
     }
@@ -35,7 +36,7 @@ export class RolesGuard implements CanActivate {
 
     if (!hasRole) {
       throw new ForbiddenException({
-        code: 'FORBIDDEN',
+        code: ErrorCodes.FORBIDDEN,
         message: 'You do not have the required permissions for this action',
       });
     }
