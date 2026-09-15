@@ -171,45 +171,91 @@ The PostgreSQL schema implements 24 models covering all TRD requirements:
 ## 9. Local Development & Setup
 
 ### Prerequisites
-- Node.js >= 20.0.0
-- pnpm >= 11.0.0
-- PostgreSQL & Redis (local or Docker)
+- **Node.js**: `>= 20.0.0`
+- **pnpm**: `>= 11.0.0`
+- **Docker & Docker Compose**: For local PostgreSQL and Redis
 
-### Installation
+---
+
+### Step-by-Step Setup
+
+#### 1. Clone & Install Dependencies
 ```bash
 # Clone the repository
 git clone https://github.com/Risevestacademy/buymeayard-backend.git
 cd buymeayard-backend
 
-# Install dependencies across monorepo
+# Install dependencies across all monorepo workspaces
 pnpm install
 
 # Generate Prisma Client
 pnpm --filter @buymeayard/api prisma:generate
 ```
 
-### Environment Configuration
+#### 2. Configure Environment Variables
 Copy [.env.example](file:///home/phantom/Documents/Github/buymeayard-backend/apps/api/.env.example) to `.env` in `apps/api/`:
 ```bash
 cp apps/api/.env.example apps/api/.env
 ```
+Ensure `BETTER_AUTH_SECRET` is set to a secure string (minimum 32 characters).
 
-### Build, Test & Run
+#### 3. Start Database & Redis (Docker)
+Start the local PostgreSQL and Redis containers:
 ```bash
-# Build all packages and applications
-pnpm build
-
-# Run unit tests
-pnpm test
-
-# Run linter
-pnpm lint
-
-# Start API in development mode (with hot-reload)
-pnpm --filter @buymeayard/api dev
+pnpm db:up
 ```
 
-### API Endpoints & Documentation
-- **API Base:** `http://localhost:3000/api/v1`
-- **Swagger Documentation:** `http://localhost:3000/api/docs`
-- **Health Check:** `http://localhost:3000/health`
+#### 4. Run Database Migrations
+Apply the Prisma schema migrations to your local PostgreSQL instance:
+```bash
+pnpm db:migrate
+```
+
+#### 5. Start Backend API Server
+Start the NestJS application with hot-reload:
+```bash
+pnpm dev
+```
+*(Or target the API package specifically: `pnpm --filter @buymeayard/api dev`)*
+
+---
+
+### Useful Development Commands
+
+| Command | Description |
+| :--- | :--- |
+| `pnpm dev` | Start backend in development mode with hot-reload |
+| `pnpm build` | Compile all monorepo packages and applications |
+| `pnpm test` | Run automated unit test suite across workspaces |
+| `pnpm lint` | Run ESLint with auto-fix across all packages |
+| `pnpm db:up` | Boot local PostgreSQL & Redis containers in background |
+| `pnpm db:down` | Stop local PostgreSQL & Redis containers |
+| `pnpm db:logs` | View live streaming logs from database containers |
+| `pnpm db:migrate` | Run Prisma migrations against the local database |
+| `pnpm db:studio` | Launch visual Prisma Studio database GUI |
+
+---
+
+### Client Authentication Guide
+The backend supports dual-mode authentication via Better Auth:
+
+- **Web Applications (Browsers):**
+  - Standard cookie authentication. On login/register, Better Auth sets secure HTTP-only session cookies (`better-auth.session_token`).
+- **Mobile Applications (React Native / iOS / Android):**
+  - Send the header `x-client-type: mobile` (or `x-platform: mobile`).
+  - The API strips `Set-Cookie` headers and returns the session token directly in the JSON response:
+    ```json
+    {
+      "token": "session-token-here",
+      "user": { ... }
+    }
+    ```
+  - For subsequent requests, authenticate using `Authorization: Bearer <token>`.
+
+---
+
+### Endpoints & Documentation
+- **API Base:** [http://localhost:3000/api/v1](http://localhost:3000/api/v1)
+- **Interactive Swagger Docs:** [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
+- **Health Check:** [http://localhost:3000/health](http://localhost:3000/health)
+- **Prisma Studio:** [http://localhost:5555](http://localhost:5555) (via `pnpm db:studio`)
