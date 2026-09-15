@@ -211,7 +211,14 @@ Apply the Prisma schema migrations to your local PostgreSQL instance:
 pnpm db:migrate
 ```
 
-#### 5. Start Backend API Server
+#### 5. Seed the Database
+Populate the database with the required default roles and the initial Super Admin account (`admin@buymeayard.com` / `AdminPassword123!`):
+```bash
+cd apps/api && pnpm prisma db seed
+```
+*(You can also run this command in your production environment's shell to seed your production database).*
+
+#### 6. Start Backend API Server
 Start the NestJS application with hot-reload:
 ```bash
 pnpm dev
