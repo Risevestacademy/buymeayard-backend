@@ -37,11 +37,30 @@ export class HttpExceptionFilter implements ExceptionFilter {
           (Array.isArray(resObj.message) ? resObj.message : undefined);
       }
     } else if (exception instanceof Error) {
-      this.logger.error(
-        `Unhandled Exception: ${exception.message}`,
-        exception.stack,
-      );
+      status = HttpStatus.INTERNAL_SERVER_ERROR;
       message = exception.message;
+    }
+
+    const request = ctx.getRequest();
+    const logContext = {
+      path: request.url,
+      method: request.method,
+      body: request.body,
+      query: request.query,
+      params: request.params,
+      ip: request.ip,
+      errorDetails: details,
+      stack: exception instanceof Error ? exception.stack : undefined,
+    };
+
+    if (status >= 500) {
+      this.logger.error(`[${request.method} ${request.url}] ${message}`, {
+        ...logContext,
+      });
+    } else {
+      this.logger.warn(`[${request.method} ${request.url}] ${message}`, {
+        ...logContext,
+      });
     }
 
     response.status(status).json({
