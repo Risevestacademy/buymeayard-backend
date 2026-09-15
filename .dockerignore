@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Turbo cache
+.turbo/
+
+# Git
+.git/
+.gitignore
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+coverage/
+*.lcov
+
+# Docker local dev (not needed in prod image)
+docker-compose.yml
+
+# Documentation
+docs/
+README.md
+LICENSE
+
+# Logs
+logs/
+*.log
