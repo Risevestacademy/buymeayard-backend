@@ -1,0 +1,32 @@
+name: CD — Deploy to Render
+
+on:
+  # Only deploy after CI passes on main
+  push:
+    branches: [main]
+
+  # Allow manual trigger from GitHub UI
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false # never cancel an in-progress deploy
+
+jobs:
+  # Gate: run the full CI pipeline first
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Deploy to Render
+    needs: ci
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Trigger Render deploy hook
+        run: |
+          curl -sf "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" \
+            || (echo "::error::Render deploy hook failed" && exit 1)
+
+      - name: Deploy triggered
+        run: echo "✅ Render deploy triggered successfully. Check https://dashboard.render.com for build status."

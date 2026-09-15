@@ -283,6 +283,21 @@ The CI environment spins up **PostgreSQL 16** and **Redis 7** as service contain
 
 The workflow is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
+### Continuous Deployment (Render)
+
+When code is pushed to `main`, the CD workflow ([`.github/workflows/cd.yml`](.github/workflows/cd.yml)) runs the full CI pipeline first, then triggers a Render deploy via webhook.
+
+```
+push to main → CI (lint + test + build) → trigger Render deploy hook → Render builds Docker image → live
+```
+
+**Setup steps:**
+
+1. In the [Render Dashboard](https://dashboard.render.com), create a new **Blueprint Instance** pointing to this repo — Render will read [`render.yaml`](render.yaml) and provision the web service, Postgres, and Redis.
+2. In Render, go to your web service → **Settings → Deploy Hook** and copy the URL.
+3. In GitHub, go to **Settings → Secrets → Actions** and add `RENDER_DEPLOY_HOOK_URL` with the copied URL.
+4. Set the remaining env vars in Render that are marked `sync: false` (Paystack keys, Cloudinary, `APP_URL`, `BETTER_AUTH_URL`).
+
 ---
 
 ## 11. Production Docker Build
@@ -327,5 +342,7 @@ docker run -p 3000:3000 \
 | :--- | :--- |
 | **Database Schema** | [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) — Full ER diagram, table dictionaries, and financial invariants |
 | **API Reference (Swagger)** | [http://localhost:3000/api/docs](http://localhost:3000/api/docs) — Interactive API documentation (run `pnpm dev` first) |
-| **CI/CD Pipeline** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
-| **Production Dockerfile** | [`Dockerfile`](Dockerfile) |
+| **CI Pipeline** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — Lint → Test → Build |
+| **CD Pipeline** | [`.github/workflows/cd.yml`](.github/workflows/cd.yml) — Deploy to Render on push to `main` |
+| **Render Blueprint** | [`render.yaml`](render.yaml) — Infrastructure-as-code for Render services |
+| **Production Dockerfile** | [`Dockerfile`](Dockerfile) — Multi-stage Docker build |
