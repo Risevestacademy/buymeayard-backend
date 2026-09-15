@@ -259,3 +259,73 @@ The backend supports dual-mode authentication via Better Auth:
 - **Interactive Swagger Docs:** [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
 - **Health Check:** [http://localhost:3000/health](http://localhost:3000/health)
 - **Prisma Studio:** [http://localhost:5555](http://localhost:5555) (via `pnpm db:studio`)
+
+---
+
+## 10. CI/CD Pipeline
+
+The project uses **GitHub Actions** for continuous integration. The workflow runs on every push or pull request to `main` and `dev`.
+
+### Pipeline Steps
+
+| Step | What it does |
+| :--- | :--- |
+| **Checkout** | Clones the repository |
+| **Install pnpm** | Sets up pnpm v11 with dependency caching |
+| **Setup Node.js** | Configures Node.js v20 |
+| **Install dependencies** | Runs `pnpm install --frozen-lockfile` |
+| **Generate Prisma client** | Generates the typed database client |
+| **Lint** | Runs ESLint across all packages |
+| **Test** | Runs the full Jest test suite |
+| **Build** | Compiles all packages via Turborepo |
+
+The CI environment spins up **PostgreSQL 16** and **Redis 7** as service containers, so integration tests can run against real backing services.
+
+The workflow is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+---
+
+## 11. Production Docker Build
+
+The project includes a multi-stage `Dockerfile` optimized for production deployments.
+
+### Build & Run
+
+```bash
+# Build the production image
+docker build -t buymeayard-api .
+
+# Run the container
+docker run -p 3000:3000 \
+  -e DATABASE_URL="postgresql://..." \
+  -e REDIS_URL="redis://..." \
+  -e BETTER_AUTH_SECRET="your-production-secret" \
+  -e BETTER_AUTH_URL="https://api.yoursite.com" \
+  -e PAYSTACK_SECRET_KEY="sk_live_..." \
+  -e PAYSTACK_WEBHOOK_SECRET="..." \
+  buymeayard-api
+```
+
+### Image Stages
+
+| Stage | Base | Purpose |
+| :--- | :--- | :--- |
+| **pruner** | `node:20-alpine` | Uses `turbo prune` to extract only the `@buymeayard/api` package and its workspace dependencies |
+| **installer** | `node:20-alpine` | Installs deps, generates Prisma client, builds the NestJS app |
+| **runner** | `node:20-alpine` | Minimal runtime — copies only compiled output, `node_modules`, and Prisma schema. Uses `dumb-init` for proper PID 1 signal handling |
+
+### Key Design Decisions
+- **Turbo prune** reduces the Docker context to only the files needed for the API app, keeping the image small.
+- **Dependency layer caching** — `package.json` files are copied and installed before source code, so rebuilds after code changes skip the slow `pnpm install` step.
+- **dumb-init** ensures `SIGTERM` is forwarded correctly to the Node process for graceful shutdowns in Kubernetes, ECS, or any orchestrator.
+
+---
+
+## 12. Project Documentation
+
+| Document | Location |
+| :--- | :--- |
+| **Database Schema** | [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) — Full ER diagram, table dictionaries, and financial invariants |
+| **API Reference (Swagger)** | [http://localhost:3000/api/docs](http://localhost:3000/api/docs) — Interactive API documentation (run `pnpm dev` first) |
+| **CI/CD Pipeline** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
+| **Production Dockerfile** | [`Dockerfile`](Dockerfile) |
