@@ -283,20 +283,23 @@ The CI environment spins up **PostgreSQL 16** and **Redis 7** as service contain
 
 The workflow is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
-### Continuous Deployment (Render)
+### Manual Deployment to Render
 
-When code is pushed to `main`, the CD workflow ([`.github/workflows/cd.yml`](.github/workflows/cd.yml)) runs the full CI pipeline first, then triggers a Render deploy via webhook.
+To deploy the API to Render without using a Blueprint (which requires a payment method):
 
-```
-push to main → CI (lint + test + build) → trigger Render deploy hook → Render builds Docker image → live
-```
-
-**Setup steps:**
-
-1. In the [Render Dashboard](https://dashboard.render.com), create a new **Blueprint Instance** pointing to this repo — Render will read [`render.yaml`](render.yaml) and provision the web service, Postgres, and Redis.
-2. In Render, go to your web service → **Settings → Deploy Hook** and copy the URL.
-3. In GitHub, go to **Settings → Secrets → Actions** and add `RENDER_DEPLOY_HOOK_URL` with the copied URL.
-4. Set the remaining env vars in Render that are marked `sync: false` (Paystack keys, Cloudinary, `APP_URL`, `BETTER_AUTH_URL`).
+1. Go to the [Render Dashboard](https://dashboard.render.com).
+2. Click **New** → **Web Service**.
+3. Connect this GitHub repository and configure:
+   - **Branch**: `main`
+   - **Runtime**: `Docker` (Auto-detected from `Dockerfile`)
+   - **Instance Type**: `Free`
+4. In the **Environment Variables** section, add the required variables:
+   - `DATABASE_URL` (Use Neon or Supabase)
+   - `REDIS_URL` (Use Upstash)
+   - `NODE_ENV=production`
+   - `PORT=3000`
+   - Your secret keys (Paystack, Cloudinary, Better Auth)
+5. Render will automatically build and deploy new commits pushed to the `main` branch.
 
 ---
 
@@ -325,9 +328,9 @@ docker run -p 3000:3000 \
 
 | Stage | Base | Purpose |
 | :--- | :--- | :--- |
-| **pruner** | `node:20-alpine` | Uses `turbo prune` to extract only the `@buymeayard/api` package and its workspace dependencies |
-| **installer** | `node:20-alpine` | Installs deps, generates Prisma client, builds the NestJS app |
-| **runner** | `node:20-alpine` | Minimal runtime — copies only compiled output, `node_modules`, and Prisma schema. Uses `dumb-init` for proper PID 1 signal handling |
+| **pruner** | `node:22-alpine` | Uses `turbo prune` to extract only the `@buymeayard/api` package and its workspace dependencies |
+| **installer** | `node:22-alpine` | Installs deps, generates Prisma client, builds the NestJS app |
+| **runner** | `node:22-alpine` | Minimal runtime — copies only compiled output, `node_modules`, and Prisma schema. Uses `dumb-init` for proper PID 1 signal handling |
 
 ### Key Design Decisions
 - **Turbo prune** reduces the Docker context to only the files needed for the API app, keeping the image small.
@@ -343,6 +346,5 @@ docker run -p 3000:3000 \
 | **Database Schema** | [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) — Full ER diagram, table dictionaries, and financial invariants |
 | **API Reference (Swagger)** | [http://localhost:3000/api/docs](http://localhost:3000/api/docs) — Interactive API documentation (run `pnpm dev` first) |
 | **CI Pipeline** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — Lint → Test → Build |
-| **CD Pipeline** | [`.github/workflows/cd.yml`](.github/workflows/cd.yml) — Deploy to Render on push to `main` |
-| **Render Blueprint** | [`render.yaml`](render.yaml) — Infrastructure-as-code for Render services |
 | **Production Dockerfile** | [`Dockerfile`](Dockerfile) — Multi-stage Docker build |
+
