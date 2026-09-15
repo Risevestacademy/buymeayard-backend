@@ -45,6 +45,7 @@ ENV PORT=3000
 COPY --from=installer /app/apps/api/dist ./apps/api/dist
 COPY --from=installer /app/apps/api/package.json ./apps/api/package.json
 COPY --from=installer /app/apps/api/prisma ./apps/api/prisma
+COPY --from=installer /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=installer /app/node_modules ./node_modules
 COPY --from=installer /app/packages ./packages
 COPY --from=installer /app/package.json ./package.json
