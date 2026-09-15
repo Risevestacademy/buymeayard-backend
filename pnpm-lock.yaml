@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      '@nestjs/event-emitter':
+        specifier: ^12.0.1
+        version: 12.0.1(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.3)
     devDependencies:
       prettier:
         specifier: ^3.5.0
@@ -56,6 +60,9 @@ importers:
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
+      posthog-node:
+        specifier: ^5.52.2
+        version: 5.52.2(rxjs@7.8.2)
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
@@ -863,6 +870,13 @@ packages:
       '@nestjs/websockets':
         optional: true
 
+  '@nestjs/event-emitter@12.0.1':
+    resolution: {integrity: sha512-7MbpgNcxUcDlqcYY/qgZm1H7MfK3uGcRsd8lEjj9ZYvI9qTl6kdkkykpxZ6YjBRH3wlZK5dFLAei8h5qpsHzOw==}
+    engines: {node: '>=20.19.0'}
+    peerDependencies:
+      '@nestjs/common': ^11.0.0 || ^12.0.0
+      '@nestjs/core': ^11.0.0 || ^12.0.0
+
   '@nestjs/mapped-types@2.1.1':
     resolution: {integrity: sha512-SCCoMEJ6jdeI5h/N+KCVF1+pmg/hmEkNA5nHTS8Gvww7T/LCl4o1gFLinw2iQ60w7slFkszHcGLKGdazVI4F8A==}
     peerDependencies:
@@ -1029,6 +1043,12 @@ packages:
   '@pkgr/core@0.3.6':
     resolution: {integrity: sha512-SEeaJLb3qBNF/OaXnaR1NmmBbFYk1zC0ZH/52fATcRPLFg/p791YrcyFFy44Bo9sLaGuSuLp5Q6axbb/O+v/RA==}
     engines: {node: ^14.18.0 || >=16.0.0}
+
+  '@posthog/core@1.54.0':
+    resolution: {integrity: sha512-168MROFCM9YsGcCrbI4zukwR1lmLtKCvJk1NRuRS3PlhpMDBgmdNBxefPifb7nBCQz+61lrWq70saXdFhNdbiQ==}
+
+  '@posthog/types@1.412.0':
+    resolution: {integrity: sha512-EP+lSTnEmftW/slhGXsuGcYAygO4oho3hjWqObP+GeceZ+6qcwK9qZwVRqJjsiZAl0xLPy5s0U0SZqGKayFyeQ==}
 
   '@prisma/client@6.19.3':
     resolution: {integrity: sha512-mKq3jQFhjvko5LTJFHGilsuQs+W+T3Gm451NzuTDGQxwCzwXHYnIu2zGkRoW+Exq3Rob7yp2MfzSrdIiZVhrBg==}
@@ -2146,6 +2166,9 @@ packages:
     resolution: {integrity: sha512-aIL5Fx7mawVa300al2BnEE4iNvo1qETxLrPI/o05L7z6go7fCw1J6EQmbK4FmJ2AS7kgVF/KEZWufBfdClMcPg==}
     engines: {node: '>= 0.6'}
 
+  eventemitter2@6.4.9:
+    resolution: {integrity: sha512-JEPTiaOt9f04oa6NOkc4aH+nVp5I3wEjpHbIPqfgCdD5v5bUzy7xQqwcVO2aDQgOWhI28da57HksMrzK9HlRxg==}
+
   events@3.3.0:
     resolution: {integrity: sha512-mQw+2fkQbALzQ7V0MY0IqdnXNOeTtP4r0lN9z7AAawCXgqea7bDii20AYrIBrFd/Hx0M2Ocz6S111CaFkUcb0Q==}
     engines: {node: '>=0.8.x'}
@@ -2958,6 +2981,15 @@ packages:
   pluralize@8.0.0:
     resolution: {integrity: sha512-Nc3IT5yHzflTfbjgqWcCPpo7DaKy4FnpB0l/zCAW0Tc7jxAiuqSxHasntB3D7887LSrA93kDJ9IXovxJYxyLCA==}
     engines: {node: '>=4'}
+
+  posthog-node@5.52.2:
+    resolution: {integrity: sha512-era2ptMcl8nQBT1apUMeoagLSgU1IfR5IwW4v0gudjzkV7IZbr+slG7I4IPiEG0WmsqrLjKnYz/t75vdveTbFA==}
+    engines: {node: ^20.20.0 || >=22.22.0}
+    peerDependencies:
+      rxjs: ^7.0.0
+    peerDependenciesMeta:
+      rxjs:
+        optional: true
 
   prelude-ls@1.2.1:
     resolution: {integrity: sha512-vkcDPrRZo1QZLbn5RLGPpg/WmIQ65qoWWhcGKf/b5eplkkarX0m9z8ppCat4mlOqUsWpyNuYgO3VRyrYHSzX5g==}
@@ -4430,6 +4462,12 @@ snapshots:
     optionalDependencies:
       '@nestjs/platform-express': 11.2.3(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.3)
 
+  '@nestjs/event-emitter@12.0.1(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@11.2.3)':
+    dependencies:
+      '@nestjs/common': 11.2.3(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      '@nestjs/core': 11.2.3(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/platform-express@11.2.3)(reflect-metadata@0.2.2)(rxjs@7.8.2)
+      eventemitter2: 6.4.9
+
   '@nestjs/mapped-types@2.1.1(@nestjs/common@11.2.3(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)':
     dependencies:
       '@nestjs/common': 11.2.3(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2)
@@ -4558,6 +4596,12 @@ snapshots:
     optional: true
 
   '@pkgr/core@0.3.6': {}
+
+  '@posthog/core@1.54.0':
+    dependencies:
+      '@posthog/types': 1.412.0
+
+  '@posthog/types@1.412.0': {}
 
   '@prisma/client@6.19.3(prisma@6.19.3(typescript@5.9.3))(typescript@5.9.3)':
     optionalDependencies:
@@ -5639,6 +5683,8 @@ snapshots:
 
   etag@1.8.1: {}
 
+  eventemitter2@6.4.9: {}
+
   events@3.3.0: {}
 
   execa@5.1.1:
@@ -6623,6 +6669,12 @@ snapshots:
       pathe: 2.0.3
 
   pluralize@8.0.0: {}
+
+  posthog-node@5.52.2(rxjs@7.8.2):
+    dependencies:
+      '@posthog/core': 1.54.0
+    optionalDependencies:
+      rxjs: 7.8.2
 
   prelude-ls@1.2.1: {}
 

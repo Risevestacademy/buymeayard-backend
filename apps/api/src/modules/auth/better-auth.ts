@@ -2,6 +2,7 @@ import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 export interface BetterAuthOptions {
   secret?: string;
@@ -10,6 +11,7 @@ export interface BetterAuthOptions {
 
 export function createBetterAuth(
   prisma: PrismaClient,
+  eventEmitter: EventEmitter2,
   options?: BetterAuthOptions,
 ) {
   return betterAuth({

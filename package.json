@@ -27,5 +27,8 @@
       "@parcel/watcher",
       "unrs-resolver"
     ]
+  },
+  "dependencies": {
+    "@nestjs/event-emitter": "^12.0.1"
   }
 }
