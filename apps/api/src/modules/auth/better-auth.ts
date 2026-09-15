@@ -4,6 +4,7 @@ import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
 import { isMobileRequest } from '../../common/utils/client-detection.util';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 export interface BetterAuthOptions {
   secret?: string;
@@ -12,6 +13,7 @@ export interface BetterAuthOptions {
 
 export function createBetterAuth(
   prisma: PrismaClient,
+  eventEmitter: EventEmitter2,
   options?: BetterAuthOptions,
 ) {
   const emailFrom =
