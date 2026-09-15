@@ -283,20 +283,52 @@ The CI environment spins up **PostgreSQL 16** and **Redis 7** as service contain
 
 The workflow is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
-### Continuous Deployment (Render)
+### Continuous Deployment (Koyeb)
 
-When code is pushed to `main`, the CD workflow ([`.github/workflows/cd.yml`](.github/workflows/cd.yml)) runs the full CI pipeline first, then triggers a Render deploy via webhook.
+When code is pushed to `main`, the CD workflow ([`.github/workflows/cd.yml`](.github/workflows/cd.yml)) runs the full CI pipeline first, then triggers a Koyeb redeploy.
 
 ```
-push to main → CI (lint + test + build) → trigger Render deploy hook → Render builds Docker image → live
+push to main → CI (lint + test + build) → Koyeb CLI redeploy → Koyeb builds Docker image → live
 ```
 
 **Setup steps:**
 
-1. In the [Render Dashboard](https://dashboard.render.com), create a new **Blueprint Instance** pointing to this repo — Render will read [`render.yaml`](render.yaml) and provision the web service, Postgres, and Redis.
-2. In Render, go to your web service → **Settings → Deploy Hook** and copy the URL.
-3. In GitHub, go to **Settings → Secrets → Actions** and add `RENDER_DEPLOY_HOOK_URL` with the copied URL.
-4. Set the remaining env vars in Render that are marked `sync: false` (Paystack keys, Cloudinary, `APP_URL`, `BETTER_AUTH_URL`).
+#### 1. Create a Redis instance on Upstash (free, no card required)
+1. Sign up at [upstash.com](https://upstash.com)
+2. Create a new Redis database (pick the region closest to you)
+3. Copy the **Redis URL** (the `rediss://...` connection string under "Redis Connect" → "redis-cli")
+
+#### 2. Create the Koyeb app
+1. Sign up at [app.koyeb.com](https://app.koyeb.com) (GitHub login, no card required)
+2. Create a new **Web Service** → connect your GitHub repo → select the `main` branch
+3. Koyeb will auto-detect the `Dockerfile` — no build config needed
+4. Set the following environment variables:
+
+| Variable | Value |
+| :--- | :--- |
+| `NODE_ENV` | `production` |
+| `PORT` | `8000` (Koyeb default) |
+| `DATABASE_URL` | Use Koyeb's managed Postgres (add a Postgres addon in the dashboard) |
+| `REDIS_URL` | The `rediss://...` URL from Upstash |
+| `BETTER_AUTH_SECRET` | Generate a random 32+ char string |
+| `BETTER_AUTH_URL` | Your Koyeb app URL (e.g. `https://buymeayard-api-xxxxx.koyeb.app`) |
+| `APP_URL` | Your frontend URL |
+| `PAYSTACK_SECRET_KEY` | Your live Paystack secret key |
+| `PAYSTACK_PUBLIC_KEY` | Your live Paystack public key |
+| `PAYSTACK_WEBHOOK_SECRET` | Your live webhook secret |
+| `CLOUDINARY_CLOUD_NAME` | Your Cloudinary credentials |
+| `CLOUDINARY_API_KEY` | |
+| `CLOUDINARY_API_SECRET` | |
+
+5. Set the health check path to `/health`
+6. Deploy
+
+#### 3. Connect GitHub Actions (optional — for CI-gated deploys)
+1. In Koyeb dashboard, go to **Account → API** and create an API token
+2. In GitHub, go to **Settings → Secrets → Actions** and add `KOYEB_API_TOKEN`
+3. Now pushes to `main` will only deploy after CI passes
+
+> **Note:** [`render.yaml`](render.yaml) is also included as an alternative if you later move to Render.
 
 ---
 
@@ -325,9 +357,9 @@ docker run -p 3000:3000 \
 
 | Stage | Base | Purpose |
 | :--- | :--- | :--- |
-| **pruner** | `node:20-alpine` | Uses `turbo prune` to extract only the `@buymeayard/api` package and its workspace dependencies |
-| **installer** | `node:20-alpine` | Installs deps, generates Prisma client, builds the NestJS app |
-| **runner** | `node:20-alpine` | Minimal runtime — copies only compiled output, `node_modules`, and Prisma schema. Uses `dumb-init` for proper PID 1 signal handling |
+| **pruner** | `node:22-alpine` | Uses `turbo prune` to extract only the `@buymeayard/api` package and its workspace dependencies |
+| **installer** | `node:22-alpine` | Installs deps, generates Prisma client, builds the NestJS app |
+| **runner** | `node:22-alpine` | Minimal runtime — copies only compiled output, `node_modules`, and Prisma schema. Uses `dumb-init` for proper PID 1 signal handling |
 
 ### Key Design Decisions
 - **Turbo prune** reduces the Docker context to only the files needed for the API app, keeping the image small.
@@ -343,6 +375,7 @@ docker run -p 3000:3000 \
 | **Database Schema** | [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) — Full ER diagram, table dictionaries, and financial invariants |
 | **API Reference (Swagger)** | [http://localhost:3000/api/docs](http://localhost:3000/api/docs) — Interactive API documentation (run `pnpm dev` first) |
 | **CI Pipeline** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — Lint → Test → Build |
-| **CD Pipeline** | [`.github/workflows/cd.yml`](.github/workflows/cd.yml) — Deploy to Render on push to `main` |
-| **Render Blueprint** | [`render.yaml`](render.yaml) — Infrastructure-as-code for Render services |
+| **CD Pipeline** | [`.github/workflows/cd.yml`](.github/workflows/cd.yml) — Deploy to Koyeb on push to `main` |
+| **Render Blueprint** | [`render.yaml`](render.yaml) — Alternative infrastructure-as-code for Render |
 | **Production Dockerfile** | [`Dockerfile`](Dockerfile) — Multi-stage Docker build |
+

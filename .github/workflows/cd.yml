@@ -1,4 +1,4 @@
-name: CD — Deploy to Render
+name: CD — Deploy to Koyeb
 
 on:
   # Only deploy after CI passes on main
@@ -18,15 +18,19 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   deploy:
-    name: Deploy to Render
+    name: Deploy to Koyeb
     needs: ci
     runs-on: ubuntu-latest
 
     steps:
-      - name: Trigger Render deploy hook
+      - name: Install Koyeb CLI
+        uses: koyeb/install-koyeb-cli@v2
+
+      - name: Trigger redeploy
+        env:
+          KOYEB_TOKEN: ${{ secrets.KOYEB_API_TOKEN }}
         run: |
-          curl -sf "${{ secrets.RENDER_DEPLOY_HOOK_URL }}" \
-            || (echo "::error::Render deploy hook failed" && exit 1)
+          koyeb service redeploy buymeayard-api/buymeayard-api
 
       - name: Deploy triggered
-        run: echo "✅ Render deploy triggered successfully. Check https://dashboard.render.com for build status."
+        run: echo "✅ Koyeb redeploy triggered. Check https://app.koyeb.com for build status."
