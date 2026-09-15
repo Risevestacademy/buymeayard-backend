@@ -12,8 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '20'
-  PNPM_VERSION: '11'
+  NODE_VERSION: '22'
 
 jobs:
   ci:
@@ -58,8 +57,7 @@ jobs:
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
+        # version auto-read from packageManager in package.json
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

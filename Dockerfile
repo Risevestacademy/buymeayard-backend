@@ -1,7 +1,7 @@
 # ─────────────────────────────────────────────
 # Stage 1: Prune the monorepo for the API app
 # ─────────────────────────────────────────────
-FROM node:20-alpine AS pruner
+FROM node:22-alpine AS pruner
 RUN corepack enable && corepack prepare pnpm@11 --activate
 RUN apk add --no-cache libc6-compat
 
@@ -12,7 +12,7 @@ RUN npx -y turbo prune @buymeayard/api --docker
 # ─────────────────────────────────────────────
 # Stage 2: Install dependencies
 # ─────────────────────────────────────────────
-FROM node:20-alpine AS installer
+FROM node:22-alpine AS installer
 RUN corepack enable && corepack prepare pnpm@11 --activate
 RUN apk add --no-cache libc6-compat openssl
 
@@ -33,7 +33,7 @@ RUN pnpm run build --filter=@buymeayard/api
 # ─────────────────────────────────────────────
 # Stage 3: Production runner
 # ─────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 RUN apk add --no-cache openssl dumb-init
 
 WORKDIR /app
