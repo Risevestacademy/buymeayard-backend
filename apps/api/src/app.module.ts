@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { validateEnv } from './config/env.validation';
 import { AppController } from './app.controller';
+import { LoggerModule } from 'nestjs-pino';
+import { TerminusModule } from '@nestjs/terminus';
 
 // Infrastructure
 import { DatabaseModule } from './infrastructure/database/database.module';
@@ -40,6 +42,17 @@ import { AuthGuard } from './common/guards/auth.guard';
       isGlobal: true,
       validate: validateEnv,
     }),
+    LoggerModule.forRoot({
+      pinoHttp: {
+        level: process.env.NODE_ENV !== 'production' ? 'debug' : 'info',
+        transport:
+          process.env.NODE_ENV !== 'production'
+            ? { target: 'pino-pretty' }
+            : undefined,
+        autoLogging: false,
+      },
+    }),
+    TerminusModule,
     DatabaseModule,
     InfrastructurePaymentsModule,
     StorageModule,
