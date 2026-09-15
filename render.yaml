@@ -5,6 +5,7 @@
 # Render will auto-detect this file and provision the services below.
 
 services:
+  # ── API Web Service ──
   - type: web
     name: buymeayard-api
     runtime: docker
@@ -51,15 +52,18 @@ services:
       - key: DEFAULT_CURRENCY
         value: NGN
 
+  # ── Redis ──
+  - type: redis
+    name: buymeayard-redis
+    plan: starter
+    region: frankfurt
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: [] # internal Render services only
+
+# ── PostgreSQL ──
 databases:
   - name: buymeayard-db
     plan: starter
     databaseName: buymeayard
     region: frankfurt
     postgresMajorVersion: "16"
-
-  - name: buymeayard-redis
-    plan: starter
-    region: frankfurt
-    type: redis
-    maxmemoryPolicy: allkeys-lru
