@@ -80,6 +80,7 @@ async function main() {
   if (adminUser) {
     const adminRole = await prisma.role.findUnique({ where: { name: 'ADMIN' } });
     const superAdminRole = await prisma.role.findUnique({ where: { name: 'SUPER_ADMIN' } });
+    const supporterRole = await prisma.role.findUnique({ where: { name: 'SUPPORTER' } });
 
     if (adminRole && superAdminRole) {
       // Upsert UserRole for ADMIN
@@ -112,6 +113,24 @@ async function main() {
         },
       });
       console.log('✅ Super Admin roles attached to user.');
+    }
+
+    // Every user is a supporter by default
+    if (supporterRole) {
+      await prisma.userRole.upsert({
+        where: {
+          userId_roleId: {
+            userId: adminUser.id,
+            roleId: supporterRole.id,
+          },
+        },
+        update: {},
+        create: {
+          userId: adminUser.id,
+          roleId: supporterRole.id,
+        },
+      });
+      console.log('✅ SUPPORTER role attached to admin user.');
     }
   }
 

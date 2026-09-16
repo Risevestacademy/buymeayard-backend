@@ -6,12 +6,18 @@ import { PrismaClient } from '@prisma/client';
 export interface BetterAuthOptions {
   secret?: string;
   baseURL?: string;
+  appURL?: string;
 }
 
 export function createBetterAuth(
   prisma: PrismaClient,
   options?: BetterAuthOptions,
 ) {
+  const appURL =
+    options?.appURL ||
+    process.env.APP_URL ||
+    'http://localhost:3001';
+
   return betterAuth({
     database: prismaAdapter(prisma, {
       provider: 'postgresql',
@@ -31,6 +37,21 @@ export function createBetterAuth(
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
+      sendResetPassword: async ({ user, url, token }) => {
+        const resetUrl = `${appURL}/reset-password?token=${token}`;
+        // TODO: Wire to InfrastructureNotificationsModule for production email delivery
+        console.log(`[Auth] Password reset requested for ${user.email}`);
+        console.log(`[Auth] Reset URL: ${resetUrl}`);
+      },
+    },
+    emailVerification: {
+      sendOnSignUp: true,
+      sendVerificationEmail: async ({ user, url, token }) => {
+        const verifyUrl = `${appURL}/verify-email?token=${token}`;
+        // TODO: Wire to InfrastructureNotificationsModule for production email delivery
+        console.log(`[Auth] Email verification for ${user.email}`);
+        console.log(`[Auth] Verify URL: ${verifyUrl}`);
+      },
     },
     session: {
       cookieCache: {
