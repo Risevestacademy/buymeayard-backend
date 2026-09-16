@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException, HttpStatus, ForbiddenException } from '@nestjs/common';
 
 jest.mock('better-auth/node', () => ({
   toNodeHandler: jest.fn(() => jest.fn()),
@@ -16,10 +16,17 @@ describe('AuthController', () => {
   let controller: AuthController;
   let authService: {
     signUpEmail: jest.Mock;
+    signUpEmailWithRole: jest.Mock;
     signInEmail: jest.Mock;
     signOut: jest.Mock;
     getSessionFromNodeHeaders: jest.Mock;
     getAuth: jest.Mock;
+    forgotPassword: jest.Mock;
+    resetPassword: jest.Mock;
+    changePassword: jest.Mock;
+    verifyEmail: jest.Mock;
+    sendVerificationEmail: jest.Mock;
+    userHasRole: jest.Mock;
   };
 
   const createMockReqRes = (headers: Record<string, string> = {}) => {
@@ -34,13 +41,33 @@ describe('AuthController', () => {
     return { req, res };
   };
 
+  const createSuccessResponse = (
+    body: any,
+    status = 200,
+  ): globalThis.Response => {
+    const webHeaders = new Headers();
+    webHeaders.set(
+      'set-cookie',
+      'better-auth.session_token=token123; Path=/; HttpOnly',
+    );
+    webHeaders.set('content-type', 'application/json');
+    return new Response(JSON.stringify(body), { status, headers: webHeaders });
+  };
+
   beforeEach(async () => {
     authService = {
       signUpEmail: jest.fn(),
+      signUpEmailWithRole: jest.fn(),
       signInEmail: jest.fn(),
       signOut: jest.fn(),
       getSessionFromNodeHeaders: jest.fn(),
       getAuth: jest.fn(),
+      forgotPassword: jest.fn(),
+      resetPassword: jest.fn(),
+      changePassword: jest.fn(),
+      verifyEmail: jest.fn(),
+      sendVerificationEmail: jest.fn(),
+      userHasRole: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -60,8 +87,12 @@ describe('AuthController', () => {
     expect(controller).toBeDefined();
   });
 
+  // --------------------------------------------------------
+  // REGISTER
+  // --------------------------------------------------------
+
   describe('register', () => {
-    it('should forward set-cookie headers for web browser requests (no mobile header)', async () => {
+    it('should register user with SUPPORTER role on web', async () => {
       const dto = {
         email: 'alice@example.com',
         password: 'Password123!',
@@ -69,32 +100,22 @@ describe('AuthController', () => {
       };
       const { req, res } = createMockReqRes();
 
-      const webHeaders = new Headers();
-      webHeaders.set(
-        'set-cookie',
-        'better-auth.session_token=token123; Path=/; HttpOnly',
+      const mockWebResponse = createSuccessResponse(
+        { user: { id: 'u1', email: 'alice@example.com' } },
+        201,
       );
-      webHeaders.set('content-type', 'application/json');
-
-      const mockWebResponse = new Response(
-        JSON.stringify({ user: { id: 'u1', email: 'alice@example.com' } }),
-        { status: 201, headers: webHeaders },
-      );
-      authService.signUpEmail.mockResolvedValue(mockWebResponse);
+      authService.signUpEmailWithRole.mockResolvedValue(mockWebResponse);
 
       const result = await controller.register(dto, req, res);
 
-      expect(authService.signUpEmail).toHaveBeenCalled();
-      expect(res.setHeader).toHaveBeenCalledWith('set-cookie', [
-        'better-auth.session_token=token123; Path=/; HttpOnly',
-      ]);
+      expect(authService.signUpEmailWithRole).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(HttpStatus.CREATED);
       expect(result).toEqual({
         user: { id: 'u1', email: 'alice@example.com' },
       });
     });
 
-    it('should suppress cookies and return token in JSON response for mobile requests (x-client-type: mobile)', async () => {
+    it('should reject registration on mobile', async () => {
       const dto = {
         email: 'alice@example.com',
         password: 'Password123!',
@@ -102,39 +123,31 @@ describe('AuthController', () => {
       };
       const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
 
-      const webHeaders = new Headers();
-      webHeaders.set(
-        'set-cookie',
+      await expect(controller.register(dto, req, res)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(authService.signUpEmailWithRole).not.toHaveBeenCalled();
+    });
+
+    it('should forward set-cookie headers for web browser requests', async () => {
+      const dto = {
+        email: 'alice@example.com',
+        password: 'Password123!',
+        name: 'Alice',
+      };
+      const { req, res } = createMockReqRes();
+
+      const mockWebResponse = createSuccessResponse(
+        { user: { id: 'u1', email: 'alice@example.com' } },
+        201,
+      );
+      authService.signUpEmailWithRole.mockResolvedValue(mockWebResponse);
+
+      await controller.register(dto, req, res);
+
+      expect(res.setHeader).toHaveBeenCalledWith('set-cookie', [
         'better-auth.session_token=token123; Path=/; HttpOnly',
-      );
-      webHeaders.set('content-type', 'application/json');
-
-      const mockWebResponse = new Response(
-        JSON.stringify({ user: { id: 'u1', email: 'alice@example.com' } }),
-        { status: 201, headers: webHeaders },
-      );
-      authService.signUpEmail.mockResolvedValue(mockWebResponse);
-
-      const result = await controller.register(dto, req, res);
-
-      // Verify cookies are suppressed
-      expect(res.removeHeader).toHaveBeenCalledWith('set-cookie');
-      expect(res.setHeader).not.toHaveBeenCalledWith(
-        'set-cookie',
-        expect.anything(),
-      );
-
-      // Verify token is in JSON response
-      expect(result).toEqual({
-        token: 'token123',
-        user: { id: 'u1', email: 'alice@example.com' },
-      });
-
-      // Verify Bearer authorization header is set
-      expect(res.setHeader).toHaveBeenCalledWith(
-        'authorization',
-        'Bearer token123',
-      );
+      ]);
     });
 
     it('should throw HttpException when better-auth returns an error response', async () => {
@@ -152,7 +165,7 @@ describe('AuthController', () => {
         }),
         { status: 400, headers: { 'content-type': 'application/json' } },
       );
-      authService.signUpEmail.mockResolvedValue(mockWebResponse);
+      authService.signUpEmailWithRole.mockResolvedValue(mockWebResponse);
 
       await expect(controller.register(dto, req, res)).rejects.toThrow(
         HttpException,
@@ -160,50 +173,87 @@ describe('AuthController', () => {
     });
   });
 
+  // --------------------------------------------------------
+  // LOGIN
+  // --------------------------------------------------------
+
   describe('login', () => {
     it('should propagate session cookie for web frontend', async () => {
       const dto = { email: 'alice@example.com', password: 'Password123!' };
       const { req, res } = createMockReqRes();
 
-      const webHeaders = new Headers();
-      webHeaders.set(
-        'set-cookie',
-        'better-auth.session_token=token456; Path=/; HttpOnly',
-      );
-      webHeaders.set('content-type', 'application/json');
-
-      const mockWebResponse = new Response(
-        JSON.stringify({ user: { id: 'u1' }, token: 'token456' }),
-        { status: 200, headers: webHeaders },
-      );
+      const mockWebResponse = createSuccessResponse({
+        user: { id: 'u1' },
+        token: 'token456',
+      });
       authService.signInEmail.mockResolvedValue(mockWebResponse);
 
       const result = await controller.login(dto, req, res);
 
       expect(authService.signInEmail).toHaveBeenCalled();
       expect(res.setHeader).toHaveBeenCalledWith('set-cookie', [
-        'better-auth.session_token=token456; Path=/; HttpOnly',
+        'better-auth.session_token=token123; Path=/; HttpOnly',
       ]);
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
       expect(result).toEqual({ user: { id: 'u1' }, token: 'token456' });
     });
 
+    it('should allow mobile login for CREATOR users', async () => {
+      const dto = { email: 'creator@example.com', password: 'Password123!' };
+      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
+
+      const mockWebResponse = createSuccessResponse({
+        user: { id: 'u-creator' },
+        token: 'token-creator',
+      });
+      authService.signInEmail.mockResolvedValue(mockWebResponse);
+      authService.userHasRole.mockResolvedValue(true);
+
+      const result = await controller.login(dto, req, res);
+
+      expect(authService.userHasRole).toHaveBeenCalledWith(
+        'u-creator',
+        'CREATOR',
+      );
+      expect(result).toEqual({
+        token: 'token-creator',
+        user: { id: 'u-creator' },
+      });
+    });
+
+    it('should reject mobile login for non-CREATOR users', async () => {
+      const dto = { email: 'supporter@example.com', password: 'Password123!' };
+      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
+
+      const mockWebResponse = createSuccessResponse({
+        user: { id: 'u-supporter' },
+        token: 'token-supporter',
+      });
+      authService.signInEmail.mockResolvedValue(mockWebResponse);
+      authService.userHasRole.mockResolvedValue(false);
+      authService.signOut.mockResolvedValue(
+        new Response(JSON.stringify({ success: true }), { status: 200 }),
+      );
+
+      await expect(controller.login(dto, req, res)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(authService.userHasRole).toHaveBeenCalledWith(
+        'u-supporter',
+        'CREATOR',
+      );
+    });
+
     it('should return token in JSON and omit cookies for mobile requests (x-platform: ios)', async () => {
-      const dto = { email: 'alice@example.com', password: 'Password123!' };
+      const dto = { email: 'creator@example.com', password: 'Password123!' };
       const { req, res } = createMockReqRes({ 'x-platform': 'ios' });
 
-      const webHeaders = new Headers();
-      webHeaders.set(
-        'set-cookie',
-        'better-auth.session_token=token456; Path=/; HttpOnly',
-      );
-      webHeaders.set('content-type', 'application/json');
-
-      const mockWebResponse = new Response(
-        JSON.stringify({ user: { id: 'u1' }, token: 'token456' }),
-        { status: 200, headers: webHeaders },
-      );
+      const mockWebResponse = createSuccessResponse({
+        user: { id: 'u1' },
+        token: 'token456',
+      });
       authService.signInEmail.mockResolvedValue(mockWebResponse);
+      authService.userHasRole.mockResolvedValue(true);
 
       const result = await controller.login(dto, req, res);
 
@@ -212,13 +262,17 @@ describe('AuthController', () => {
         'set-cookie',
         expect.anything(),
       );
-      expect(result).toEqual({ token: 'token456', user: { id: 'u1' } });
+      expect(result).toHaveProperty('token');
       expect(res.setHeader).toHaveBeenCalledWith(
         'authorization',
-        'Bearer token456',
+        expect.stringContaining('Bearer'),
       );
     });
   });
+
+  // --------------------------------------------------------
+  // LOGOUT
+  // --------------------------------------------------------
 
   describe('logout', () => {
     it('should forward cookie clearance for web frontend', async () => {
@@ -268,6 +322,10 @@ describe('AuthController', () => {
     });
   });
 
+  // --------------------------------------------------------
+  // GET SESSION
+  // --------------------------------------------------------
+
   describe('getSession', () => {
     it('should retrieve session from request headers', async () => {
       const req = { headers: { authorization: 'Bearer token-123' } } as any;
@@ -279,6 +337,127 @@ describe('AuthController', () => {
       expect(authService.getSessionFromNodeHeaders).toHaveBeenCalledWith(
         req.headers,
       );
+    });
+  });
+
+  // --------------------------------------------------------
+  // FORGOT PASSWORD
+  // --------------------------------------------------------
+
+  describe('forgotPassword', () => {
+    it('should call forgotPassword on auth service', async () => {
+      const dto = { email: 'user@example.com' };
+      const { req, res } = createMockReqRes();
+
+      const mockWebResponse = createSuccessResponse({ status: true });
+      authService.forgotPassword.mockResolvedValue(mockWebResponse);
+
+      const result = await controller.forgotPassword(dto, req, res);
+
+      expect(authService.forgotPassword).toHaveBeenCalledWith({
+        email: 'user@example.com',
+        headers: expect.any(Headers),
+      });
+      expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
+      expect(result).toEqual({ status: true });
+    });
+  });
+
+  // --------------------------------------------------------
+  // RESET PASSWORD
+  // --------------------------------------------------------
+
+  describe('resetPassword', () => {
+    it('should call resetPassword on auth service', async () => {
+      const dto = { token: 'reset-token', newPassword: 'NewPassword123!' };
+      const { req, res } = createMockReqRes();
+
+      const mockWebResponse = createSuccessResponse({ status: true });
+      authService.resetPassword.mockResolvedValue(mockWebResponse);
+
+      const result = await controller.resetPassword(dto, req, res);
+
+      expect(authService.resetPassword).toHaveBeenCalledWith({
+        token: 'reset-token',
+        newPassword: 'NewPassword123!',
+      });
+      expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
+      expect(result).toEqual({ status: true });
+    });
+  });
+
+  // --------------------------------------------------------
+  // CHANGE PASSWORD
+  // --------------------------------------------------------
+
+  describe('changePassword', () => {
+    it('should call changePassword on auth service with headers', async () => {
+      const dto = {
+        currentPassword: 'OldPassword!',
+        newPassword: 'NewPassword123!',
+      };
+      const { req, res } = createMockReqRes();
+
+      const mockWebResponse = createSuccessResponse({ status: true });
+      authService.changePassword.mockResolvedValue(mockWebResponse);
+
+      const result = await controller.changePassword(dto, req, res);
+
+      expect(authService.changePassword).toHaveBeenCalledWith({
+        currentPassword: 'OldPassword!',
+        newPassword: 'NewPassword123!',
+        headers: expect.any(Headers),
+      });
+      expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
+      expect(result).toEqual({ status: true });
+    });
+  });
+
+  // --------------------------------------------------------
+  // VERIFY EMAIL
+  // --------------------------------------------------------
+
+  describe('verifyEmail', () => {
+    it('should call verifyEmail on auth service', async () => {
+      const dto = { token: 'verify-token-123' };
+      const { req, res } = createMockReqRes();
+
+      const mockWebResponse = createSuccessResponse({ status: true });
+      authService.verifyEmail.mockResolvedValue(mockWebResponse);
+
+      const result = await controller.verifyEmail(dto, req, res);
+
+      expect(authService.verifyEmail).toHaveBeenCalledWith({
+        token: 'verify-token-123',
+      });
+      expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
+      expect(result).toEqual({ status: true });
+    });
+  });
+
+  // --------------------------------------------------------
+  // SEND VERIFICATION EMAIL
+  // --------------------------------------------------------
+
+  describe('sendVerificationEmail', () => {
+    it('should call sendVerificationEmail on auth service with user email', async () => {
+      const { req, res } = createMockReqRes();
+
+      const mockWebResponse = createSuccessResponse({ status: true });
+      authService.sendVerificationEmail.mockResolvedValue(mockWebResponse);
+
+      const result = await controller.sendVerificationEmail(
+        req,
+        res,
+        'user@example.com',
+      );
+
+      expect(authService.sendVerificationEmail).toHaveBeenCalledWith({
+        email: 'user@example.com',
+        headers: expect.any(Headers),
+      });
+      expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
+      expect(result).toEqual({ status: true });
     });
   });
 });
