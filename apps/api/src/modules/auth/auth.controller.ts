@@ -16,6 +16,8 @@ import {
   ApiOperation,
   ApiResponse as SwaggerResponse,
   ApiBearerAuth,
+  ApiHeader,
+  ApiExcludeEndpoint,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { toNodeHandler } from 'better-auth/node';
@@ -36,6 +38,12 @@ import {
 } from '../../common/utils/client-detection.util';
 
 @ApiTags('auth')
+@ApiHeader({
+  name: 'x-client-type',
+  required: false,
+  description:
+    'Optional. Set to "mobile" or "app" to identify as a mobile client. This alters the authentication behavior for mobile apps (e.g. enforcing the CREATOR role).',
+})
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -149,6 +157,7 @@ export class AuthController {
   @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Log out current session',
     description:
@@ -168,6 +177,7 @@ export class AuthController {
 
   @Public()
   @Get('session')
+  @ApiBearerAuth()
   @ApiOperation({
     summary: 'Get current authenticated user session',
     description:
@@ -328,6 +338,7 @@ export class AuthController {
 
   @Public()
   @All('*')
+  @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Better Auth native SDK handler endpoint' })
   async handleBetterAuth(@Req() req: Request, @Res() res: Response) {
     // If mobile request header is present, suppress Set-Cookie from native handler

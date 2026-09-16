@@ -6,7 +6,6 @@ export const envSchema = z.object({
     .enum(['development', 'production', 'test'])
     .default('development'),
   API_URL: z.string().url().default('http://localhost:3000'),
-  APP_URL: z.string().url().default('http://localhost:3001'),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   REDIS_URL: z
@@ -22,6 +21,9 @@ export const envSchema = z.object({
   PAYSTACK_SECRET_KEY: z.string().default('sk_test_mock'),
   PAYSTACK_PUBLIC_KEY: z.string().default('pk_test_mock'),
   PAYSTACK_WEBHOOK_SECRET: z.string().default('webhook_secret_mock'),
+
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('noreply@buymeayard.com'),
 
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),

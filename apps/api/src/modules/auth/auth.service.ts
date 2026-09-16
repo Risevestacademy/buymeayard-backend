@@ -19,7 +19,6 @@ export class AuthService implements OnModuleInit {
     this.auth = createBetterAuth(this.prisma, {
       secret: this.configService.get<string>('BETTER_AUTH_SECRET'),
       baseURL: this.configService.get<string>('BETTER_AUTH_URL'),
-      appURL: this.configService.get<string>('APP_URL'),
     });
   }
 
@@ -156,9 +155,7 @@ export class AuthService implements OnModuleInit {
     });
   }
 
-  async verifyEmail(params: {
-    token: string;
-  }): Promise<globalThis.Response> {
+  async verifyEmail(params: { token: string }): Promise<globalThis.Response> {
     return this.getAuth().api.verifyEmail({
       query: {
         token: params.token,

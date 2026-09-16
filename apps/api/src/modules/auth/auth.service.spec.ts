@@ -32,8 +32,7 @@ describe('AuthService', () => {
     configService = {
       get: jest.fn((key: string) => {
         if (key === 'BETTER_AUTH_SECRET') return 'test-secret';
-        if (key === 'BETTER_AUTH_URL') return 'http://localhost:4000';
-        if (key === 'APP_URL') return 'http://localhost:3001';
+        if (key === 'BETTER_AUTH_URL') return 'http://localhost:3000';
         return null;
       }),
     };
@@ -71,8 +70,7 @@ describe('AuthService', () => {
     service.onModuleInit();
     expect(createBetterAuth).toHaveBeenCalledWith(prismaService, {
       secret: 'test-secret',
-      baseURL: 'http://localhost:4000',
-      appURL: 'http://localhost:3001',
+      baseURL: 'http://localhost:3000',
     });
   });
 
@@ -254,7 +252,9 @@ describe('AuthService', () => {
       });
 
       expect(result).toEqual(mockWebResponse);
-      expect(mockBetterAuthInstance.api.requestPasswordReset).toHaveBeenCalledWith({
+      expect(
+        mockBetterAuthInstance.api.requestPasswordReset,
+      ).toHaveBeenCalledWith({
         body: {
           email: 'user@example.com',
           redirectTo: '/reset-password',
@@ -326,9 +326,7 @@ describe('AuthService', () => {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
-      mockBetterAuthInstance.api.verifyEmail.mockResolvedValue(
-        mockWebResponse,
-      );
+      mockBetterAuthInstance.api.verifyEmail.mockResolvedValue(mockWebResponse);
 
       const result = await service.verifyEmail({
         token: 'verify-token-123',
