@@ -36,7 +36,7 @@ describe('AppController', () => {
     }).compile();
 
     appController = app.get<AppController>(AppController);
-    healthCheckService = app.get(HealthCheckService) as any;
+    healthCheckService = app.get(HealthCheckService);
   });
 
   describe('check', () => {

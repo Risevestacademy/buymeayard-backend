@@ -254,7 +254,9 @@ describe('AuthService', () => {
       });
 
       expect(result).toEqual(mockWebResponse);
-      expect(mockBetterAuthInstance.api.requestPasswordReset).toHaveBeenCalledWith({
+      expect(
+        mockBetterAuthInstance.api.requestPasswordReset,
+      ).toHaveBeenCalledWith({
         body: {
           email: 'user@example.com',
           redirectTo: '/reset-password',
@@ -326,9 +328,7 @@ describe('AuthService', () => {
         status: 200,
         headers: { 'content-type': 'application/json' },
       });
-      mockBetterAuthInstance.api.verifyEmail.mockResolvedValue(
-        mockWebResponse,
-      );
+      mockBetterAuthInstance.api.verifyEmail.mockResolvedValue(mockWebResponse);
 
       const result = await service.verifyEmail({
         token: 'verify-token-123',

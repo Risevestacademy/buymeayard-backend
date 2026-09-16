@@ -156,9 +156,7 @@ export class AuthService implements OnModuleInit {
     });
   }
 
-  async verifyEmail(params: {
-    token: string;
-  }): Promise<globalThis.Response> {
+  async verifyEmail(params: { token: string }): Promise<globalThis.Response> {
     return this.getAuth().api.verifyEmail({
       query: {
         token: params.token,
