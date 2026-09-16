@@ -113,13 +113,14 @@ export class AuthController {
   async registerCreator(
     @Body() dto: RegisterCreatorDto,
     @Req() req: Request,
-    @Res() res: Response,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    const webReq = fromNodeRequest(req);
-    const webRes = await this.authService.signUpCreator(dto, webReq.headers);
+    const webRes = await this.authService.signUpCreator(
+      dto,
+      fromNodeHeaders(req.headers),
+    );
 
-    const body = await webRes.json();
-    return res.status(webRes.status).send(body);
+    return this.handleAuthResponse(webRes, req, res, HttpStatus.CREATED);
   }
 
   @Public()
