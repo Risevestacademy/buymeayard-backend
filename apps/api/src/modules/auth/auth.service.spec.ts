@@ -32,8 +32,7 @@ describe('AuthService', () => {
     configService = {
       get: jest.fn((key: string) => {
         if (key === 'BETTER_AUTH_SECRET') return 'test-secret';
-        if (key === 'BETTER_AUTH_URL') return 'http://localhost:4000';
-        if (key === 'APP_URL') return 'http://localhost:3001';
+        if (key === 'BETTER_AUTH_URL') return 'http://localhost:3000';
         return null;
       }),
     };
@@ -71,8 +70,7 @@ describe('AuthService', () => {
     service.onModuleInit();
     expect(createBetterAuth).toHaveBeenCalledWith(prismaService, {
       secret: 'test-secret',
-      baseURL: 'http://localhost:4000',
-      appURL: 'http://localhost:3001',
+      baseURL: 'http://localhost:3000',
     });
   });
 

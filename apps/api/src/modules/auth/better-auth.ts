@@ -7,7 +7,6 @@ import { Resend } from 'resend';
 export interface BetterAuthOptions {
   secret?: string;
   baseURL?: string;
-  appURL?: string;
 }
 
 export function createBetterAuth(

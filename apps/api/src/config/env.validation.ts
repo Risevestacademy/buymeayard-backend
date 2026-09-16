@@ -6,7 +6,6 @@ export const envSchema = z.object({
     .enum(['development', 'production', 'test'])
     .default('development'),
   API_URL: z.string().url().default('http://localhost:3000'),
-  APP_URL: z.string().url().default('http://localhost:3001'),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   REDIS_URL: z

@@ -19,7 +19,6 @@ export class AuthService implements OnModuleInit {
     this.auth = createBetterAuth(this.prisma, {
       secret: this.configService.get<string>('BETTER_AUTH_SECRET'),
       baseURL: this.configService.get<string>('BETTER_AUTH_URL'),
-      appURL: this.configService.get<string>('APP_URL'),
     });
   }
 

@@ -17,8 +17,6 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') || 3000;
-  const appUrl =
-    configService.get<string>('APP_URL') || 'http://localhost:3001';
 
   // Global prefix: /api/v1
   app.setGlobalPrefix('api/v1', {
@@ -29,7 +27,6 @@ async function bootstrap() {
   app.use(cookieParser());
   app.enableCors({
     origin: [
-      appUrl,
       'http://localhost:3000',
       'http://localhost:3001',
       'https://buymeayard-main-dev.up.railway.app',
