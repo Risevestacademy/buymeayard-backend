@@ -25,6 +25,7 @@ import { AuthService } from './auth.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RegisterDto } from './dto/register.dto';
+import { RegisterCreatorDto } from './dto/register-creator.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -91,6 +92,34 @@ export class AuthController {
       ...dto,
       headers: fromNodeHeaders(req.headers),
     });
+    return this.handleAuthResponse(webRes, req, res, HttpStatus.CREATED);
+  }
+
+  @Public()
+  @Post('register-creator')
+  @ApiOperation({
+    summary: 'Register a new creator account',
+    description:
+      'Creates a new user account, assigns the CREATOR role, and initializes their Creator Profile. This is the primary onboarding endpoint for creators.',
+  })
+  @SwaggerResponse({
+    status: 201,
+    description: 'Creator account successfully created.',
+  })
+  @SwaggerResponse({
+    status: 400,
+    description: 'Validation failed or username/email already exists.',
+  })
+  async registerCreator(
+    @Body() dto: RegisterCreatorDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const webRes = await this.authService.signUpCreator(
+      dto,
+      fromNodeHeaders(req.headers),
+    );
+
     return this.handleAuthResponse(webRes, req, res, HttpStatus.CREATED);
   }
 
