@@ -4,6 +4,7 @@ import { fromNodeHeaders } from '../../common/utils/headers.util';
 import type { IncomingHttpHeaders } from 'http';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { createBetterAuth, AuthInstance } from './better-auth';
+import { RegisterCreatorDto } from './dto/register-creator.dto';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -66,6 +67,41 @@ export class AuthService implements OnModuleInit {
       } catch (error) {
         this.logger.warn(
           `Failed to assign SUPPORTER role after registration: ${error}`,
+        );
+      }
+    }
+
+    return webRes;
+  }
+
+  /**
+   * Register a new user and auto-assign the CREATOR role,
+   * initializing their CreatorProfile.
+   */
+  async signUpCreator(
+    dto: RegisterCreatorDto,
+    headers?: Headers,
+  ): Promise<globalThis.Response> {
+    const webRes = await this.signUpEmail({
+      email: dto.email,
+      password: dto.password,
+      name: dto.name,
+      headers,
+    });
+
+    // Only assign role and profile if registration succeeded
+    if (webRes.ok) {
+      try {
+        const cloned = webRes.clone();
+        const body = await cloned.json();
+        const userId = body?.user?.id;
+
+        if (userId) {
+          await this.assignCreatorRoleAndProfile(userId, dto);
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Failed to assign CREATOR role/profile after registration: ${error}`,
         );
       }
     }
@@ -220,5 +256,57 @@ export class AuthService implements OnModuleInit {
     });
 
     this.logger.log(`Assigned SUPPORTER role to user ${userId}`);
+  }
+
+  /**
+   * Assign the CREATOR role and initialize the CreatorProfile.
+   */
+  private async assignCreatorRoleAndProfile(
+    userId: string,
+    dto: RegisterCreatorDto,
+  ): Promise<void> {
+    const creatorRole = await this.prisma.role.findUnique({
+      where: { name: 'CREATOR' },
+    });
+
+    if (!creatorRole) {
+      this.logger.error('CREATOR role not found in database. Run seeds first.');
+      return;
+    }
+
+    // Run this in a transaction to ensure both role and profile are created together
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Assign Role
+      await tx.userRole.upsert({
+        where: {
+          userId_roleId: {
+            userId,
+            roleId: creatorRole.id,
+          },
+        },
+        update: {},
+        create: {
+          userId,
+          roleId: creatorRole.id,
+        },
+      });
+
+      // 2. Create Profile
+      await tx.creatorProfile.create({
+        data: {
+          userId,
+          username: dto.username,
+          displayName: dto.name,
+          bio: dto.bio || null,
+          categoryId: dto.categoryId || null,
+          status: 'REGISTERED',
+          kycStatus: 'NOT_SUBMITTED',
+        },
+      });
+    });
+
+    this.logger.log(
+      `Assigned CREATOR role and initialized profile for user ${userId}`,
+    );
   }
 }
