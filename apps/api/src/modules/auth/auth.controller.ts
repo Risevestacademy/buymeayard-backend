@@ -11,10 +11,12 @@ import {
   HttpException,
   ForbiddenException,
 } from '@nestjs/common';
+import {
   ApiTags,
   ApiOperation,
   ApiResponse as SwaggerResponse,
   ApiBearerAuth,
+} from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { toNodeHandler } from 'better-auth/node';
 import { AuthService } from './auth.service';
@@ -43,12 +45,26 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Register a new user account with email and password',
-    description: 'Creates a new user account and automatically assigns the SUPPORTER role. This endpoint is strictly restricted to web clients. Mobile applications cannot register new accounts.',
+    description:
+      'Creates a new user account and automatically assigns the SUPPORTER role. This endpoint is strictly restricted to web clients. Mobile applications cannot register new accounts.',
   })
-  @SwaggerResponse({ status: 201, description: 'User successfully registered and logged in.' })
-  @SwaggerResponse({ status: 400, description: 'Invalid input data or validation error.' })
-  @SwaggerResponse({ status: 403, description: 'Registration is blocked on mobile platforms (REGISTRATION_WEB_ONLY).' })
-  @SwaggerResponse({ status: 409, description: 'User with this email already exists.' })
+  @SwaggerResponse({
+    status: 201,
+    description: 'User successfully registered and logged in.',
+  })
+  @SwaggerResponse({
+    status: 400,
+    description: 'Invalid input data or validation error.',
+  })
+  @SwaggerResponse({
+    status: 403,
+    description:
+      'Registration is blocked on mobile platforms (REGISTRATION_WEB_ONLY).',
+  })
+  @SwaggerResponse({
+    status: 409,
+    description: 'User with this email already exists.',
+  })
   async register(
     @Body() dto: RegisterDto,
     @Req() req: Request,
@@ -73,13 +89,24 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Log in with email and password',
-    description: 'Authenticates a user and starts a session. Web clients will receive an HTTP-only session cookie. Mobile clients will receive a JSON token and must have the CREATOR role, otherwise access is denied.',
+    description:
+      'Authenticates a user and starts a session. Web clients will receive an HTTP-only session cookie. Mobile clients will receive a JSON token and must have the CREATOR role, otherwise access is denied.',
   })
-  @SwaggerResponse({ status: 200, description: 'User successfully logged in. Session token returned.' })
-  @SwaggerResponse({ status: 400, description: 'Invalid credentials or validation error.' })
-  @SwaggerResponse({ status: 403, description: 'Mobile access denied. Only creators can log in from the mobile app (MOBILE_ACCESS_DENIED).' })
+  @SwaggerResponse({
+    status: 200,
+    description: 'User successfully logged in. Session token returned.',
+  })
+  @SwaggerResponse({
+    status: 400,
+    description: 'Invalid credentials or validation error.',
+  })
+  @SwaggerResponse({
+    status: 403,
+    description:
+      'Mobile access denied. Only creators can log in from the mobile app (MOBILE_ACCESS_DENIED).',
+  })
   async login(
     @Body() dto: LoginDto,
     @Req() req: Request,
@@ -97,10 +124,7 @@ export class AuthController {
       const userId = body?.user?.id;
 
       if (userId) {
-        const isCreator = await this.authService.userHasRole(
-          userId,
-          'CREATOR',
-        );
+        const isCreator = await this.authService.userHasRole(userId, 'CREATOR');
         if (!isCreator) {
           // Invalidate the session that was just created
           try {
@@ -125,11 +149,15 @@ export class AuthController {
   @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Log out current session',
-    description: 'Invalidates the current active session. Clears cookies for web clients.',
+    description:
+      'Invalidates the current active session. Clears cookies for web clients.',
   })
-  @SwaggerResponse({ status: 200, description: 'User successfully logged out.' })
+  @SwaggerResponse({
+    status: 200,
+    description: 'User successfully logged out.',
+  })
   @SwaggerResponse({ status: 401, description: 'No active session found.' })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const webRes = await this.authService.signOut({
@@ -140,12 +168,16 @@ export class AuthController {
 
   @Public()
   @Get('session')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Get current authenticated user session',
-    description: 'Retrieves the currently authenticated user details based on the session token (cookie or header).',
+    description:
+      'Retrieves the currently authenticated user details based on the session token (cookie or header).',
   })
   @SwaggerResponse({ status: 200, description: 'Active session returned.' })
-  @SwaggerResponse({ status: 401, description: 'Unauthorized. No active session.' })
+  @SwaggerResponse({
+    status: 401,
+    description: 'Unauthorized. No active session.',
+  })
   async getSession(@Req() req: Request) {
     return this.authService.getSessionFromNodeHeaders(req.headers);
   }
@@ -153,15 +185,19 @@ export class AuthController {
   @Public()
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Request a password reset email',
-    description: 'Sends a password reset link to the specified email address if the account exists.',
+    description:
+      'Sends a password reset link to the specified email address if the account exists.',
   })
   @SwaggerResponse({
     status: 200,
     description: 'Password reset email sent successfully.',
   })
-  @SwaggerResponse({ status: 400, description: 'Validation error for the email.' })
+  @SwaggerResponse({
+    status: 400,
+    description: 'Validation error for the email.',
+  })
   async forgotPassword(
     @Body() dto: ForgotPasswordDto,
     @Req() req: Request,
@@ -177,12 +213,16 @@ export class AuthController {
   @Public()
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Reset password using a token from the reset email',
-    description: 'Updates the user\'s password if the provided reset token is valid and not expired.',
+    description:
+      "Updates the user's password if the provided reset token is valid and not expired.",
   })
   @SwaggerResponse({ status: 200, description: 'Password successfully reset.' })
-  @SwaggerResponse({ status: 400, description: 'Invalid or expired reset token, or weak password.' })
+  @SwaggerResponse({
+    status: 400,
+    description: 'Invalid or expired reset token, or weak password.',
+  })
   async resetPassword(
     @Body() dto: ResetPasswordDto,
     @Req() req: Request,
@@ -200,11 +240,22 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Change password for the authenticated user',
-    description: 'Allows an authenticated user to change their password by providing their current password and a new one.',
+    description:
+      'Allows an authenticated user to change their password by providing their current password and a new one.',
   })
-  @SwaggerResponse({ status: 200, description: 'Password successfully changed.' })
-  @SwaggerResponse({ status: 400, description: 'Current password does not match (PASSWORD_MISMATCH) or new password is too weak.' })
-  @SwaggerResponse({ status: 401, description: 'Unauthorized. Active session required.' })
+  @SwaggerResponse({
+    status: 200,
+    description: 'Password successfully changed.',
+  })
+  @SwaggerResponse({
+    status: 400,
+    description:
+      'Current password does not match (PASSWORD_MISMATCH) or new password is too weak.',
+  })
+  @SwaggerResponse({
+    status: 401,
+    description: 'Unauthorized. Active session required.',
+  })
   async changePassword(
     @Body() dto: ChangePasswordDto,
     @Req() req: Request,
@@ -221,12 +272,16 @@ export class AuthController {
   @Public()
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Verify email address using a token',
-    description: 'Marks a user\'s email address as verified using the token sent in the verification email.',
+    description:
+      "Marks a user's email address as verified using the token sent in the verification email.",
   })
   @SwaggerResponse({ status: 200, description: 'Email successfully verified.' })
-  @SwaggerResponse({ status: 400, description: 'Invalid or expired verification token.' })
+  @SwaggerResponse({
+    status: 400,
+    description: 'Invalid or expired verification token.',
+  })
   async verifyEmail(
     @Body() dto: VerifyEmailDto,
     @Req() req: Request,
@@ -243,14 +298,22 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Resend email verification link to the authenticated user',
-    description: 'Triggers a new verification email to be sent to the currently authenticated user\'s registered email address.',
+    description:
+      "Triggers a new verification email to be sent to the currently authenticated user's registered email address.",
   })
   @SwaggerResponse({
     status: 200,
     description: 'Verification email sent successfully.',
   })
-  @SwaggerResponse({ status: 401, description: 'Unauthorized. Active session required.' })
-  @SwaggerResponse({ status: 429, description: 'Too many requests. Please wait before requesting another email.' })
+  @SwaggerResponse({
+    status: 401,
+    description: 'Unauthorized. Active session required.',
+  })
+  @SwaggerResponse({
+    status: 429,
+    description:
+      'Too many requests. Please wait before requesting another email.',
+  })
   async sendVerificationEmail(
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
