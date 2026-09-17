@@ -2,15 +2,16 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service'; // adjust path to your actual PrismaService
+import { Prisma} from '@prisma/client';
 
 export interface RecordAuditLogParams {
   actorId?: string;
   action: string; // e.g. 'user.login', 'admin.user.deleted'
   resourceType: string;
   resourceId: string;
-  previousState?: Record<string, unknown>;
-  newState?: Record<string, unknown>;
-  metadata?: Record<string, unknown>;
+  previousState?: Prisma.InputJsonValue;
+  newState?: Prisma.InputJsonValue;
+  metadata?: Prisma.InputJsonValue;
   ipAddress?: string;
 }
 

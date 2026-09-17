@@ -5,6 +5,7 @@ import { validateEnv } from './config/env.validation';
 import { AppController } from './app.controller';
 import { LoggerModule } from 'nestjs-pino';
 import { TerminusModule } from '@nestjs/terminus';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 // Infrastructure
 import { DatabaseModule } from './infrastructure/database/database.module';
@@ -38,6 +39,7 @@ import { AuthGuard } from './common/guards/auth.guard';
 
 @Module({
   imports: [
+    EventEmitterModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       validate: validateEnv,
