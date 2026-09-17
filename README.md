@@ -171,45 +171,187 @@ The PostgreSQL schema implements 24 models covering all TRD requirements:
 ## 9. Local Development & Setup
 
 ### Prerequisites
-- Node.js >= 20.0.0
-- pnpm >= 11.0.0
-- PostgreSQL & Redis (local or Docker)
+- **Node.js**: `>= 20.0.0`
+- **pnpm**: `>= 11.0.0`
+- **Docker & Docker Compose**: For local PostgreSQL and Redis
 
-### Installation
+---
+
+### Step-by-Step Setup
+
+#### 1. Clone & Install Dependencies
 ```bash
 # Clone the repository
 git clone https://github.com/Risevestacademy/buymeayard-backend.git
 cd buymeayard-backend
 
-# Install dependencies across monorepo
+# Install dependencies across all monorepo workspaces
 pnpm install
 
 # Generate Prisma Client
 pnpm --filter @buymeayard/api prisma:generate
 ```
 
-### Environment Configuration
+#### 2. Configure Environment Variables
 Copy [.env.example](file:///home/phantom/Documents/Github/buymeayard-backend/apps/api/.env.example) to `.env` in `apps/api/`:
 ```bash
 cp apps/api/.env.example apps/api/.env
 ```
+Ensure `BETTER_AUTH_SECRET` is set to a secure string (minimum 32 characters).
 
-### Build, Test & Run
+#### 3. Start Database & Redis (Docker)
+Start the local PostgreSQL and Redis containers:
 ```bash
-# Build all packages and applications
-pnpm build
-
-# Run unit tests
-pnpm test
-
-# Run linter
-pnpm lint
-
-# Start API in development mode (with hot-reload)
-pnpm --filter @buymeayard/api dev
+pnpm db:up
 ```
 
-### API Endpoints & Documentation
-- **API Base:** `http://localhost:3000/api/v1`
-- **Swagger Documentation:** `http://localhost:3000/api/docs`
-- **Health Check:** `http://localhost:3000/health`
+#### 4. Run Database Migrations
+Apply the Prisma schema migrations to your local PostgreSQL instance:
+```bash
+pnpm db:migrate
+```
+
+#### 5. Seed the Database
+Populate the database with the required default roles and the initial Super Admin account (`admin@buymeayard.com` / `AdminPassword123!`):
+```bash
+cd apps/api && pnpm prisma db seed
+```
+*(You can also run this command in your production environment's shell to seed your production database).*
+
+#### 6. Start Backend API Server
+Start the NestJS application with hot-reload:
+```bash
+pnpm dev
+```
+*(Or target the API package specifically: `pnpm --filter @buymeayard/api dev`)*
+
+---
+
+### Useful Development Commands
+
+| Command | Description |
+| :--- | :--- |
+| `pnpm dev` | Start backend in development mode with hot-reload |
+| `pnpm build` | Compile all monorepo packages and applications |
+| `pnpm test` | Run automated unit test suite across workspaces |
+| `pnpm lint` | Run ESLint with auto-fix across all packages |
+| `pnpm db:up` | Boot local PostgreSQL & Redis containers in background |
+| `pnpm db:down` | Stop local PostgreSQL & Redis containers |
+| `pnpm db:logs` | View live streaming logs from database containers |
+| `pnpm db:migrate` | Run Prisma migrations against the local database |
+| `pnpm db:studio` | Launch visual Prisma Studio database GUI |
+
+---
+
+### Client Authentication Guide
+The backend supports dual-mode authentication via Better Auth:
+
+- **Web Applications (Browsers):**
+  - Standard cookie authentication. On login/register, Better Auth sets secure HTTP-only session cookies (`better-auth.session_token`).
+- **Mobile Applications (React Native / iOS / Android):**
+  - Send the header `x-client-type: mobile` (or `x-platform: mobile`).
+  - The API strips `Set-Cookie` headers and returns the session token directly in the JSON response:
+    ```json
+    {
+      "token": "session-token-here",
+      "user": { ... }
+    }
+    ```
+  - For subsequent requests, authenticate using `Authorization: Bearer <token>`.
+
+---
+
+### Endpoints & Documentation
+- **API Base:** [http://localhost:3000/api/v1](http://localhost:3000/api/v1)
+- **Interactive Swagger Docs:** [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
+- **Health Check:** [http://localhost:3000/health](http://localhost:3000/health)
+- **Prisma Studio:** [http://localhost:5555](http://localhost:5555) (via `pnpm db:studio`)
+
+---
+
+## 10. CI/CD Pipeline
+
+The project uses **GitHub Actions** for continuous integration. The workflow runs on every push or pull request to `main` and `dev`.
+
+### Pipeline Steps
+
+| Step | What it does |
+| :--- | :--- |
+| **Checkout** | Clones the repository |
+| **Install pnpm** | Sets up pnpm v11 with dependency caching |
+| **Setup Node.js** | Configures Node.js v20 |
+| **Install dependencies** | Runs `pnpm install --frozen-lockfile` |
+| **Generate Prisma client** | Generates the typed database client |
+| **Lint** | Runs ESLint across all packages |
+| **Test** | Runs the full Jest test suite |
+| **Build** | Compiles all packages via Turborepo |
+
+The CI environment spins up **PostgreSQL 16** and **Redis 7** as service containers, so integration tests can run against real backing services.
+
+The workflow is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+### Manual Deployment to Render
+
+To deploy the API to Render without using a Blueprint (which requires a payment method):
+
+1. Go to the [Render Dashboard](https://dashboard.render.com).
+2. Click **New** → **Web Service**.
+3. Connect this GitHub repository and configure:
+   - **Branch**: `main`
+   - **Runtime**: `Docker` (Auto-detected from `Dockerfile`)
+   - **Instance Type**: `Free`
+4. In the **Environment Variables** section, add the required variables:
+   - `DATABASE_URL` (Use Neon or Supabase)
+   - `REDIS_URL` (Use Upstash)
+   - `NODE_ENV=production`
+   - `PORT=3000`
+   - Your secret keys (Paystack, Cloudinary, Better Auth)
+5. Render will automatically build and deploy new commits pushed to the `main` branch.
+
+---
+
+## 11. Production Docker Build
+
+The project includes a multi-stage `Dockerfile` optimized for production deployments.
+
+### Build & Run
+
+```bash
+# Build the production image
+docker build -t buymeayard-api .
+
+# Run the container
+docker run -p 3000:3000 \
+  -e DATABASE_URL="postgresql://..." \
+  -e REDIS_URL="redis://..." \
+  -e BETTER_AUTH_SECRET="your-production-secret" \
+  -e BETTER_AUTH_URL="https://api.yoursite.com" \
+  -e PAYSTACK_SECRET_KEY="sk_live_..." \
+  -e PAYSTACK_WEBHOOK_SECRET="..." \
+  buymeayard-api
+```
+
+### Image Stages
+
+| Stage | Base | Purpose |
+| :--- | :--- | :--- |
+| **pruner** | `node:22-alpine` | Uses `turbo prune` to extract only the `@buymeayard/api` package and its workspace dependencies |
+| **installer** | `node:22-alpine` | Installs deps, generates Prisma client, builds the NestJS app |
+| **runner** | `node:22-alpine` | Minimal runtime — copies only compiled output, `node_modules`, and Prisma schema. Uses `dumb-init` for proper PID 1 signal handling |
+
+### Key Design Decisions
+- **Turbo prune** reduces the Docker context to only the files needed for the API app, keeping the image small.
+- **Dependency layer caching** — `package.json` files are copied and installed before source code, so rebuilds after code changes skip the slow `pnpm install` step.
+- **dumb-init** ensures `SIGTERM` is forwarded correctly to the Node process for graceful shutdowns in Kubernetes, ECS, or any orchestrator.
+
+---
+
+## 12. Project Documentation
+
+| Document | Location |
+| :--- | :--- |
+| **Database Schema** | [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) — Full ER diagram, table dictionaries, and financial invariants |
+| **API Reference (Swagger)** | [http://localhost:3000/api/docs](http://localhost:3000/api/docs) — Interactive API documentation (run `pnpm dev` first) |
+| **CI Pipeline** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — Lint → Test → Build |
+| **Production Dockerfile** | [`Dockerfile`](Dockerfile) — Multi-stage Docker build |
+

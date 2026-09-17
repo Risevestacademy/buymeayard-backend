@@ -1,20 +1,22 @@
 import { NestFactory } from '@nestjs/core';
-import { Logger, ValidationPipe } from '@nestjs/common';
+import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
+import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule, {
     rawBody: true, // Required for webhook cryptographic signature verification
+    bufferLogs: true,
   });
+
+  const logger = app.get(Logger);
+  app.useLogger(logger);
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') || 3000;
-  const appUrl =
-    configService.get<string>('APP_URL') || 'http://localhost:3001';
 
   // Global prefix: /api/v1
   app.setGlobalPrefix('api/v1', {
@@ -24,7 +26,13 @@ async function bootstrap() {
   // Cookies & Security
   app.use(cookieParser());
   app.enableCors({
-    origin: [appUrl, 'http://localhost:3000', 'http://localhost:3001'],
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'https://buymeayard-main-dev.up.railway.app',
+      'https://buymeayard-creator-dev.up.railway.app',
+      'https://buymeayard-admin-dev.up.railway.app',
+    ],
     credentials: true,
   });
 

@@ -8,7 +8,12 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "format": "prettier --write \"**/*.{ts,tsx,md,json}\"",
-    "clean": "turbo run clean && rm -rf node_modules"
+    "clean": "turbo run clean && rm -rf node_modules",
+    "db:up": "docker compose up -d",
+    "db:down": "docker compose down",
+    "db:logs": "docker compose logs -f",
+    "db:migrate": "pnpm --filter @buymeayard/api prisma:migrate",
+    "db:studio": "pnpm --filter @buymeayard/api prisma:studio"
   },
   "devDependencies": {
     "prettier": "^3.5.0",
@@ -17,7 +22,7 @@
   },
   "packageManager": "pnpm@11.1.2",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
