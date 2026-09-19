@@ -18,6 +18,9 @@ export function createBetterAuth(
 
   return betterAuth({
     trustedOrigins: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
       'https://buymeayard-main-dev.up.railway.app',
       'https://buymeayard-creator-dev.up.railway.app',
       'https://buymeayard-admin-dev.up.railway.app',
