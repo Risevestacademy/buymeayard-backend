@@ -82,10 +82,12 @@ export class AuthService implements OnModuleInit {
     dto: RegisterCreatorDto,
     headers?: Headers,
   ): Promise<globalThis.Response> {
+    const fullName = `${dto.firstName} ${dto.lastName}`.trim();
+
     const webRes = await this.signUpEmail({
       email: dto.email,
       password: dto.password,
-      name: dto.name,
+      name: fullName,
       headers,
     });
 
@@ -296,9 +298,7 @@ export class AuthService implements OnModuleInit {
         data: {
           userId,
           username: dto.username,
-          displayName: dto.name,
-          bio: dto.bio || null,
-          categoryId: dto.categoryId || null,
+          displayName: `${dto.firstName} ${dto.lastName}`.trim(),
           status: 'REGISTERED',
           kycStatus: 'NOT_SUBMITTED',
         },

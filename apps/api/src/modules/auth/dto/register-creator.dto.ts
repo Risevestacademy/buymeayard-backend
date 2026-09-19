@@ -1,12 +1,11 @@
 import {
   IsEmail,
   IsNotEmpty,
-  IsOptional,
   IsString,
   MinLength,
   Matches,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterCreatorDto {
   @ApiProperty({
@@ -25,12 +24,20 @@ export class RegisterCreatorDto {
   password!: string;
 
   @ApiProperty({
-    example: 'Adeola Johnson',
-    description: 'Creator full display name',
+    example: 'Adeola',
+    description: 'Creator first name',
   })
   @IsString()
   @IsNotEmpty()
-  name!: string;
+  firstName!: string;
+
+  @ApiProperty({
+    example: 'Johnson',
+    description: 'Creator last name',
+  })
+  @IsString()
+  @IsNotEmpty()
+  lastName!: string;
 
   @ApiProperty({
     example: 'adeola_creates',
@@ -43,20 +50,4 @@ export class RegisterCreatorDto {
       'Username can only contain letters, numbers, underscores, and dots',
   })
   username!: string;
-
-  @ApiPropertyOptional({
-    example: 'Fashion designer based in Lagos',
-    description: 'Creator bio',
-  })
-  @IsOptional()
-  @IsString()
-  bio?: string;
-
-  @ApiPropertyOptional({
-    example: 'uuid-category-id',
-    description: 'ID of the creator category (e.g., Fashion, Tech)',
-  })
-  @IsOptional()
-  @IsString()
-  categoryId?: string;
 }

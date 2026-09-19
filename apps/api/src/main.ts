@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
@@ -43,6 +43,15 @@ async function bootstrap() {
       whitelist: true,
       transform: true,
       forbidNonWhitelisted: true,
+      exceptionFactory: (errors) => {
+        // Get the first error from the array
+        const firstError = errors[0];
+        // Get the first constraint message from that error
+        const message = firstError.constraints
+          ? Object.values(firstError.constraints)[0]
+          : 'Validation failed';
+        return new BadRequestException(message);
+      },
     }),
   );
 
