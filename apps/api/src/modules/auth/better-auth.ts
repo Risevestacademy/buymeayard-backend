@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
-import { bearer } from 'better-auth/plugins';
+import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import { Resend } from 'resend';
 import { randomBytes } from 'crypto';
@@ -224,7 +224,31 @@ export function createBetterAuth(
         },
       },
     },
-    plugins: [bearer()],
+    plugins: [
+      bearer(),
+      genericOAuth({
+        config: [
+          {
+            providerId: 'instagram',
+            clientId: process.env.INSTAGRAM_CLIENT_ID || '',
+            clientSecret: process.env.INSTAGRAM_CLIENT_SECRET || '',
+            authorizationUrl: 'https://api.instagram.com/oauth/authorize',
+            tokenUrl: 'https://api.instagram.com/oauth/access_token',
+            userInfoUrl: 'https://graph.instagram.com/me?fields=id,username',
+            scopes: ['user_profile'],
+          },
+          {
+            providerId: 'tiktok',
+            clientId: process.env.TIKTOK_CLIENT_KEY || '',
+            clientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
+            authorizationUrl: 'https://www.tiktok.com/v2/auth/authorize/',
+            tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
+            userInfoUrl: 'https://open.tiktokapis.com/v2/user/info/',
+            scopes: ['user.info.basic'],
+          },
+        ],
+      }),
+    ],
   });
 }
 
