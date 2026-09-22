@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
 
@@ -63,9 +63,20 @@ export class CreatorsService {
   async onboardCreator(userId: string, dto: OnboardCreatorDto) {
     const creator = await this.findByUserId(userId);
 
+    if (dto.username && dto.username !== creator.username) {
+      const existing = await this.prisma.creatorProfile.findUnique({
+        where: { username: dto.username },
+      });
+      if (existing) {
+        throw new ConflictException('Username is already taken');
+      }
+    }
+
     return this.prisma.creatorProfile.update({
       where: { id: creator.id },
       data: {
+        displayName: dto.displayName,
+        username: dto.username,
         bio: dto.bio,
         categoryId: dto.categoryId,
         avatarUrl: dto.avatarUrl,
