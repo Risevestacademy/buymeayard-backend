@@ -16,7 +16,6 @@ describe('AuthController', () => {
   let controller: AuthController;
   let authService: {
     signUpEmail: jest.Mock;
-    signUpEmailWithRole: jest.Mock;
     signInEmail: jest.Mock;
     signOut: jest.Mock;
     getSessionFromNodeHeaders: jest.Mock;
@@ -57,7 +56,6 @@ describe('AuthController', () => {
   beforeEach(async () => {
     authService = {
       signUpEmail: jest.fn(),
-      signUpEmailWithRole: jest.fn(),
       signInEmail: jest.fn(),
       signOut: jest.fn(),
       getSessionFromNodeHeaders: jest.fn(),
@@ -104,11 +102,11 @@ describe('AuthController', () => {
         { user: { id: 'u1', email: 'alice@example.com' } },
         201,
       );
-      authService.signUpEmailWithRole.mockResolvedValue(mockWebResponse);
+      authService.signUpEmail.mockResolvedValue(mockWebResponse);
 
       const result = await controller.register(dto, req, res);
 
-      expect(authService.signUpEmailWithRole).toHaveBeenCalled();
+      expect(authService.signUpEmail).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(HttpStatus.CREATED);
       expect(result).toEqual({
         user: { id: 'u1', email: 'alice@example.com' },
@@ -126,7 +124,7 @@ describe('AuthController', () => {
       await expect(controller.register(dto, req, res)).rejects.toThrow(
         ForbiddenException,
       );
-      expect(authService.signUpEmailWithRole).not.toHaveBeenCalled();
+      expect(authService.signUpEmail).not.toHaveBeenCalled();
     });
 
     it('should forward set-cookie headers for web browser requests', async () => {
@@ -141,7 +139,7 @@ describe('AuthController', () => {
         { user: { id: 'u1', email: 'alice@example.com' } },
         201,
       );
-      authService.signUpEmailWithRole.mockResolvedValue(mockWebResponse);
+      authService.signUpEmail.mockResolvedValue(mockWebResponse);
 
       await controller.register(dto, req, res);
 
@@ -165,7 +163,7 @@ describe('AuthController', () => {
         }),
         { status: 400, headers: { 'content-type': 'application/json' } },
       );
-      authService.signUpEmailWithRole.mockResolvedValue(mockWebResponse);
+      authService.signUpEmail.mockResolvedValue(mockWebResponse);
 
       await expect(controller.register(dto, req, res)).rejects.toThrow(
         HttpException,

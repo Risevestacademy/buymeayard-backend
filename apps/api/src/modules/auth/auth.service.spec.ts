@@ -146,7 +146,7 @@ describe('AuthService', () => {
       });
       prismaService.userRole.upsert.mockResolvedValue({});
 
-      const result = await service.signUpEmailWithRole({
+      const result = await service.signUpEmail({
         email: 'new@example.com',
         password: 'Password123!',
         name: 'New User',
@@ -181,7 +181,7 @@ describe('AuthService', () => {
       );
       mockBetterAuthInstance.api.signUpEmail.mockResolvedValue(mockWebResponse);
 
-      const result = await service.signUpEmailWithRole({
+      const result = await service.signUpEmail({
         email: 'existing@example.com',
         password: 'Password123!',
       });

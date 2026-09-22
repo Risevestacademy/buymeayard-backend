@@ -136,10 +136,14 @@ export function createBetterAuth(
         create: {
           after: async (account) => {
             try {
-              if (account.providerId === 'email' || account.providerId === 'google' || account.providerId === 'apple') {
+              if (
+                account.providerId === 'email' ||
+                account.providerId === 'google' ||
+                account.providerId === 'apple'
+              ) {
                 return; // We don't link these as public social links for now (unless Google is for YouTube)
               }
-              
+
               let url = '';
               const provider = account.providerId;
               const accountId = account.accountId; // The user ID on the social platform
@@ -165,7 +169,7 @@ export function createBetterAuth(
               }
 
               const profile = await prisma.creatorProfile.findUnique({
-                where: { userId: account.userId }
+                where: { userId: account.userId },
               });
 
               if (profile) {
@@ -174,15 +178,17 @@ export function createBetterAuth(
                     creatorId: profile.id,
                     platform: provider,
                     url: url,
-                  }
+                  },
                 });
-                console.log(`[Auth] Synced ${provider} social link for user ${account.userId}`);
+                console.log(
+                  `[Auth] Synced ${provider} social link for user ${account.userId}`,
+                );
               }
             } catch (err) {
               console.error(`[Auth] Failed to sync social link:`, err);
             }
-          }
-        }
+          },
+        },
       },
       user: {
         create: {
@@ -204,8 +210,9 @@ export function createBetterAuth(
               });
 
               // Initialize CreatorProfile
-              const fallbackUsername = user.email.split('@')[0] + '-' + randomBytes(4).toString('hex');
-              
+              const fallbackUsername =
+                user.email.split('@')[0] + '-' + randomBytes(4).toString('hex');
+
               await prisma.creatorProfile.create({
                 data: {
                   userId: user.id,
@@ -216,9 +223,14 @@ export function createBetterAuth(
                 },
               });
 
-              console.log(`[Auth] Provisioned CREATOR profile for user ${user.id}`);
+              console.log(
+                `[Auth] Provisioned CREATOR profile for user ${user.id}`,
+              );
             } catch (err) {
-              console.error(`[Auth] Failed to provision CREATOR profile for user ${user.id}:`, err);
+              console.error(
+                `[Auth] Failed to provision CREATOR profile for user ${user.id}:`,
+                err,
+              );
             }
           },
         },

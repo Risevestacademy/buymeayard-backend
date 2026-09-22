@@ -9,7 +9,6 @@ import {
   HttpCode,
   HttpStatus,
   HttpException,
-  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,

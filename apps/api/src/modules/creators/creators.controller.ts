@@ -25,12 +25,16 @@ export class CreatorsController {
   }
 
   @Put('me/onboarding')
-  @ApiOperation({ 
+  @ApiOperation({
     summary: 'Complete creator profile onboarding',
-    description: 'Updates the creator profile with display name, username (slug), and other details. Note: Social media linking should be done separately via Better Auth linkAccount SDK.'
+    description:
+      'Updates the creator profile with display name, username (slug), and other details. Note: Social media linking should be done separately via Better Auth linkAccount SDK.',
   })
   @ApiResponse({ status: 200, description: 'Profile successfully updated.' })
-  @ApiResponse({ status: 409, description: 'Username (slug) is already taken.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Username (slug) is already taken.',
+  })
   async onboardCreator(
     @CurrentUser('id') userId: string,
     @Body() dto: OnboardCreatorDto,
