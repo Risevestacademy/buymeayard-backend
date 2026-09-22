@@ -3,6 +3,22 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class OnboardCreatorDto {
   @ApiPropertyOptional({
+    example: 'Adeola Johnson',
+    description: 'Creator display name',
+  })
+  @IsOptional()
+  @IsString()
+  displayName?: string;
+
+  @ApiPropertyOptional({
+    example: 'adeola_creates',
+    description: 'Unique username / slug for the creator profile',
+  })
+  @IsOptional()
+  @IsString()
+  username?: string;
+
+  @ApiPropertyOptional({
     example: 'Fashion designer based in Lagos',
     description: 'Creator bio',
   })

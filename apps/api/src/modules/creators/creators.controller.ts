@@ -1,5 +1,5 @@
 import { Controller, Get, Put, Body, Param, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { CreatorsService } from './creators.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -25,7 +25,16 @@ export class CreatorsController {
   }
 
   @Put('me/onboarding')
-  @ApiOperation({ summary: 'Complete creator profile onboarding' })
+  @ApiOperation({
+    summary: 'Complete creator profile onboarding',
+    description:
+      'Updates the creator profile with display name, username (slug), and other details. Note: Social media linking should be done separately via Better Auth linkAccount SDK.',
+  })
+  @ApiResponse({ status: 200, description: 'Profile successfully updated.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Username (slug) is already taken.',
+  })
   async onboardCreator(
     @CurrentUser('id') userId: string,
     @Body() dto: OnboardCreatorDto,
