@@ -58,18 +58,6 @@ export function createBetterAuth(
         clientId: process.env.FACEBOOK_CLIENT_ID || '',
         clientSecret: process.env.FACEBOOK_CLIENT_SECRET || '',
       },
-      instagram: {
-        clientId: process.env.INSTAGRAM_CLIENT_ID || '',
-        clientSecret: process.env.INSTAGRAM_CLIENT_SECRET || '',
-      },
-      tiktok: {
-        clientKey: process.env.TIKTOK_CLIENT_KEY || '',
-        clientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
-      },
-      youtube: {
-        clientId: process.env.YOUTUBE_CLIENT_ID || '',
-        clientSecret: process.env.YOUTUBE_CLIENT_SECRET || '',
-      },
     },
     emailAndPassword: {
       enabled: true,
