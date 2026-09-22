@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { HttpException, HttpStatus, ForbiddenException } from '@nestjs/common';
+import { HttpException, HttpStatus } from '@nestjs/common';
 
 jest.mock('better-auth/node', () => ({
   toNodeHandler: jest.fn(() => jest.fn()),
@@ -112,8 +112,6 @@ describe('AuthController', () => {
         user: { id: 'u1', email: 'alice@example.com' },
       });
     });
-
-
 
     it('should forward set-cookie headers for web browser requests', async () => {
       const dto = {
