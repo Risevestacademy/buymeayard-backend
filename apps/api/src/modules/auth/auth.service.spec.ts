@@ -8,6 +8,11 @@ const mockBetterAuthInstance = {
     signUpEmail: jest.fn(),
     signInEmail: jest.fn(),
     signOut: jest.fn(),
+    requestPasswordReset: jest.fn(),
+    resetPassword: jest.fn(),
+    changePassword: jest.fn(),
+    verifyEmail: jest.fn(),
+    sendVerificationEmail: jest.fn(),
   },
 };
 
@@ -27,12 +32,20 @@ describe('AuthService', () => {
     configService = {
       get: jest.fn((key: string) => {
         if (key === 'BETTER_AUTH_SECRET') return 'test-secret';
-        if (key === 'BETTER_AUTH_URL') return 'http://localhost:4000';
+        if (key === 'BETTER_AUTH_URL') return 'http://localhost:3000';
         return null;
       }),
     };
 
-    prismaService = {};
+    prismaService = {
+      role: {
+        findUnique: jest.fn(),
+      },
+      userRole: {
+        upsert: jest.fn(),
+        findFirst: jest.fn(),
+      },
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -57,7 +70,7 @@ describe('AuthService', () => {
     service.onModuleInit();
     expect(createBetterAuth).toHaveBeenCalledWith(prismaService, {
       secret: 'test-secret',
-      baseURL: 'http://localhost:4000',
+      baseURL: 'http://localhost:3000',
     });
   });
 
@@ -117,6 +130,68 @@ describe('AuthService', () => {
     });
   });
 
+  describe('signUpEmailWithRole', () => {
+    it('should assign SUPPORTER role after successful registration', async () => {
+      const mockWebResponse = new Response(
+        JSON.stringify({ user: { id: 'u-new' } }),
+        {
+          status: 201,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+      mockBetterAuthInstance.api.signUpEmail.mockResolvedValue(mockWebResponse);
+      prismaService.role.findUnique.mockResolvedValue({
+        id: 'role-supporter',
+        name: 'SUPPORTER',
+      });
+      prismaService.userRole.upsert.mockResolvedValue({});
+
+      const result = await service.signUpEmailWithRole({
+        email: 'new@example.com',
+        password: 'Password123!',
+        name: 'New User',
+      });
+
+      expect(result.ok).toBe(true);
+      expect(prismaService.role.findUnique).toHaveBeenCalledWith({
+        where: { name: 'SUPPORTER' },
+      });
+      expect(prismaService.userRole.upsert).toHaveBeenCalledWith({
+        where: {
+          userId_roleId: {
+            userId: 'u-new',
+            roleId: 'role-supporter',
+          },
+        },
+        update: {},
+        create: {
+          userId: 'u-new',
+          roleId: 'role-supporter',
+        },
+      });
+    });
+
+    it('should not assign role if registration fails', async () => {
+      const mockWebResponse = new Response(
+        JSON.stringify({ message: 'User already exists' }),
+        {
+          status: 400,
+          headers: { 'content-type': 'application/json' },
+        },
+      );
+      mockBetterAuthInstance.api.signUpEmail.mockResolvedValue(mockWebResponse);
+
+      const result = await service.signUpEmailWithRole({
+        email: 'existing@example.com',
+        password: 'Password123!',
+      });
+
+      expect(result.ok).toBe(false);
+      expect(prismaService.role.findUnique).not.toHaveBeenCalled();
+      expect(prismaService.userRole.upsert).not.toHaveBeenCalled();
+    });
+  });
+
   describe('signInEmail', () => {
     it('should call signInEmail on betterAuth api with asResponse: true', async () => {
       const mockWebResponse = new Response(
@@ -159,6 +234,166 @@ describe('AuthService', () => {
         headers: expect.any(Headers),
         asResponse: true,
       });
+    });
+  });
+
+  describe('forgotPassword', () => {
+    it('should call forgetPassword on betterAuth api', async () => {
+      const mockWebResponse = new Response(JSON.stringify({ status: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+      mockBetterAuthInstance.api.requestPasswordReset.mockResolvedValue(
+        mockWebResponse,
+      );
+
+      const result = await service.forgotPassword({
+        email: 'user@example.com',
+      });
+
+      expect(result).toEqual(mockWebResponse);
+      expect(
+        mockBetterAuthInstance.api.requestPasswordReset,
+      ).toHaveBeenCalledWith({
+        body: {
+          email: 'user@example.com',
+          redirectTo: '/reset-password',
+        },
+        asResponse: true,
+      });
+    });
+  });
+
+  describe('resetPassword', () => {
+    it('should call resetPassword on betterAuth api', async () => {
+      const mockWebResponse = new Response(JSON.stringify({ status: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+      mockBetterAuthInstance.api.resetPassword.mockResolvedValue(
+        mockWebResponse,
+      );
+
+      const result = await service.resetPassword({
+        token: 'reset-token-123',
+        newPassword: 'NewPassword123!',
+      });
+
+      expect(result).toEqual(mockWebResponse);
+      expect(mockBetterAuthInstance.api.resetPassword).toHaveBeenCalledWith({
+        body: {
+          token: 'reset-token-123',
+          newPassword: 'NewPassword123!',
+        },
+        asResponse: true,
+      });
+    });
+  });
+
+  describe('changePassword', () => {
+    it('should call changePassword on betterAuth api with headers', async () => {
+      const mockHeaders = new Headers();
+      mockHeaders.set('authorization', 'Bearer token-123');
+      const mockWebResponse = new Response(JSON.stringify({ status: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+      mockBetterAuthInstance.api.changePassword.mockResolvedValue(
+        mockWebResponse,
+      );
+
+      const result = await service.changePassword({
+        currentPassword: 'OldPassword!',
+        newPassword: 'NewPassword123!',
+        headers: mockHeaders,
+      });
+
+      expect(result).toEqual(mockWebResponse);
+      expect(mockBetterAuthInstance.api.changePassword).toHaveBeenCalledWith({
+        body: {
+          currentPassword: 'OldPassword!',
+          newPassword: 'NewPassword123!',
+        },
+        headers: mockHeaders,
+        asResponse: true,
+      });
+    });
+  });
+
+  describe('verifyEmail', () => {
+    it('should call verifyEmail on betterAuth api', async () => {
+      const mockWebResponse = new Response(JSON.stringify({ status: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+      mockBetterAuthInstance.api.verifyEmail.mockResolvedValue(mockWebResponse);
+
+      const result = await service.verifyEmail({
+        token: 'verify-token-123',
+      });
+
+      expect(result).toEqual(mockWebResponse);
+      expect(mockBetterAuthInstance.api.verifyEmail).toHaveBeenCalledWith({
+        query: {
+          token: 'verify-token-123',
+        },
+        asResponse: true,
+      });
+    });
+  });
+
+  describe('sendVerificationEmail', () => {
+    it('should call sendVerificationEmail on betterAuth api with headers', async () => {
+      const mockHeaders = new Headers();
+      mockHeaders.set('authorization', 'Bearer token-123');
+      const mockWebResponse = new Response(JSON.stringify({ status: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+      mockBetterAuthInstance.api.sendVerificationEmail.mockResolvedValue(
+        mockWebResponse,
+      );
+
+      const result = await service.sendVerificationEmail({
+        email: 'user@example.com',
+        headers: mockHeaders,
+      });
+
+      expect(result).toEqual(mockWebResponse);
+      expect(
+        mockBetterAuthInstance.api.sendVerificationEmail,
+      ).toHaveBeenCalledWith({
+        body: {
+          email: 'user@example.com',
+        },
+        headers: mockHeaders,
+        asResponse: true,
+      });
+    });
+  });
+
+  describe('userHasRole', () => {
+    it('should return true when user has the role', async () => {
+      prismaService.userRole.findFirst.mockResolvedValue({
+        userId: 'u1',
+        roleId: 'r1',
+      });
+
+      const result = await service.userHasRole('u1', 'CREATOR');
+      expect(result).toBe(true);
+      expect(prismaService.userRole.findFirst).toHaveBeenCalledWith({
+        where: {
+          userId: 'u1',
+          role: { name: 'CREATOR' },
+        },
+      });
+    });
+
+    it('should return false when user does not have the role', async () => {
+      prismaService.userRole.findFirst.mockResolvedValue(null);
+
+      const result = await service.userHasRole('u1', 'CREATOR');
+      expect(result).toBe(false);
     });
   });
 });

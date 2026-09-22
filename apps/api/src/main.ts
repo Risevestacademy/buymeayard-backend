@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
@@ -17,8 +17,6 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') || 3000;
-  const appUrl =
-    configService.get<string>('APP_URL') || 'http://localhost:3001';
 
   // Global prefix: /api/v1
   app.setGlobalPrefix('api/v1', {
@@ -28,7 +26,14 @@ async function bootstrap() {
   // Cookies & Security
   app.use(cookieParser());
   app.enableCors({
-    origin: [appUrl, 'http://localhost:3000', 'http://localhost:3001'],
+    origin: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
+      'https://buymeayard-main-dev.up.railway.app',
+      'https://buymeayard-creator-dev.up.railway.app',
+      'https://buymeayard-admin-dev.up.railway.app',
+    ],
     credentials: true,
   });
 
@@ -38,6 +43,15 @@ async function bootstrap() {
       whitelist: true,
       transform: true,
       forbidNonWhitelisted: true,
+      exceptionFactory: (errors) => {
+        // Get the first error from the array
+        const firstError = errors[0];
+        // Get the first constraint message from that error
+        const message = firstError.constraints
+          ? Object.values(firstError.constraints)[0]
+          : 'Validation failed';
+        return new BadRequestException(message);
+      },
     }),
   );
 
