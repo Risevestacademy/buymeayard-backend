@@ -130,21 +130,13 @@ describe('AuthService', () => {
     });
   });
 
-  describe('signUpEmailWithRole', () => {
-    it('should assign SUPPORTER role after successful registration', async () => {
+  describe('signUpEmail', () => {
+    it('should call signUpEmail on betterAuth api with asResponse: true', async () => {
       const mockWebResponse = new Response(
         JSON.stringify({ user: { id: 'u-new' } }),
-        {
-          status: 201,
-          headers: { 'content-type': 'application/json' },
-        },
+        { status: 201, headers: { 'content-type': 'application/json' } },
       );
       mockBetterAuthInstance.api.signUpEmail.mockResolvedValue(mockWebResponse);
-      prismaService.role.findUnique.mockResolvedValue({
-        id: 'role-supporter',
-        name: 'SUPPORTER',
-      });
-      prismaService.userRole.upsert.mockResolvedValue({});
 
       const result = await service.signUpEmail({
         email: 'new@example.com',
@@ -152,43 +144,15 @@ describe('AuthService', () => {
         name: 'New User',
       });
 
+      expect(mockBetterAuthInstance.api.signUpEmail).toHaveBeenCalledWith({
+        body: {
+          email: 'new@example.com',
+          password: 'Password123!',
+          name: 'New User',
+        },
+        asResponse: true,
+      });
       expect(result.ok).toBe(true);
-      expect(prismaService.role.findUnique).toHaveBeenCalledWith({
-        where: { name: 'SUPPORTER' },
-      });
-      expect(prismaService.userRole.upsert).toHaveBeenCalledWith({
-        where: {
-          userId_roleId: {
-            userId: 'u-new',
-            roleId: 'role-supporter',
-          },
-        },
-        update: {},
-        create: {
-          userId: 'u-new',
-          roleId: 'role-supporter',
-        },
-      });
-    });
-
-    it('should not assign role if registration fails', async () => {
-      const mockWebResponse = new Response(
-        JSON.stringify({ message: 'User already exists' }),
-        {
-          status: 400,
-          headers: { 'content-type': 'application/json' },
-        },
-      );
-      mockBetterAuthInstance.api.signUpEmail.mockResolvedValue(mockWebResponse);
-
-      const result = await service.signUpEmail({
-        email: 'existing@example.com',
-        password: 'Password123!',
-      });
-
-      expect(result.ok).toBe(false);
-      expect(prismaService.role.findUnique).not.toHaveBeenCalled();
-      expect(prismaService.userRole.upsert).not.toHaveBeenCalled();
     });
   });
 

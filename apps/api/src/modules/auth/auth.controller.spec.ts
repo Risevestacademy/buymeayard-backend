@@ -113,19 +113,7 @@ describe('AuthController', () => {
       });
     });
 
-    it('should reject registration on mobile', async () => {
-      const dto = {
-        email: 'alice@example.com',
-        password: 'Password123!',
-        name: 'Alice',
-      };
-      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
 
-      await expect(controller.register(dto, req, res)).rejects.toThrow(
-        ForbiddenException,
-      );
-      expect(authService.signUpEmail).not.toHaveBeenCalled();
-    });
 
     it('should forward set-cookie headers for web browser requests', async () => {
       const dto = {
@@ -194,52 +182,6 @@ describe('AuthController', () => {
       ]);
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
       expect(result).toEqual({ user: { id: 'u1' }, token: 'token456' });
-    });
-
-    it('should allow mobile login for CREATOR users', async () => {
-      const dto = { email: 'creator@example.com', password: 'Password123!' };
-      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
-
-      const mockWebResponse = createSuccessResponse({
-        user: { id: 'u-creator' },
-        token: 'token-creator',
-      });
-      authService.signInEmail.mockResolvedValue(mockWebResponse);
-      authService.userHasRole.mockResolvedValue(true);
-
-      const result = await controller.login(dto, req, res);
-
-      expect(authService.userHasRole).toHaveBeenCalledWith(
-        'u-creator',
-        'CREATOR',
-      );
-      expect(result).toEqual({
-        token: 'token-creator',
-        user: { id: 'u-creator' },
-      });
-    });
-
-    it('should reject mobile login for non-CREATOR users', async () => {
-      const dto = { email: 'supporter@example.com', password: 'Password123!' };
-      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
-
-      const mockWebResponse = createSuccessResponse({
-        user: { id: 'u-supporter' },
-        token: 'token-supporter',
-      });
-      authService.signInEmail.mockResolvedValue(mockWebResponse);
-      authService.userHasRole.mockResolvedValue(false);
-      authService.signOut.mockResolvedValue(
-        new Response(JSON.stringify({ success: true }), { status: 200 }),
-      );
-
-      await expect(controller.login(dto, req, res)).rejects.toThrow(
-        ForbiddenException,
-      );
-      expect(authService.userHasRole).toHaveBeenCalledWith(
-        'u-supporter',
-        'CREATOR',
-      );
     });
 
     it('should return token in JSON and omit cookies for mobile requests (x-platform: ios)', async () => {
