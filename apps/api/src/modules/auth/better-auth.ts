@@ -1,10 +1,11 @@
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
-import { bearer } from 'better-auth/plugins';
+import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Resend } from 'resend';
 import { createAuthMiddleware } from 'better-auth/api';
+import { randomBytes } from 'crypto';
 
 export interface BetterAuthOptions {
   secret?: string;
@@ -21,6 +22,9 @@ export function createBetterAuth(
 
   return betterAuth({
     trustedOrigins: [
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://localhost:3002',
       'https://buymeayard-main-dev.up.railway.app',
       'https://buymeayard-creator-dev.up.railway.app',
       'https://buymeayard-admin-dev.up.railway.app',
@@ -40,6 +44,24 @@ export function createBetterAuth(
       process.env.BETTER_AUTH_URL ||
       'http://localhost:3000',
     basePath: '/api/v1/auth',
+    socialProviders: {
+      google: {
+        clientId: process.env.GOOGLE_CLIENT_ID || '',
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+      },
+      apple: {
+        clientId: process.env.APPLE_CLIENT_ID || '',
+        clientSecret: process.env.APPLE_CLIENT_SECRET || '',
+      },
+      twitter: {
+        clientId: process.env.TWITTER_CLIENT_ID || '',
+        clientSecret: process.env.TWITTER_CLIENT_SECRET || '',
+      },
+      facebook: {
+        clientId: process.env.FACEBOOK_CLIENT_ID || '',
+        clientSecret: process.env.FACEBOOK_CLIENT_SECRET || '',
+      },
+    },
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
@@ -86,18 +108,121 @@ export function createBetterAuth(
     session: {
       cookieCache: {
         enabled: true,
-        maxAge: 5 * 60, // 5 minutes
+        maxAge: 5 * 60,
       },
-      expiresIn: 60 * 60 * 24 * 7, // 7 days
-      updateAge: 60 * 60 * 24, // 1 day
+      expiresIn: 60 * 60 * 24 * 7,
+      updateAge: 60 * 60 * 24,
     },
-    plugins: [bearer()],
-
-     // --- Added: emit user.created after a user row is actually created ---
+    advanced: {
+      crossSubDomainCookies: {
+        enabled: true,
+      },
+      defaultCookieAttributes: {
+        sameSite: 'none',
+        secure: true,
+      },
+    },
     databaseHooks: {
+      account: {
+        create: {
+          after: async (account) => {
+            try {
+              if (
+                account.providerId === 'email' ||
+                account.providerId === 'google' ||
+                account.providerId === 'apple'
+              ) {
+                return;
+              }
+
+              let url = '';
+              const provider = account.providerId;
+              const accountId = account.accountId;
+
+              switch (provider) {
+                case 'twitter':
+                  url = `https://x.com/intent/user?user_id=${accountId}`;
+                  break;
+                case 'facebook':
+                  url = `https://facebook.com/${accountId}`;
+                  break;
+                case 'instagram':
+                  url = `https://instagram.com/${accountId}`;
+                  break;
+                case 'tiktok':
+                  url = `https://tiktok.com/@${accountId}`;
+                  break;
+                case 'youtube':
+                  url = `https://youtube.com/channel/${accountId}`;
+                  break;
+                default:
+                  url = `https://${provider}.com/${accountId}`;
+              }
+
+              const profile = await prisma.creatorProfile.findUnique({
+                where: { userId: account.userId },
+              });
+
+              if (profile) {
+                await prisma.creatorSocialLink.create({
+                  data: {
+                    creatorId: profile.id,
+                    platform: provider,
+                    url: url,
+                  },
+                });
+                console.log(
+                  `[Auth] Synced ${provider} social link for user ${account.userId}`,
+                );
+              }
+            } catch (err) {
+              console.error(`[Auth] Failed to sync social link:`, err);
+            }
+          },
+        },
+      },
       user: {
         create: {
           after: async (user) => {
+            // --- dev's CREATOR auto-provisioning (⚠️ see note above re: conflicts with signUpCreator flow) ---
+            try {
+              const role = await prisma.role.upsert({
+                where: { name: 'CREATOR' },
+                update: {},
+                create: { name: 'CREATOR' },
+              });
+
+              await prisma.userRole.create({
+                data: {
+                  userId: user.id,
+                  roleId: role.id,
+                },
+              });
+
+              const fallbackUsername =
+                user.email.split('@')[0] + '-' + randomBytes(4).toString('hex');
+
+              await prisma.creatorProfile.create({
+                data: {
+                  userId: user.id,
+                  username: fallbackUsername,
+                  displayName: user.name || user.email.split('@')[0],
+                  status: 'REGISTERED',
+                  kycStatus: 'NOT_SUBMITTED',
+                },
+              });
+
+              console.log(
+                `[Auth] Provisioned CREATOR profile for user ${user.id}`,
+              );
+            } catch (err) {
+              console.error(
+                `[Auth] Failed to provision CREATOR profile for user ${user.id}:`,
+                err,
+              );
+            }
+
+            // --- our event.created emission for the audit/analytics pipeline ---
             eventEmitter.emit('user.created', {
               userId: user.id,
               email: user.email,
@@ -107,8 +232,6 @@ export function createBetterAuth(
         },
       },
     },
-
-    // --- Added: emit user.login specifically on the sign-in endpoint ---
     hooks: {
       after: createAuthMiddleware(async (ctx) => {
         if (ctx.path === '/sign-in/email' && ctx.context.returned) {
@@ -123,6 +246,31 @@ export function createBetterAuth(
         }
       }),
     },
+    plugins: [
+      bearer(),
+      genericOAuth({
+        config: [
+          {
+            providerId: 'instagram',
+            clientId: process.env.INSTAGRAM_CLIENT_ID || '',
+            clientSecret: process.env.INSTAGRAM_CLIENT_SECRET || '',
+            authorizationUrl: 'https://api.instagram.com/oauth/authorize',
+            tokenUrl: 'https://api.instagram.com/oauth/access_token',
+            userInfoUrl: 'https://graph.instagram.com/me?fields=id,username',
+            scopes: ['user_profile'],
+          },
+          {
+            providerId: 'tiktok',
+            clientId: process.env.TIKTOK_CLIENT_KEY || '',
+            clientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
+            authorizationUrl: 'https://www.tiktok.com/v2/auth/authorize/',
+            tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
+            userInfoUrl: 'https://open.tiktokapis.com/v2/user/info/',
+            scopes: ['user.info.basic'],
+          },
+        ],
+      }),
+    ],
   });
 }
 
