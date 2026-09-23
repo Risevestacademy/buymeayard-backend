@@ -13,7 +13,8 @@ import { PostHogAnalyticsListener } from './listeners/posthog-analytics.listener
     PostHogAnalyticsListener,
   ],
   exports: [AnalyticsService,
-    AuditLogService
+    AuditLogService,
+    PostHogService,
   ],
 })
 export class AnalyticsModule {}
