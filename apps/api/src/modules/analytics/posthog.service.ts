@@ -27,6 +27,18 @@ export class PostHogService implements OnModuleDestroy {
     }
   }
 
+
+captureException(error: Error, distinctId: string, properties?: Record<string, unknown>): void {
+  try {
+    this.client.captureException(error, distinctId, properties);
+  } catch (err) {
+    this.logger.error(
+      `Failed to capture exception to PostHog`,
+      err instanceof Error ? err.stack : String(err),
+    );
+  }
+}
+
   async onModuleDestroy(): Promise<void> {
     await this.client.shutdown();
   }

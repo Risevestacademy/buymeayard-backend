@@ -8,10 +8,13 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ErrorCodes } from '../errors/error-codes';
+import { PostHogService } from '../../modules/analytics/posthog.service';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
+
+  constructor(private readonly postHogService: PostHogService) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -57,6 +60,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
       this.logger.error(`[${request.method} ${request.url}] ${message}`, {
         ...logContext,
       });
+      if (exception instanceof Error) {
+        this.postHogService.captureException(
+          exception,
+          request.user?.id ?? 'anonymous',
+          {
+            path: request.url,
+            method: request.method,
+            status_code: status,
+          },
+        );
+      }
     } else {
       this.logger.warn(`[${request.method} ${request.url}] ${message}`, {
         ...logContext,
