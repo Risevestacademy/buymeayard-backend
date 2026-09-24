@@ -4,6 +4,9 @@ import { fromNodeHeaders } from '../../common/utils/headers.util';
 import type { IncomingHttpHeaders } from 'http';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { createBetterAuth, AuthInstance } from './better-auth';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+
+
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -13,10 +16,11 @@ export class AuthService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   onModuleInit() {
-    this.auth = createBetterAuth(this.prisma, {
+    this.auth = createBetterAuth(this.prisma, this.eventEmitter, {
       secret: this.configService.get<string>('BETTER_AUTH_SECRET'),
       baseURL: this.configService.get<string>('BETTER_AUTH_URL'),
     });

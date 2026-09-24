@@ -2,7 +2,9 @@ import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Resend } from 'resend';
+import { createAuthMiddleware } from 'better-auth/api';
 import { randomBytes } from 'crypto';
 
 export interface BetterAuthOptions {
@@ -12,6 +14,7 @@ export interface BetterAuthOptions {
 
 export function createBetterAuth(
   prisma: PrismaClient,
+  eventEmitter: EventEmitter2,
   options?: BetterAuthOptions,
 ) {
   const resend = new Resend(process.env.RESEND_API_KEY || 're_mock');
@@ -105,10 +108,10 @@ export function createBetterAuth(
     session: {
       cookieCache: {
         enabled: true,
-        maxAge: 5 * 60, // 5 minutes
+        maxAge: 5 * 60,
       },
-      expiresIn: 60 * 60 * 24 * 7, // 7 days
-      updateAge: 60 * 60 * 24, // 1 day
+      expiresIn: 60 * 60 * 24 * 7,
+      updateAge: 60 * 60 * 24,
     },
     advanced: {
       crossSubDomainCookies: {
@@ -129,12 +132,12 @@ export function createBetterAuth(
                 account.providerId === 'google' ||
                 account.providerId === 'apple'
               ) {
-                return; // We don't link these as public social links for now (unless Google is for YouTube)
+                return;
               }
 
               let url = '';
               const provider = account.providerId;
-              const accountId = account.accountId; // The user ID on the social platform
+              const accountId = account.accountId;
 
               switch (provider) {
                 case 'twitter':
@@ -181,15 +184,14 @@ export function createBetterAuth(
       user: {
         create: {
           after: async (user) => {
+            // --- dev's CREATOR auto-provisioning (⚠️ see note above re: conflicts with signUpCreator flow) ---
             try {
-              // Ensure role CREATOR exists
               const role = await prisma.role.upsert({
                 where: { name: 'CREATOR' },
                 update: {},
                 create: { name: 'CREATOR' },
               });
 
-              // Assign CREATOR role
               await prisma.userRole.create({
                 data: {
                   userId: user.id,
@@ -197,7 +199,6 @@ export function createBetterAuth(
                 },
               });
 
-              // Initialize CreatorProfile
               const fallbackUsername =
                 user.email.split('@')[0] + '-' + randomBytes(4).toString('hex');
 
@@ -220,9 +221,30 @@ export function createBetterAuth(
                 err,
               );
             }
+
+            // --- our event.created emission for the audit/analytics pipeline ---
+            eventEmitter.emit('user.created', {
+              userId: user.id,
+              email: user.email,
+              name: user.name,
+            });
           },
         },
       },
+    },
+    hooks: {
+      after: createAuthMiddleware(async (ctx) => {
+        if (ctx.path === '/sign-in/email' && ctx.context.returned) {
+          const returned = ctx.context.returned as { user?: { id: string; email: string } };
+          if (returned.user) {
+            eventEmitter.emit('user.login', {
+              userId: returned.user.id,
+              email: returned.user.email,
+              ipAddress: ctx.request?.headers.get('x-forwarded-for') ?? undefined,
+            });
+          }
+        }
+      }),
     },
     plugins: [
       bearer(),
