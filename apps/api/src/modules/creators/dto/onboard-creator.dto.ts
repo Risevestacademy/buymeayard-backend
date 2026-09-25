@@ -5,7 +5,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export class SocialLinkDto {
   @ApiProperty({
     example: 'twitter',
-    description: 'Social platform name (e.g., twitter, instagram, tiktok, youtube)',
+    description:
+      'Social platform name (e.g., twitter, instagram, tiktok, youtube)',
   })
   @IsString()
   platform: string;

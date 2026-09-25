@@ -147,7 +147,8 @@ export class CreatorsController {
   })
   @ApiParam({
     name: 'username',
-    description: 'Creator username slug or personalized link (e.g. "adeola" or "buymeayard/adeola")',
+    description:
+      'Creator username slug or personalized link (e.g. "adeola" or "buymeayard/adeola")',
     example: 'adeola',
   })
   @ApiResponse({

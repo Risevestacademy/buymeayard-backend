@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreatorsService } from './creators.service';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 
@@ -38,10 +42,14 @@ describe('CreatorsService', () => {
         update: jest.fn(),
       },
       role: {
-        upsert: jest.fn().mockResolvedValue({ id: 'role-creator-id', name: 'CREATOR' }),
+        upsert: jest
+          .fn()
+          .mockResolvedValue({ id: 'role-creator-id', name: 'CREATOR' }),
       },
       userRole: {
-        upsert: jest.fn().mockResolvedValue({ userId: 'user-1', roleId: 'role-creator-id' }),
+        upsert: jest
+          .fn()
+          .mockResolvedValue({ userId: 'user-1', roleId: 'role-creator-id' }),
       },
       creatorSocialLink: {
         findFirst: jest.fn(),
@@ -112,9 +120,7 @@ describe('CreatorsService', () => {
       const result = await service.onboardCreator('user-1', {
         creatorName: 'Adeola Johnson',
         personalizedLink: 'buymeayard/adeola',
-        socialLinks: [
-          { platform: 'twitter', url: 'https://x.com/adeola' },
-        ],
+        socialLinks: [{ platform: 'twitter', url: 'https://x.com/adeola' }],
       });
 
       expect(prisma.role.upsert).toHaveBeenCalledWith(
@@ -173,7 +179,9 @@ describe('CreatorsService', () => {
 
     it('should throw NotFoundException if creator is not found', async () => {
       prisma.creatorProfile.findFirst.mockResolvedValue(null);
-      await expect(service.findByUsername('unknown')).rejects.toThrow(NotFoundException);
+      await expect(service.findByUsername('unknown')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

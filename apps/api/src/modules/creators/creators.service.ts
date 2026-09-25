@@ -36,7 +36,7 @@ export class CreatorsService {
 
   async findByUsername(usernameOrLink: string) {
     const cleanSlug = usernameOrLink
-      .replace(/^https?:\/\/[^\/]+\//i, '')
+      .replace(/^https?:\/\/[^/]+\//i, '')
       .replace(/^(buymeayard\/|\/|@)/i, '')
       .replace(/\/+$/, '')
       .toLowerCase()
@@ -101,7 +101,7 @@ export class CreatorsService {
     }
 
     const cleanSlug = rawLink
-      .replace(/^https?:\/\/[^\/]+\//i, '')
+      .replace(/^https?:\/\/[^/]+\//i, '')
       .replace(/^(buymeayard\/|\/|@)/i, '')
       .replace(/\/+$/, '')
       .toLowerCase()
@@ -264,7 +264,10 @@ export class CreatorsService {
       }
     } catch (err) {
       // Non-critical background sync
-      console.warn('[CreatorsService] Failed to auto-sync OAuth social accounts:', err);
+      console.warn(
+        '[CreatorsService] Failed to auto-sync OAuth social accounts:',
+        err,
+      );
     }
 
     // Return refreshed profile with socialLinks and materials

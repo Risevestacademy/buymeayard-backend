@@ -182,7 +182,11 @@ describe('AuthController', () => {
         'better-auth.session_token=token123; Path=/; HttpOnly',
       ]);
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
-      expect(result).toEqual({ user: { id: 'u1' }, token: 'token456', isOnboarded: false });
+      expect(result).toEqual({
+        user: { id: 'u1' },
+        token: 'token456',
+        isOnboarded: false,
+      });
     });
 
     it('should return token in JSON and omit cookies for mobile requests (x-platform: ios)', async () => {

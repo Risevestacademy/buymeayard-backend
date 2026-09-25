@@ -20,9 +20,9 @@ export function createBetterAuth(
 
   // Frontend URLs per app
   const frontendUrls = {
-    main: process.env.FRONTEND_URL || 'http://localhost:3000',       // supporters (future use)
+    main: process.env.FRONTEND_URL || 'http://localhost:3000', // supporters (future use)
     creator: process.env.CREATOR_FRONTEND_URL || 'http://localhost:3001', // creators
-    admin: process.env.ADMIN_FRONTEND_URL || 'http://localhost:3002',     // admins
+    admin: process.env.ADMIN_FRONTEND_URL || 'http://localhost:3002', // admins
   };
 
   /**
