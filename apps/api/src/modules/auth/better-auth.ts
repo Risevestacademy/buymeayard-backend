@@ -61,13 +61,53 @@ export function createBetterAuth(
   const sendEmail = async (to: string, subject: string, html: string) => {
     try {
       if (resend) {
-        await resend.emails.send({
+        const result = await resend.emails.send({
           from: emailFrom,
           to,
           subject,
           html,
         });
-        console.log(`[Auth] Email sent via Resend API to ${to}: ${subject}`);
+        if (result.error) {
+          console.error(
+            `[Auth] Resend API error sending to ${to}:`,
+            result.error,
+          );
+        } else {
+          console.log(
+            `[Auth] Email sent via Resend API to ${to} (id: ${result.data?.id}): ${subject}`,
+          );
+        }
+        return;
+      }
+
+      if (process.env.BREVO_API_KEY) {
+        // Brevo transactional email over HTTPS (port 443 — works seamlessly on Railway)
+        const match = emailFrom.match(/^(?:(.*)<)?([^>]+)>?$/);
+        const senderName = match?.[1]?.trim() || 'BuyMeAYard';
+        const senderEmail =
+          match?.[2]?.trim() || process.env.SMTP_USER || 'buymeayard@gmail.com';
+
+        const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            accept: 'application/json',
+            'api-key': process.env.BREVO_API_KEY,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            sender: { name: senderName, email: senderEmail },
+            to: [{ email: to }],
+            subject,
+            htmlContent: html,
+          }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          console.error(`[Auth] Brevo API error sending to ${to}:`, errData);
+        } else {
+          console.log(`[Auth] Email sent via Brevo API to ${to}: ${subject}`);
+        }
         return;
       }
 
