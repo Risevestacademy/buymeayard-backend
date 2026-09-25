@@ -3,7 +3,7 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
-import { Resend } from 'resend';
+// import { Resend } from 'resend';
 
 export interface BetterAuthOptions {
   secret?: string;
@@ -14,8 +14,8 @@ export function createBetterAuth(
   prisma: PrismaClient,
   options?: BetterAuthOptions,
 ) {
-  const resendApiKey = process.env.RESEND_API_KEY;
-  const resend = resendApiKey ? new Resend(resendApiKey) : null;
+  // const resendApiKey = process.env.RESEND_API_KEY;
+  // const resend = resendApiKey ? new Resend(resendApiKey) : null;
   const emailFrom = process.env.EMAIL_FROM || 'noreply@gmail.com';
   const smtpPort = parseInt(process.env.SMTP_PORT || '587');
 
@@ -91,25 +91,25 @@ export function createBetterAuth(
         console.error(`[Auth] Brevo API error sending to ${to}:`, errData);
       }
 
-      if (resend) {
-        const result = await resend.emails.send({
-          from: emailFrom,
-          to,
-          subject,
-          html,
-        });
-        if (result.error) {
-          console.error(
-            `[Auth] Resend API error sending to ${to}:`,
-            result.error,
-          );
-        } else {
-          console.log(
-            `[Auth] Email sent via Resend API to ${to} (id: ${result.data?.id}): ${subject}`,
-          );
-          return;
-        }
-      }
+      // if (resend) {
+      //   const result = await resend.emails.send({
+      //     from: emailFrom,
+      //     to,
+      //     subject,
+      //     html,
+      //   });
+      //   if (result.error) {
+      //     console.error(
+      //       `[Auth] Resend API error sending to ${to}:`,
+      //       result.error,
+      //     );
+      //   } else {
+      //     console.log(
+      //       `[Auth] Email sent via Resend API to ${to} (id: ${result.data?.id}): ${subject}`,
+      //     );
+      //     return;
+      //   }
+      // }
 
       await smtpTransport.sendMail({ from: emailFrom, to, subject, html });
       console.log(`[Auth] Email sent via SMTP to ${to}: ${subject}`);
