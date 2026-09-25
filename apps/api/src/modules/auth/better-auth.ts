@@ -60,28 +60,8 @@ export function createBetterAuth(
 
   const sendEmail = async (to: string, subject: string, html: string) => {
     try {
-      if (resend) {
-        const result = await resend.emails.send({
-          from: emailFrom,
-          to,
-          subject,
-          html,
-        });
-        if (result.error) {
-          console.error(
-            `[Auth] Resend API error sending to ${to}:`,
-            result.error,
-          );
-        } else {
-          console.log(
-            `[Auth] Email sent via Resend API to ${to} (id: ${result.data?.id}): ${subject}`,
-          );
-        }
-        return;
-      }
-
       if (process.env.BREVO_API_KEY) {
-        // Brevo transactional email over HTTPS (port 443 — works seamlessly on Railway)
+        // Brevo transactional email over HTTPS (port 443 — works seamlessly on Render/Railway)
         const match = emailFrom.match(/^(?:(.*)<)?([^>]+)>?$/);
         const senderName = match?.[1]?.trim() || 'BuyMeAYard';
         const senderEmail =
@@ -102,13 +82,33 @@ export function createBetterAuth(
           }),
         });
 
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          console.error(`[Auth] Brevo API error sending to ${to}:`, errData);
-        } else {
+        if (res.ok) {
           console.log(`[Auth] Email sent via Brevo API to ${to}: ${subject}`);
+          return;
         }
-        return;
+
+        const errData = await res.json().catch(() => ({}));
+        console.error(`[Auth] Brevo API error sending to ${to}:`, errData);
+      }
+
+      if (resend) {
+        const result = await resend.emails.send({
+          from: emailFrom,
+          to,
+          subject,
+          html,
+        });
+        if (result.error) {
+          console.error(
+            `[Auth] Resend API error sending to ${to}:`,
+            result.error,
+          );
+        } else {
+          console.log(
+            `[Auth] Email sent via Resend API to ${to} (id: ${result.data?.id}): ${subject}`,
+          );
+          return;
+        }
       }
 
       await smtpTransport.sendMail({ from: emailFrom, to, subject, html });
