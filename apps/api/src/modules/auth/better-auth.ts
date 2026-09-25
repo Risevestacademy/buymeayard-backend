@@ -13,7 +13,8 @@ export function createBetterAuth(
   prisma: PrismaClient,
   options?: BetterAuthOptions,
 ) {
-  const emailFrom = process.env.EMAIL_FROM || 'noreply@gmail.com';
+  const emailFrom =
+    process.env.EMAIL_FROM || 'BuyMeAYard <buymeayard@gmail.com>';
   const smtpPort = parseInt(process.env.SMTP_PORT || '587');
 
   // Frontend URLs per app
@@ -43,7 +44,7 @@ export function createBetterAuth(
   };
 
   const smtpTransport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
     port: smtpPort,
     secure: smtpPort === 465, // true for SSL (465), false for STARTTLS (587)
     connectionTimeout: 5000, // 5s connection timeout so blocked ports fail quickly
