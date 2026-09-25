@@ -31,7 +31,6 @@ export class UsersService {
           select: {
             id: true,
             username: true,
-            displayName: true,
             personalizedLink: true,
             status: true,
             kycStatus: true,
@@ -56,7 +55,12 @@ export class UsersService {
       status: user.status,
       roles: user.roles.map((r) => r.role.name),
       isOnboarded: user.creatorProfile !== null,
-      creatorProfile: user.creatorProfile,
+      creatorProfile: user.creatorProfile
+        ? {
+            ...user.creatorProfile,
+            name: user.name,
+          }
+        : null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -70,7 +74,6 @@ export class UsersService {
           select: {
             id: true,
             username: true,
-            displayName: true,
             personalizedLink: true,
             status: true,
           },
@@ -89,7 +92,12 @@ export class UsersService {
       id: user.id,
       name: user.name,
       image: user.image,
-      creatorProfile: user.creatorProfile,
+      creatorProfile: user.creatorProfile
+        ? {
+            ...user.creatorProfile,
+            name: user.name,
+          }
+        : null,
       createdAt: user.createdAt,
     };
   }

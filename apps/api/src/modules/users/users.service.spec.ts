@@ -30,7 +30,6 @@ describe('UsersService', () => {
         creatorProfile: {
           id: 'creator-1',
           username: 'adeola',
-          displayName: 'Adeola',
           personalizedLink: 'buymeayard/adeola',
           status: 'ACTIVE',
           kycStatus: 'VERIFIED',
@@ -65,7 +64,6 @@ describe('UsersService', () => {
         creatorProfile: {
           id: 'creator-1',
           username: 'adeola',
-          displayName: 'Adeola',
           personalizedLink: 'buymeayard.com/adeola',
           status: 'ACTIVE',
         },

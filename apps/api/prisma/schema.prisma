@@ -115,7 +115,6 @@ model CreatorProfile {
   id               String   @id @default(uuid())
   userId           String   @unique
   username         String   @unique
-  displayName      String
   personalizedLink String?  @unique
   bio              String?
   avatarUrl        String?
