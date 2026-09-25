@@ -72,29 +72,6 @@ export class AuthService implements OnModuleInit {
     });
   }
 
-  async signInSocial(params: {
-    provider: 'google' | 'apple' | 'twitter' | 'facebook';
-    callbackURL?: string;
-    errorCallbackURL?: string;
-    newUserCallbackURL?: string;
-    disableRedirect?: boolean;
-    idToken?: string;
-    headers?: Headers;
-  }): Promise<globalThis.Response> {
-    return this.getAuth().api.signInSocial({
-      body: {
-        provider: params.provider,
-        callbackURL: params.callbackURL,
-        errorCallbackURL: params.errorCallbackURL,
-        newUserCallbackURL: params.newUserCallbackURL,
-        disableRedirect: params.disableRedirect,
-        idToken: params.idToken ? { token: params.idToken } : undefined,
-      },
-      ...(params.headers ? { headers: params.headers } : {}),
-      asResponse: true,
-    });
-  }
-
   async signOut(params?: { headers?: Headers }): Promise<globalThis.Response> {
     const headers = params?.headers || new Headers();
     return this.getAuth().api.signOut({

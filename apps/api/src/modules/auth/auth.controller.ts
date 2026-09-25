@@ -25,11 +25,6 @@ import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
-import {
-  SocialSignInDto,
-  GoogleSignInDto,
-  AppleSignInDto,
-} from './dto/social-sign-in.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -116,99 +111,6 @@ export class AuthController {
   ) {
     const webRes = await this.authService.signInEmail({
       ...dto,
-      headers: fromNodeHeaders(req.headers),
-    });
-    const body = await this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
-    if (body && typeof body === 'object' && body.user?.id) {
-      body.isOnboarded = await this.authService.getIsOnboarded(body.user.id);
-    }
-    return body;
-  }
-
-  @Public()
-  @Post('sign-in/social')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Sign in or sign up with an OAuth provider (Google, Apple)',
-    description:
-      'Initiates OAuth flow or exchanges native mobile idToken for a session. For web, returns { url, redirect: true } or redirects. For mobile (with idToken or x-client-type), returns session token and user details.',
-  })
-  @SwaggerResponse({
-    status: 200,
-    description:
-      'OAuth initiation URL or session object returned successfully.',
-  })
-  @SwaggerResponse({
-    status: 400,
-    description: 'Invalid OAuth request data.',
-  })
-  async signInSocial(
-    @Body() dto: SocialSignInDto,
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const webRes = await this.authService.signInSocial({
-      ...dto,
-      headers: fromNodeHeaders(req.headers),
-    });
-    const body = await this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
-    if (body && typeof body === 'object' && body.user?.id) {
-      body.isOnboarded = await this.authService.getIsOnboarded(body.user.id);
-    }
-    return body;
-  }
-
-  @Public()
-  @Post('social/google')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Sign in / Sign up with Google',
-    description:
-      'Convenience endpoint for Google OAuth. Web clients provide optional callbackURL; mobile clients provide idToken.',
-  })
-  @SwaggerResponse({
-    status: 200,
-    description: 'OAuth redirect URL (web) or session token (mobile).',
-  })
-  async signInWithGoogle(
-    @Body() dto: GoogleSignInDto,
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const webRes = await this.authService.signInSocial({
-      provider: 'google',
-      callbackURL: dto.callbackURL,
-      idToken: dto.idToken,
-      headers: fromNodeHeaders(req.headers),
-    });
-    const body = await this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
-    if (body && typeof body === 'object' && body.user?.id) {
-      body.isOnboarded = await this.authService.getIsOnboarded(body.user.id);
-    }
-    return body;
-  }
-
-  @Public()
-  @Post('social/apple')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Sign in / Sign up with Apple',
-    description:
-      'Convenience endpoint for Apple OAuth. Web clients provide optional callbackURL; mobile clients provide idToken.',
-  })
-  @SwaggerResponse({
-    status: 200,
-    description: 'OAuth redirect URL (web) or session token (mobile).',
-  })
-  async signInWithApple(
-    @Body() dto: AppleSignInDto,
-    @Req() req: Request,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const webRes = await this.authService.signInSocial({
-      provider: 'apple',
-      callbackURL: dto.callbackURL,
-      idToken: dto.idToken,
       headers: fromNodeHeaders(req.headers),
     });
     const body = await this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
