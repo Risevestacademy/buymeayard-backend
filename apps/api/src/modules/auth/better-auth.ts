@@ -3,7 +3,7 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
-// import { Resend } from 'resend'; // Switched to SMTP — uncomment to revert
+import { Resend } from 'resend';
 
 export interface BetterAuthOptions {
   secret?: string;
@@ -14,7 +14,8 @@ export function createBetterAuth(
   prisma: PrismaClient,
   options?: BetterAuthOptions,
 ) {
-  // const resend = new Resend(process.env.RESEND_API_KEY || 're_mock'); // Switched to SMTP
+  const resendApiKey = process.env.RESEND_API_KEY;
+  const resend = resendApiKey ? new Resend(resendApiKey) : null;
   const emailFrom = process.env.EMAIL_FROM || 'noreply@gmail.com';
   const smtpPort = parseInt(process.env.SMTP_PORT || '587');
 
@@ -48,6 +49,9 @@ export function createBetterAuth(
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: smtpPort,
     secure: smtpPort === 465, // true for SSL (465), false for STARTTLS (587)
+    connectionTimeout: 5000, // 5s connection timeout so blocked ports fail quickly
+    greetingTimeout: 5000,
+    socketTimeout: 5000,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -55,8 +59,23 @@ export function createBetterAuth(
   });
 
   const sendEmail = async (to: string, subject: string, html: string) => {
-    await smtpTransport.sendMail({ from: emailFrom, to, subject, html });
-    console.log(`[Auth] Email sent to ${to}: ${subject}`);
+    try {
+      if (resend) {
+        await resend.emails.send({
+          from: emailFrom,
+          to,
+          subject,
+          html,
+        });
+        console.log(`[Auth] Email sent via Resend API to ${to}: ${subject}`);
+        return;
+      }
+
+      await smtpTransport.sendMail({ from: emailFrom, to, subject, html });
+      console.log(`[Auth] Email sent via SMTP to ${to}: ${subject}`);
+    } catch (err) {
+      console.error(`[Auth] Failed to send email to ${to}:`, err);
+    }
   };
 
   return betterAuth({
@@ -108,10 +127,12 @@ export function createBetterAuth(
         const baseUrl = await getFrontendUrlForReset(user.id);
         const token = new URL(url).searchParams.get('token');
         const frontendLink = `${baseUrl}/reset-password?token=${token}`;
-        await sendEmail(
+        sendEmail(
           user.email,
           'Reset Your Password - BuyMeAYard',
           `<p>Click the link below to reset your password:</p><p><a href="${frontendLink}">${frontendLink}</a></p>`,
+        ).catch((err) =>
+          console.error('[Auth] Failed to send password reset email:', err),
         );
       },
     },
@@ -121,10 +142,12 @@ export function createBetterAuth(
         // Always use creator URL — only creators self-register
         const token = new URL(url).searchParams.get('token');
         const frontendLink = `${frontendUrls.creator}/verify-email?token=${token}`;
-        await sendEmail(
+        sendEmail(
           user.email,
           'Verify Your Email - BuyMeAYard',
           `<p>Click the link below to verify your email address:</p><p><a href="${frontendLink}">${frontendLink}</a></p>`,
+        ).catch((err) =>
+          console.error('[Auth] Failed to send verification email:', err),
         );
       },
     },
