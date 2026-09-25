@@ -112,21 +112,19 @@ model UserRole {
 // --------------------------------------------------------
 
 model CreatorProfile {
-  id          String   @id @default(uuid())
-  userId      String   @unique
-  username    String   @unique
-  displayName String
-  bio         String?
-  avatarUrl   String?
-  coverUrl    String?
-  categoryId  String?
-  status      String   @default("REGISTERED") // REGISTERED, PROFILE_CREATED, KYC_PENDING, VERIFIED, ACTIVE, SUSPENDED, BANNED, DEACTIVATED
-  kycStatus   String   @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  username         String   @unique
+  displayName      String
+  personalizedLink String?  @unique
+  bio              String?
+  avatarUrl        String?
+  status           String   @default("REGISTERED") // REGISTERED, PROFILE_CREATED, KYC_PENDING, VERIFIED, ACTIVE, SUSPENDED, BANNED, DEACTIVATED
+  kycStatus        String   @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  category       CreatorCategory?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   socialLinks    CreatorSocialLink[]
   materials      CreatorMaterial[]
   supports       Support[]            @relation("CreatorSupports")
@@ -137,21 +135,8 @@ model CreatorProfile {
   kycSubmissions KycSubmission[]
 
   @@index([username])
-  @@index([categoryId])
+  @@index([personalizedLink])
   @@map("creator_profiles")
-}
-
-model CreatorCategory {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  slug      String   @unique
-  status    String   @default("ACTIVE")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  creators CreatorProfile[]
-
-  @@map("creator_categories")
 }
 
 model CreatorSocialLink {

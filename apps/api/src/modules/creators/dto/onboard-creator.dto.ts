@@ -1,52 +1,71 @@
-import { IsOptional, IsString, IsUrl } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsArray, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class SocialLinkDto {
+  @ApiProperty({
+    example: 'twitter',
+    description:
+      'Social platform name (e.g., twitter, instagram, tiktok, youtube)',
+  })
+  @IsString()
+  platform: string;
+
+  @ApiProperty({
+    example: 'https://x.com/adeola',
+    description: 'URL to creator social profile',
+  })
+  @IsString()
+  url: string;
+}
 
 export class OnboardCreatorDto {
+  @ApiProperty({
+    example: 'Adeola Johnson',
+    description: 'Creator display name entered during onboarding',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  creatorName?: string;
+
   @ApiPropertyOptional({
     example: 'Adeola Johnson',
-    description: 'Creator display name',
+    description: 'Alternative alias for creator display name',
   })
   @IsOptional()
   @IsString()
   displayName?: string;
 
+  @ApiProperty({
+    example: 'buymeayard/adeola',
+    description:
+      'Personalized profile link entered by creator (e.g. "buymeayard/adeola" or "adeola")',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  personalizedLink?: string;
+
   @ApiPropertyOptional({
-    example: 'adeola_creates',
-    description: 'Unique username / slug for the creator profile',
+    example: 'adeola',
+    description: 'Alternative alias for personalized link slug handle',
   })
   @IsOptional()
   @IsString()
   username?: string;
 
   @ApiPropertyOptional({
-    example: 'Fashion designer based in Lagos',
-    description: 'Creator bio',
+    type: [SocialLinkDto],
+    description: 'List of connected social media accounts',
+    example: [
+      { platform: 'twitter', url: 'https://x.com/adeola' },
+      { platform: 'instagram', url: 'https://instagram.com/adeola' },
+    ],
   })
   @IsOptional()
-  @IsString()
-  bio?: string;
-
-  @ApiPropertyOptional({
-    example: 'uuid-category-id',
-    description: 'ID of the creator category (e.g., Fashion, Tech)',
-  })
-  @IsOptional()
-  @IsString()
-  categoryId?: string;
-
-  @ApiPropertyOptional({
-    example: 'https://example.com/avatar.jpg',
-    description: 'URL to the creator avatar image',
-  })
-  @IsOptional()
-  @IsUrl()
-  avatarUrl?: string;
-
-  @ApiPropertyOptional({
-    example: 'https://example.com/cover.jpg',
-    description: 'URL to the creator cover image',
-  })
-  @IsOptional()
-  @IsUrl()
-  coverUrl?: string;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SocialLinkDto)
+  socialLinks?: SocialLinkDto[];
 }

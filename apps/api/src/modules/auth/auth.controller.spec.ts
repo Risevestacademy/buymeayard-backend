@@ -26,6 +26,7 @@ describe('AuthController', () => {
     verifyEmail: jest.Mock;
     sendVerificationEmail: jest.Mock;
     userHasRole: jest.Mock;
+    getIsOnboarded: jest.Mock;
   };
 
   const createMockReqRes = (headers: Record<string, string> = {}) => {
@@ -66,6 +67,7 @@ describe('AuthController', () => {
       verifyEmail: jest.fn(),
       sendVerificationEmail: jest.fn(),
       userHasRole: jest.fn(),
+      getIsOnboarded: jest.fn().mockResolvedValue(false),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -110,6 +112,7 @@ describe('AuthController', () => {
       expect(res.status).toHaveBeenCalledWith(HttpStatus.CREATED);
       expect(result).toEqual({
         user: { id: 'u1', email: 'alice@example.com' },
+        isOnboarded: false,
       });
     });
 
@@ -179,7 +182,11 @@ describe('AuthController', () => {
         'better-auth.session_token=token123; Path=/; HttpOnly',
       ]);
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
-      expect(result).toEqual({ user: { id: 'u1' }, token: 'token456' });
+      expect(result).toEqual({
+        user: { id: 'u1' },
+        token: 'token456',
+        isOnboarded: false,
+      });
     });
 
     it('should return token in JSON and omit cookies for mobile requests (x-platform: ios)', async () => {
