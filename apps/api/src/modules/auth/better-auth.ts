@@ -2,8 +2,8 @@ import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
-import { Resend } from 'resend';
-import { randomBytes } from 'crypto';
+import * as nodemailer from 'nodemailer';
+// import { Resend } from 'resend'; // Switched to SMTP — uncomment to revert
 
 export interface BetterAuthOptions {
   secret?: string;
@@ -14,8 +14,50 @@ export function createBetterAuth(
   prisma: PrismaClient,
   options?: BetterAuthOptions,
 ) {
-  const resend = new Resend(process.env.RESEND_API_KEY || 're_mock');
-  const emailFrom = process.env.EMAIL_FROM || 'noreply@buymeayard.com';
+  // const resend = new Resend(process.env.RESEND_API_KEY || 're_mock'); // Switched to SMTP
+  const emailFrom = process.env.EMAIL_FROM || 'noreply@gmail.com';
+  const smtpPort = parseInt(process.env.SMTP_PORT || '587');
+
+  // Frontend URLs per app
+  const frontendUrls = {
+    main: process.env.FRONTEND_URL || 'http://localhost:3000',       // supporters (future use)
+    creator: process.env.CREATOR_FRONTEND_URL || 'http://localhost:3001', // creators
+    admin: process.env.ADMIN_FRONTEND_URL || 'http://localhost:3002',     // admins
+  };
+
+  /**
+   * Resolves the frontend URL for password reset emails.
+   * - Admins → admin portal
+   * - Everyone else (creators) → creator portal
+   * Note: Verification emails always go to the creator portal
+   * since only creators self-register (admins are seeded, supporters don't have accounts).
+   */
+  const getFrontendUrlForReset = async (userId: string): Promise<string> => {
+    const userRoles = await prisma.userRole.findMany({
+      where: { userId },
+      include: { role: true },
+    });
+    const roleNames = userRoles.map((r) => r.role.name);
+    if (roleNames.includes('ADMIN') || roleNames.includes('SUPER_ADMIN')) {
+      return frontendUrls.admin;
+    }
+    return frontendUrls.creator;
+  };
+
+  const smtpTransport = nodemailer.createTransport({
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: smtpPort,
+    secure: smtpPort === 465, // true for SSL (465), false for STARTTLS (587)
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+
+  const sendEmail = async (to: string, subject: string, html: string) => {
+    await smtpTransport.sendMail({ from: emailFrom, to, subject, html });
+    console.log(`[Auth] Email sent to ${to}: ${subject}`);
+  };
 
   return betterAuth({
     trustedOrigins: [
@@ -63,43 +105,27 @@ export function createBetterAuth(
       enabled: true,
       requireEmailVerification: false,
       sendResetPassword: async ({ user, url, token: _token }) => {
-        if (process.env.RESEND_API_KEY) {
-          await resend.emails.send({
-            from: emailFrom,
-            to: user.email,
-            subject: 'Reset Your Password - BuyMeAYard',
-            html: `<p>Click the link below to reset your password:</p><p><a href="${url}">${url}</a></p>`,
-          });
-          console.log(
-            `[Auth] Password reset email sent via Resend to ${user.email}`,
-          );
-        } else {
-          console.log(`[Auth] Password reset requested for ${user.email}`);
-          console.log(
-            `[Auth] Reset URL (Add RESEND_API_KEY to send emails): ${url}`,
-          );
-        }
+        const baseUrl = await getFrontendUrlForReset(user.id);
+        const token = new URL(url).searchParams.get('token');
+        const frontendLink = `${baseUrl}/reset-password?token=${token}`;
+        await sendEmail(
+          user.email,
+          'Reset Your Password - BuyMeAYard',
+          `<p>Click the link below to reset your password:</p><p><a href="${frontendLink}">${frontendLink}</a></p>`,
+        );
       },
     },
     emailVerification: {
       sendOnSignUp: true,
       sendVerificationEmail: async ({ user, url, token: _token }) => {
-        if (process.env.RESEND_API_KEY) {
-          await resend.emails.send({
-            from: emailFrom,
-            to: user.email,
-            subject: 'Verify Your Email - BuyMeAYard',
-            html: `<p>Click the link below to verify your email address:</p><p><a href="${url}">${url}</a></p>`,
-          });
-          console.log(
-            `[Auth] Verification email sent via Resend to ${user.email}`,
-          );
-        } else {
-          console.log(`[Auth] Email verification for ${user.email}`);
-          console.log(
-            `[Auth] Verify URL (Add RESEND_API_KEY to send emails): ${url}`,
-          );
-        }
+        // Always use creator URL — only creators self-register
+        const token = new URL(url).searchParams.get('token');
+        const frontendLink = `${frontendUrls.creator}/verify-email?token=${token}`;
+        await sendEmail(
+          user.email,
+          'Verify Your Email - BuyMeAYard',
+          `<p>Click the link below to verify your email address:</p><p><a href="${frontendLink}">${frontendLink}</a></p>`,
+        );
       },
     },
     session: {
@@ -181,45 +207,9 @@ export function createBetterAuth(
       user: {
         create: {
           after: async (user) => {
-            try {
-              // Ensure role CREATOR exists
-              const role = await prisma.role.upsert({
-                where: { name: 'CREATOR' },
-                update: {},
-                create: { name: 'CREATOR' },
-              });
-
-              // Assign CREATOR role
-              await prisma.userRole.create({
-                data: {
-                  userId: user.id,
-                  roleId: role.id,
-                },
-              });
-
-              // Initialize CreatorProfile
-              const fallbackUsername =
-                user.email.split('@')[0] + '-' + randomBytes(4).toString('hex');
-
-              await prisma.creatorProfile.create({
-                data: {
-                  userId: user.id,
-                  username: fallbackUsername,
-                  displayName: user.name || user.email.split('@')[0],
-                  status: 'REGISTERED',
-                  kycStatus: 'NOT_SUBMITTED',
-                },
-              });
-
-              console.log(
-                `[Auth] Provisioned CREATOR profile for user ${user.id}`,
-              );
-            } catch (err) {
-              console.error(
-                `[Auth] Failed to provision CREATOR profile for user ${user.id}:`,
-                err,
-              );
-            }
+            // No roles or profiles are assigned at registration.
+            // Users complete onboarding explicitly via PUT /api/v1/creators/me/onboarding.
+            console.log(`[Auth] New user registered: ${user.id}`);
           },
         },
       },

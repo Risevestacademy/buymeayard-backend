@@ -156,4 +156,16 @@ export class AuthService implements OnModuleInit {
     });
     return !!userRole;
   }
+
+  /**
+   * Returns whether a user has completed creator onboarding
+   * (i.e. a CreatorProfile exists for them).
+   */
+  async getIsOnboarded(userId: string): Promise<boolean> {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    return profile !== null;
+  }
 }

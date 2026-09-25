@@ -76,7 +76,11 @@ export class AuthController {
       ...dto,
       headers: fromNodeHeaders(req.headers),
     });
-    return this.handleAuthResponse(webRes, req, res, HttpStatus.CREATED);
+    const body = await this.handleAuthResponse(webRes, req, res, HttpStatus.CREATED);
+    if (body && typeof body === 'object' && body.user?.id) {
+      body.isOnboarded = await this.authService.getIsOnboarded(body.user.id);
+    }
+    return body;
   }
 
   @Public()
@@ -104,8 +108,11 @@ export class AuthController {
       ...dto,
       headers: fromNodeHeaders(req.headers),
     });
-
-    return this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
+    const body = await this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
+    if (body && typeof body === 'object' && body.user?.id) {
+      body.isOnboarded = await this.authService.getIsOnboarded(body.user.id);
+    }
+    return body;
   }
 
   @Public()
