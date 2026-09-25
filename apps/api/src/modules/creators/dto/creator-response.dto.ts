@@ -65,6 +65,12 @@ export class CreatorProfileDataDto {
 
   @ApiProperty({
     example: 'Adeola Johnson',
+    description: 'Creator name',
+  })
+  name: string;
+
+  @ApiProperty({
+    example: 'Adeola Johnson',
     description: 'Creator name alias',
   })
   creatorName: string;

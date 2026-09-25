@@ -9,6 +9,9 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 describe('CreatorsService', () => {
   let service: CreatorsService;
   let prisma: {
+    user: {
+      update: jest.Mock;
+    };
     creatorProfile: {
       findMany: jest.Mock;
       findUnique: jest.Mock;
@@ -34,6 +37,11 @@ describe('CreatorsService', () => {
 
   beforeEach(() => {
     prisma = {
+      user: {
+        update: jest
+          .fn()
+          .mockResolvedValue({ id: 'user-1', name: 'Adeola Johnson' }),
+      },
       creatorProfile: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
@@ -101,20 +109,20 @@ describe('CreatorsService', () => {
           id: 'creator-1',
           userId: 'user-1',
           username: 'adeola',
-          displayName: 'Adeola Johnson',
           personalizedLink: 'buymeayard/adeola',
           status: 'PROFILE_CREATED',
           socialLinks: [],
           materials: [],
+          user: { name: 'Adeola Johnson' },
         });
 
       prisma.creatorProfile.create.mockResolvedValue({
         id: 'creator-1',
         userId: 'user-1',
         username: 'adeola',
-        displayName: 'Adeola Johnson',
         personalizedLink: 'buymeayard/adeola',
         status: 'PROFILE_CREATED',
+        user: { name: 'Adeola Johnson' },
       });
 
       const result = await service.onboardCreator('user-1', {
@@ -123,6 +131,10 @@ describe('CreatorsService', () => {
         socialLinks: [{ platform: 'twitter', url: 'https://x.com/adeola' }],
       });
 
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { name: 'Adeola Johnson' },
+      });
       expect(prisma.role.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ where: { name: 'CREATOR' } }),
       );
@@ -130,12 +142,19 @@ describe('CreatorsService', () => {
         data: {
           userId: 'user-1',
           username: 'adeola',
-          displayName: 'Adeola Johnson',
           personalizedLink: 'buymeayard/adeola',
           status: 'PROFILE_CREATED',
           kycStatus: 'NOT_SUBMITTED',
         },
         include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
+            },
+          },
           socialLinks: true,
           materials: true,
         },
@@ -152,12 +171,13 @@ describe('CreatorsService', () => {
 
     it('should format creator profile with creatorName and personalizedLink', () => {
       const formatted = service.formatCreatorProfile({
-        displayName: 'Adeola Johnson',
+        user: { name: 'Adeola Johnson' },
         username: 'adeola',
         personalizedLink: 'buymeayard/adeola',
       });
 
       expect(formatted.creatorName).toBe('Adeola Johnson');
+      expect(formatted.name).toBe('Adeola Johnson');
       expect(formatted.personalizedLink).toBe('buymeayard/adeola');
       expect(formatted.firstName).toBe('Adeola');
       expect(formatted.lastName).toBe('Johnson');
@@ -169,8 +189,8 @@ describe('CreatorsService', () => {
       prisma.creatorProfile.findFirst.mockResolvedValue({
         id: 'creator-1',
         username: 'adeola',
-        displayName: 'Adeola Johnson',
         personalizedLink: 'buymeayard/adeola',
+        user: { name: 'Adeola Johnson' },
       });
 
       const res = await service.findByUsername('buymeayard/adeola');

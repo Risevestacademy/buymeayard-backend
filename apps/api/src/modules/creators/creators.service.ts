@@ -18,7 +18,7 @@ export class CreatorsService {
 
     if (_query?.search) {
       where.OR = [
-        { displayName: { contains: _query.search, mode: 'insensitive' } },
+        { user: { name: { contains: _query.search, mode: 'insensitive' } } },
         { username: { contains: _query.search, mode: 'insensitive' } },
         { personalizedLink: { contains: _query.search, mode: 'insensitive' } },
       ];
@@ -27,6 +27,14 @@ export class CreatorsService {
     const creators = await this.prisma.creatorProfile.findMany({
       where,
       include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
         socialLinks: true,
       },
     });
@@ -53,6 +61,14 @@ export class CreatorsService {
         ],
       },
       include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
         socialLinks: true,
         materials: {
           include: {
@@ -75,6 +91,14 @@ export class CreatorsService {
     const creator = await this.prisma.creatorProfile.findUnique({
       where: { userId },
       include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
         socialLinks: true,
         materials: true,
       },
@@ -132,7 +156,13 @@ export class CreatorsService {
       );
     }
 
-    // 4. Create or update profile
+    // 4. Update User name
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { name: creatorName },
+    });
+
+    // 5. Create or update profile
     const existingProfile = await this.prisma.creatorProfile.findUnique({
       where: { userId },
     });
@@ -143,7 +173,6 @@ export class CreatorsService {
       profile = await this.prisma.creatorProfile.update({
         where: { id: existingProfile.id },
         data: {
-          displayName: creatorName,
           username: cleanSlug,
           personalizedLink: formattedPersonalizedLink,
           status:
@@ -152,6 +181,14 @@ export class CreatorsService {
               : existingProfile.status,
         },
         include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
+            },
+          },
           socialLinks: true,
           materials: true,
         },
@@ -173,12 +210,19 @@ export class CreatorsService {
         data: {
           userId,
           username: cleanSlug,
-          displayName: creatorName,
           personalizedLink: formattedPersonalizedLink,
           status: 'PROFILE_CREATED',
           kycStatus: 'NOT_SUBMITTED',
         },
         include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
+            },
+          },
           socialLinks: true,
           materials: true,
         },
@@ -271,26 +315,37 @@ export class CreatorsService {
     }
 
     // Return refreshed profile with socialLinks and materials
-    return this.prisma.creatorProfile.findUnique({
+    const updated = await this.prisma.creatorProfile.findUnique({
       where: { id: profile.id },
       include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
         socialLinks: true,
         materials: true,
       },
     });
+
+    return this.formatCreatorProfile(updated);
   }
 
   formatCreatorProfile(profile: any) {
     if (!profile) return profile;
 
-    const [firstName, ...lastNameParts] = (profile.displayName || '').split(
-      ' ',
-    );
+    const creatorName = profile.user?.name || profile.name || '';
+    const [firstName, ...lastNameParts] = creatorName.split(' ');
     const lastName = lastNameParts.join(' ');
 
     return {
       ...profile,
-      creatorName: profile.displayName,
+      name: creatorName,
+      creatorName,
+      displayName: creatorName,
       personalizedLink:
         profile.personalizedLink ||
         (profile.username ? `buymeayard/${profile.username}` : null),
