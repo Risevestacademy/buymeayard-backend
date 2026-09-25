@@ -3,7 +3,6 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
-// import { Resend } from 'resend'; // Switched to SMTP — uncomment to revert
 
 export interface BetterAuthOptions {
   secret?: string;
@@ -14,8 +13,8 @@ export function createBetterAuth(
   prisma: PrismaClient,
   options?: BetterAuthOptions,
 ) {
-  // const resend = new Resend(process.env.RESEND_API_KEY || 're_mock'); // Switched to SMTP
-  const emailFrom = process.env.EMAIL_FROM || 'noreply@gmail.com';
+  const emailFrom =
+    process.env.EMAIL_FROM || 'BuyMeAYard <buymeayard@gmail.com>';
   const smtpPort = parseInt(process.env.SMTP_PORT || '587');
 
   // Frontend URLs per app
@@ -45,9 +44,12 @@ export function createBetterAuth(
   };
 
   const smtpTransport = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
     port: smtpPort,
     secure: smtpPort === 465, // true for SSL (465), false for STARTTLS (587)
+    connectionTimeout: 5000, // 5s connection timeout so blocked ports fail quickly
+    greetingTimeout: 5000,
+    socketTimeout: 5000,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -55,8 +57,43 @@ export function createBetterAuth(
   });
 
   const sendEmail = async (to: string, subject: string, html: string) => {
-    await smtpTransport.sendMail({ from: emailFrom, to, subject, html });
-    console.log(`[Auth] Email sent to ${to}: ${subject}`);
+    try {
+      if (process.env.BREVO_API_KEY) {
+        // Brevo transactional email over HTTPS (port 443 — works seamlessly on Render/Railway)
+        const match = emailFrom.match(/^(?:(.*)<)?([^>]+)>?$/);
+        const senderName = match?.[1]?.trim() || 'BuyMeAYard';
+        const senderEmail =
+          match?.[2]?.trim() || process.env.SMTP_USER || 'buymeayard@gmail.com';
+
+        const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            accept: 'application/json',
+            'api-key': process.env.BREVO_API_KEY,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            sender: { name: senderName, email: senderEmail },
+            to: [{ email: to }],
+            subject,
+            htmlContent: html,
+          }),
+        });
+
+        if (res.ok) {
+          console.log(`[Auth] Email sent via Brevo API to ${to}: ${subject}`);
+          return;
+        }
+
+        const errData = await res.json().catch(() => ({}));
+        console.error(`[Auth] Brevo API error sending to ${to}:`, errData);
+      }
+
+      await smtpTransport.sendMail({ from: emailFrom, to, subject, html });
+      console.log(`[Auth] Email sent via SMTP to ${to}: ${subject}`);
+    } catch (err) {
+      console.error(`[Auth] Failed to send email to ${to}:`, err);
+    }
   };
 
   return betterAuth({
@@ -108,10 +145,12 @@ export function createBetterAuth(
         const baseUrl = await getFrontendUrlForReset(user.id);
         const token = new URL(url).searchParams.get('token');
         const frontendLink = `${baseUrl}/reset-password?token=${token}`;
-        await sendEmail(
+        sendEmail(
           user.email,
           'Reset Your Password - BuyMeAYard',
           `<p>Click the link below to reset your password:</p><p><a href="${frontendLink}">${frontendLink}</a></p>`,
+        ).catch((err) =>
+          console.error('[Auth] Failed to send password reset email:', err),
         );
       },
     },
@@ -121,10 +160,12 @@ export function createBetterAuth(
         // Always use creator URL — only creators self-register
         const token = new URL(url).searchParams.get('token');
         const frontendLink = `${frontendUrls.creator}/verify-email?token=${token}`;
-        await sendEmail(
+        sendEmail(
           user.email,
           'Verify Your Email - BuyMeAYard',
           `<p>Click the link below to verify your email address:</p><p><a href="${frontendLink}">${frontendLink}</a></p>`,
+        ).catch((err) =>
+          console.error('[Auth] Failed to send verification email:', err),
         );
       },
     },
