@@ -17,7 +17,6 @@ describe('AuthController', () => {
   let authService: {
     signUpEmail: jest.Mock;
     signInEmail: jest.Mock;
-    signInSocial: jest.Mock;
     signOut: jest.Mock;
     getSessionFromNodeHeaders: jest.Mock;
     getAuth: jest.Mock;
@@ -59,7 +58,6 @@ describe('AuthController', () => {
     authService = {
       signUpEmail: jest.fn(),
       signInEmail: jest.fn(),
-      signInSocial: jest.fn(),
       signOut: jest.fn(),
       getSessionFromNodeHeaders: jest.fn(),
       getAuth: jest.fn(),
