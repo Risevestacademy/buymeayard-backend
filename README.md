@@ -190,6 +190,9 @@ pnpm install
 
 # Generate Prisma Client
 pnpm --filter @buymeayard/api prisma:generate
+
+# Build shared workspace packages (required before the API can compile)
+pnpm --filter @buymeayard/types build
 ```
 
 #### 2. Configure Environment Variables
