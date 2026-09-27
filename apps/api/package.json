@@ -93,7 +93,10 @@
       "**/*.(t|j)s"
     ],
     "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+  "^@nestjs/event-emitter$": "<rootDir>/../test/mocks/event-emitter.mock.ts"
+}
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
