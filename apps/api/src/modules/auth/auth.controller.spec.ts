@@ -306,6 +306,38 @@ describe('AuthController', () => {
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
       expect(result).toEqual({ status: true });
     });
+
+    it('should pass from param when explicitly provided in dto', async () => {
+      const dto = { email: 'user@example.com', from: 'mobile' };
+      const { req, res } = createMockReqRes();
+
+      const mockWebResponse = createSuccessResponse({ status: true });
+      authService.forgotPassword.mockResolvedValue(mockWebResponse);
+
+      await controller.forgotPassword(dto, req, res);
+
+      expect(authService.forgotPassword).toHaveBeenCalledWith({
+        email: 'user@example.com',
+        from: 'mobile',
+        headers: expect.any(Headers),
+      });
+    });
+
+    it('should automatically set from to mobile if x-client-type is mobile', async () => {
+      const dto = { email: 'user@example.com' };
+      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
+
+      const mockWebResponse = createSuccessResponse({ status: true });
+      authService.forgotPassword.mockResolvedValue(mockWebResponse);
+
+      await controller.forgotPassword(dto, req, res);
+
+      expect(authService.forgotPassword).toHaveBeenCalledWith({
+        email: 'user@example.com',
+        from: 'mobile',
+        headers: expect.any(Headers),
+      });
+    });
   });
 
   // --------------------------------------------------------
