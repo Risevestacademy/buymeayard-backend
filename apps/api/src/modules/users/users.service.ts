@@ -46,7 +46,7 @@ export class UsersService {
       });
     }
 
-    const isOnboarded =
+    const isCompleted =
       user.creatorProfile !== null &&
       user.creatorProfile.status !== 'REGISTERED';
 
@@ -58,10 +58,8 @@ export class UsersService {
       emailVerified: user.emailVerified,
       status: user.status,
       roles: user.roles.map((r) => r.role.name),
-      isOnboarded,
-      isOnboardingCompleted: isOnboarded,
-      isProfileSetupCompleted: isOnboarded,
-      isProfileCompleted: isOnboarded,
+      isOnboardingCompleted: isCompleted,
+      isProfileSetupCompleted: isCompleted,
       creatorProfile: user.creatorProfile
         ? {
             id: user.creatorProfile.id,

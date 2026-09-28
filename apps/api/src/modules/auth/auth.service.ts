@@ -177,17 +177,13 @@ export class AuthService implements OnModuleInit {
    * Returns onboarding and profile setup completion flags for a user.
    */
   async getUserAuthFlags(userId: string): Promise<{
-    isOnboarded: boolean;
     isOnboardingCompleted: boolean;
     isProfileSetupCompleted: boolean;
-    isProfileCompleted: boolean;
   }> {
     const isCompleted = await this.getIsOnboarded(userId);
     return {
-      isOnboarded: isCompleted,
       isOnboardingCompleted: isCompleted,
       isProfileSetupCompleted: isCompleted,
-      isProfileCompleted: isCompleted,
     };
   }
 }
