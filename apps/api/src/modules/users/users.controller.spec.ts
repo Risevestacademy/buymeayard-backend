@@ -36,13 +36,53 @@ describe('UsersController', () => {
   });
 
   describe('getProfile', () => {
-    it('should return the current user profile with roles', async () => {
-      const mockProfile = { id: 'user-1', name: 'Alice', roles: ['USER'] };
+    it('should return the current user profile with roles and onboarding/profile flags', async () => {
+      const mockProfile = {
+        id: 'user-1',
+        name: 'Alice',
+        email: 'alice@example.com',
+        roles: ['CREATOR'],
+        isOnboardingCompleted: true,
+        isProfileSetupCompleted: true,
+        creatorProfile: {
+          id: 'cp-1',
+          creatorName: 'Alice',
+          slug: 'alice',
+          username: 'alice',
+          personalizedLink: 'alice',
+          status: 'PROFILE_CREATED',
+          kycStatus: 'NOT_SUBMITTED',
+        },
+      };
       usersService.findByIdWithRoles.mockResolvedValue(mockProfile);
 
       const result = await controller.getProfile('user-1');
       expect(result).toEqual(mockProfile);
+      expect(result.isOnboardingCompleted).toBe(true);
+      expect(result.isProfileSetupCompleted).toBe(true);
+      // Strictly verify no obsolete redundant aliases are present
+      expect((result as any).isOnboarded).toBeUndefined();
+      expect((result as any).isProfileCompleted).toBeUndefined();
       expect(usersService.findByIdWithRoles).toHaveBeenCalledWith('user-1');
+    });
+
+    it('should return false for onboarding/profile flags when user is not onboarded', async () => {
+      const mockProfile = {
+        id: 'user-2',
+        name: 'Bob',
+        email: 'bob@example.com',
+        roles: ['SUPPORTER'],
+        isOnboardingCompleted: false,
+        isProfileSetupCompleted: false,
+        creatorProfile: null,
+      };
+      usersService.findByIdWithRoles.mockResolvedValue(mockProfile);
+
+      const result = await controller.getProfile('user-2');
+      expect(result.isOnboardingCompleted).toBe(false);
+      expect(result.isProfileSetupCompleted).toBe(false);
+      expect((result as any).isOnboarded).toBeUndefined();
+      expect((result as any).isProfileCompleted).toBeUndefined();
     });
   });
 

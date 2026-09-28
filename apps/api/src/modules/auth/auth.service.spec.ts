@@ -45,6 +45,9 @@ describe('AuthService', () => {
         upsert: jest.fn(),
         findFirst: jest.fn(),
       },
+      creatorProfile: {
+        findUnique: jest.fn(),
+      },
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -384,6 +387,77 @@ describe('AuthService', () => {
 
       const result = await service.userHasRole('u1', 'CREATOR');
       expect(result).toBe(false);
+    });
+  });
+
+  describe('getIsOnboarded', () => {
+    it('should return false if creator profile does not exist', async () => {
+      prismaService.creatorProfile.findUnique.mockResolvedValue(null);
+
+      const result = await service.getIsOnboarded('u-none');
+      expect(result).toBe(false);
+      expect(prismaService.creatorProfile.findUnique).toHaveBeenCalledWith({
+        where: { userId: 'u-none' },
+        select: { id: true, status: true },
+      });
+    });
+
+    it('should return false if creator profile status is REGISTERED', async () => {
+      prismaService.creatorProfile.findUnique.mockResolvedValue({
+        id: 'cp-1',
+        status: 'REGISTERED',
+      });
+
+      const result = await service.getIsOnboarded('u-registered');
+      expect(result).toBe(false);
+    });
+
+    it('should return true if creator profile status is PROFILE_CREATED', async () => {
+      prismaService.creatorProfile.findUnique.mockResolvedValue({
+        id: 'cp-2',
+        status: 'PROFILE_CREATED',
+      });
+
+      const result = await service.getIsOnboarded('u-onboarded');
+      expect(result).toBe(true);
+    });
+
+    it('should return true if creator profile status is ACTIVE', async () => {
+      prismaService.creatorProfile.findUnique.mockResolvedValue({
+        id: 'cp-3',
+        status: 'ACTIVE',
+      });
+
+      const result = await service.getIsOnboarded('u-active');
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('getUserAuthFlags', () => {
+    it('should return isOnboardingCompleted and isProfileSetupCompleted matching completion status', async () => {
+      prismaService.creatorProfile.findUnique.mockResolvedValue({
+        id: 'cp-onboarded',
+        status: 'PROFILE_CREATED',
+      });
+
+      const result = await service.getUserAuthFlags('u-creator');
+      expect(result).toEqual({
+        isOnboardingCompleted: true,
+        isProfileSetupCompleted: true,
+      });
+      // Verify no obsolete keys
+      expect((result as any).isOnboarded).toBeUndefined();
+      expect((result as any).isProfileCompleted).toBeUndefined();
+    });
+
+    it('should return false flags for user with no creator profile or status REGISTERED', async () => {
+      prismaService.creatorProfile.findUnique.mockResolvedValue(null);
+
+      const result = await service.getUserAuthFlags('u-new');
+      expect(result).toEqual({
+        isOnboardingCompleted: false,
+        isProfileSetupCompleted: false,
+      });
     });
   });
 });
