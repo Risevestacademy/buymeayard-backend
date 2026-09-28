@@ -242,7 +242,10 @@ describe('CreatorsService', () => {
         username: 'taken_handle',
       });
 
-      const res = await service.checkSlugAvailability('taken_handle', 'my-user');
+      const res = await service.checkSlugAvailability(
+        'taken_handle',
+        'my-user',
+      );
       expect(res.available).toBe(false);
       expect(res.reason).toContain('already taken');
     });

@@ -159,8 +159,7 @@ export class AuthController {
   ): Promise<SocialSignInResponseDto> {
     const isMobile = isMobileRequest(req.headers);
     const callbackURL =
-      dto.callbackURL ||
-      (isMobile ? 'buymeayard://oauth-callback' : undefined);
+      dto.callbackURL || (isMobile ? 'buymeayard://oauth-callback' : undefined);
 
     const result = await this.authService.signInSocial({
       provider: dto.provider,
@@ -179,7 +178,8 @@ export class AuthController {
   @Public()
   @Get('social/:provider')
   @ApiOperation({
-    summary: 'Direct browser OAuth redirect for social provider (Google, Apple)',
+    summary:
+      'Direct browser OAuth redirect for social provider (Google, Apple)',
     description:
       'Redirects browser clients directly to the provider OAuth consent screen, or returns JSON URL if requested via API.',
   })
