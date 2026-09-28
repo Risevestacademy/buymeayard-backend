@@ -82,12 +82,16 @@ export class AuthService implements OnModuleInit {
 
   async forgotPassword(params: {
     email: string;
+    from?: string;
     headers?: Headers;
   }): Promise<globalThis.Response> {
+    const redirectTo = params.from
+      ? `/reset-password?from=${encodeURIComponent(params.from)}`
+      : '/reset-password';
     return this.getAuth().api.requestPasswordReset({
       body: {
         email: params.email,
-        redirectTo: '/reset-password',
+        redirectTo,
       },
       ...(params.headers ? { headers: params.headers } : {}),
       asResponse: true,

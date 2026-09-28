@@ -179,8 +179,11 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const isMobile = isMobileRequest(req.headers);
+    const from = dto.from || (isMobile ? 'mobile' : undefined);
     const webRes = await this.authService.forgotPassword({
       email: dto.email,
+      ...(from ? { from } : {}),
       headers: fromNodeHeaders(req.headers),
     });
     return this.handleAuthResponse(webRes, req, res, HttpStatus.OK);

@@ -3,6 +3,7 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
+import { isMobileRequest } from '../../common/utils/client-detection.util';
 
 export interface BetterAuthOptions {
   secret?: string;
@@ -141,10 +142,41 @@ export function createBetterAuth(
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
-      sendResetPassword: async ({ user, url, token: _token }) => {
+      sendResetPassword: async ({ user, url, token: _token }, request) => {
         const baseUrl = await getFrontendUrlForReset(user.id);
-        const token = new URL(url).searchParams.get('token');
-        const frontendLink = `${baseUrl}/reset-password?token=${token}`;
+        let token = _token;
+        if (!token) {
+          try {
+            const parsedUrl = new URL(url);
+            token =
+              parsedUrl.searchParams.get('token') ||
+              parsedUrl.pathname.split('/reset-password/')[1]?.split('?')[0];
+          } catch {
+            token = _token;
+          }
+        }
+
+        // Determine if "from" param should be appended (e.g. ?from=mobile)
+        let from: string | undefined;
+        try {
+          const callbackURL = new URL(url).searchParams.get('callbackURL');
+          if (callbackURL) {
+            const decoded = decodeURIComponent(callbackURL);
+            const dummyUrl = new URL(decoded, 'http://localhost');
+            from = dummyUrl.searchParams.get('from') || undefined;
+          }
+        } catch {
+          // fallback
+        }
+
+        if (!from && request?.headers) {
+          if (isMobileRequest(request.headers)) {
+            from = 'mobile';
+          }
+        }
+
+        const fromQuery = from ? `&from=${encodeURIComponent(from)}` : '';
+        const frontendLink = `${baseUrl}/reset-password?token=${token}${fromQuery}`;
         sendEmail(
           user.email,
           'Reset Your Password - BuyMeAYard',

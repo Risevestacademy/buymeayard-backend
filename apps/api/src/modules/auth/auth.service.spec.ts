@@ -226,6 +226,32 @@ describe('AuthService', () => {
         asResponse: true,
       });
     });
+
+    it('should append from query to redirectTo when from is provided', async () => {
+      const mockWebResponse = new Response(JSON.stringify({ status: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+      mockBetterAuthInstance.api.requestPasswordReset.mockResolvedValue(
+        mockWebResponse,
+      );
+
+      const result = await service.forgotPassword({
+        email: 'user@example.com',
+        from: 'mobile',
+      });
+
+      expect(result).toEqual(mockWebResponse);
+      expect(
+        mockBetterAuthInstance.api.requestPasswordReset,
+      ).toHaveBeenCalledWith({
+        body: {
+          email: 'user@example.com',
+          redirectTo: '/reset-password?from=mobile',
+        },
+        asResponse: true,
+      });
+    });
   });
 
   describe('resetPassword', () => {
