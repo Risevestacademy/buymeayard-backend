@@ -25,6 +25,7 @@ describe('AuthController', () => {
     changePassword: jest.Mock;
     verifyEmail: jest.Mock;
     sendVerificationEmail: jest.Mock;
+    signInSocial: jest.Mock;
     userHasRole: jest.Mock;
     getIsOnboarded: jest.Mock;
     getUserAuthFlags: jest.Mock;
@@ -67,6 +68,7 @@ describe('AuthController', () => {
       changePassword: jest.fn(),
       verifyEmail: jest.fn(),
       sendVerificationEmail: jest.fn(),
+      signInSocial: jest.fn(),
       userHasRole: jest.fn(),
       getIsOnboarded: jest.fn().mockResolvedValue(false),
       getUserAuthFlags: jest.fn().mockResolvedValue({
@@ -451,6 +453,105 @@ describe('AuthController', () => {
       });
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
       expect(result).toEqual({ status: true });
+    });
+  });
+
+  // --------------------------------------------------------
+  // SOCIAL SIGN IN (REST & MOBILE)
+  // --------------------------------------------------------
+
+  describe('socialSignIn (POST /auth/social/sign-in)', () => {
+    it('should call authService.signInSocial and return url and redirect flag', async () => {
+      const { req } = createMockReqRes();
+      authService.signInSocial.mockResolvedValue({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+      });
+
+      const result = await controller.socialSignIn(
+        {
+          provider: 'google',
+          callbackURL: 'buymeayard://oauth-callback',
+        },
+        req,
+      );
+
+      expect(authService.signInSocial).toHaveBeenCalledWith({
+        provider: 'google',
+        callbackURL: 'buymeayard://oauth-callback',
+        errorCallbackURL: undefined,
+        newUserCallbackURL: undefined,
+        headers: expect.any(Headers),
+      });
+      expect(result).toEqual({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+      });
+    });
+
+    it('should default callbackURL to mobile custom scheme if x-client-type is mobile', async () => {
+      const { req } = createMockReqRes({ 'x-client-type': 'mobile' });
+      authService.signInSocial.mockResolvedValue({
+        url: 'https://appleid.apple.com/auth/authorize?...',
+        redirect: true,
+      });
+
+      const result = await controller.socialSignIn({ provider: 'apple' }, req);
+
+      expect(authService.signInSocial).toHaveBeenCalledWith({
+        provider: 'apple',
+        callbackURL: 'buymeayard://oauth-callback',
+        errorCallbackURL: undefined,
+        newUserCallbackURL: undefined,
+        headers: expect.any(Headers),
+      });
+      expect(result.url).toContain('appleid.apple.com');
+    });
+  });
+
+  describe('directSocialRedirect (GET /auth/social/:provider)', () => {
+    it('should redirect browser to provider OAuth URL', async () => {
+      const { req, res } = createMockReqRes();
+      res.redirect = jest.fn();
+      authService.signInSocial.mockResolvedValue({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+      });
+
+      await controller.directSocialRedirect(
+        'google',
+        'http://localhost:3000/dashboard',
+        undefined,
+        req,
+        res,
+      );
+
+      expect(res.redirect).toHaveBeenCalledWith(
+        'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+      );
+    });
+
+    it('should return JSON when redirect=false is passed', async () => {
+      const { req, res } = createMockReqRes();
+      res.json = jest.fn();
+      authService.signInSocial.mockResolvedValue({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+      });
+
+      await controller.directSocialRedirect(
+        'google',
+        'buymeayard://oauth-callback',
+        'false',
+        req,
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
+      expect(res.json).toHaveBeenCalledWith({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+      });
     });
   });
 });

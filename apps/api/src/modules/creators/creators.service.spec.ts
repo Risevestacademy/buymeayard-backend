@@ -209,4 +209,66 @@ describe('CreatorsService', () => {
       );
     });
   });
+
+  describe('checkSlugAvailability', () => {
+    it('should return available: false if slug is empty', async () => {
+      const res = await service.checkSlugAvailability('');
+      expect(res.available).toBe(false);
+      expect(res.reason).toContain('empty');
+    });
+
+    it('should return available: false if slug is less than 3 chars', async () => {
+      const res = await service.checkSlugAvailability('ab');
+      expect(res.available).toBe(false);
+      expect(res.reason).toContain('at least 3 characters');
+    });
+
+    it('should return available: false if slug contains invalid characters', async () => {
+      const res = await service.checkSlugAvailability('invalid handle!');
+      expect(res.available).toBe(false);
+      expect(res.reason).toContain('letters, numbers');
+    });
+
+    it('should return available: false if slug is a reserved word', async () => {
+      const res = await service.checkSlugAvailability('admin');
+      expect(res.available).toBe(false);
+      expect(res.reason).toContain('reserved');
+    });
+
+    it('should return available: false if slug is already taken by another user', async () => {
+      prisma.creatorProfile.findFirst.mockResolvedValue({
+        id: 'creator-other',
+        userId: 'other-user',
+        username: 'taken_handle',
+      });
+
+      const res = await service.checkSlugAvailability(
+        'taken_handle',
+        'my-user',
+      );
+      expect(res.available).toBe(false);
+      expect(res.reason).toContain('already taken');
+    });
+
+    it('should return available: true and isCurrent: true if slug belongs to current user', async () => {
+      prisma.creatorProfile.findFirst.mockResolvedValue({
+        id: 'creator-self',
+        userId: 'my-user',
+        username: 'my_handle',
+      });
+
+      const res = await service.checkSlugAvailability('my_handle', 'my-user');
+      expect(res.available).toBe(true);
+      expect(res.isCurrent).toBe(true);
+    });
+
+    it('should return available: true for a valid and unique slug', async () => {
+      prisma.creatorProfile.findFirst.mockResolvedValue(null);
+
+      const res = await service.checkSlugAvailability('@aesthetefisayo');
+      expect(res.available).toBe(true);
+      expect(res.slug).toBe('aesthetefisayo');
+      expect(res.message).toBe('Handle is available');
+    });
+  });
 });
