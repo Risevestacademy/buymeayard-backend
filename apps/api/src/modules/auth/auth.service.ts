@@ -163,13 +163,27 @@ export class AuthService implements OnModuleInit {
 
   /**
    * Returns whether a user has completed creator onboarding
-   * (i.e. a CreatorProfile exists for them).
+   * (i.e. a CreatorProfile exists and status is not REGISTERED).
    */
   async getIsOnboarded(userId: string): Promise<boolean> {
     const profile = await this.prisma.creatorProfile.findUnique({
       where: { userId },
-      select: { id: true },
+      select: { id: true, status: true },
     });
-    return profile !== null;
+    return profile !== null && profile.status !== 'REGISTERED';
+  }
+
+  /**
+   * Returns onboarding and profile setup completion flags for a user.
+   */
+  async getUserAuthFlags(userId: string): Promise<{
+    isOnboardingCompleted: boolean;
+    isProfileSetupCompleted: boolean;
+  }> {
+    const isCompleted = await this.getIsOnboarded(userId);
+    return {
+      isOnboardingCompleted: isCompleted,
+      isProfileSetupCompleted: isCompleted,
+    };
   }
 }

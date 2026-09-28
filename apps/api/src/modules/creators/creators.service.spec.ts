@@ -75,28 +75,28 @@ describe('CreatorsService', () => {
   describe('onboardCreator', () => {
     it('should throw BadRequestException if creatorName is missing', async () => {
       await expect(
-        service.onboardCreator('user-1', { personalizedLink: 'adeola' }),
+        service.onboardCreator('user-1', { slug: 'adeola' }),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException if personalizedLink is missing', async () => {
+    it('should throw BadRequestException if slug is missing', async () => {
       await expect(
         service.onboardCreator('user-1', { creatorName: 'Adeola Johnson' }),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw ConflictException if personalizedLink or username is taken by another user', async () => {
+    it('should throw ConflictException if slug or username is taken by another user', async () => {
       prisma.creatorProfile.findFirst.mockResolvedValue({
         id: 'creator-other',
         userId: 'other-user',
         username: 'adeola',
-        personalizedLink: 'buymeayard/adeola',
+        personalizedLink: 'adeola',
       });
 
       await expect(
         service.onboardCreator('user-1', {
           creatorName: 'Adeola Johnson',
-          personalizedLink: 'buymeayard/adeola',
+          slug: 'adeola',
         }),
       ).rejects.toThrow(ConflictException);
     });
@@ -109,7 +109,7 @@ describe('CreatorsService', () => {
           id: 'creator-1',
           userId: 'user-1',
           username: 'adeola',
-          personalizedLink: 'buymeayard/adeola',
+          personalizedLink: 'adeola',
           status: 'PROFILE_CREATED',
           socialLinks: [],
           materials: [],
@@ -120,14 +120,14 @@ describe('CreatorsService', () => {
         id: 'creator-1',
         userId: 'user-1',
         username: 'adeola',
-        personalizedLink: 'buymeayard/adeola',
+        personalizedLink: 'adeola',
         status: 'PROFILE_CREATED',
         user: { name: 'Adeola Johnson' },
       });
 
       const result = await service.onboardCreator('user-1', {
         creatorName: 'Adeola Johnson',
-        personalizedLink: 'buymeayard/adeola',
+        slug: 'adeola',
         socialLinks: [{ platform: 'twitter', url: 'https://x.com/adeola' }],
       });
 
@@ -142,7 +142,7 @@ describe('CreatorsService', () => {
         data: {
           userId: 'user-1',
           username: 'adeola',
-          personalizedLink: 'buymeayard/adeola',
+          personalizedLink: 'adeola',
           status: 'PROFILE_CREATED',
           kycStatus: 'NOT_SUBMITTED',
         },
@@ -166,21 +166,26 @@ describe('CreatorsService', () => {
           url: 'https://x.com/adeola',
         },
       });
-      expect(result?.username).toBe('adeola');
+      expect(result?.creatorName).toBe('Adeola Johnson');
+      expect(result?.slug).toBe('adeola');
     });
 
-    it('should format creator profile with creatorName and personalizedLink', () => {
+    it('should format creator profile with only creatorName and clean slug', () => {
       const formatted = service.formatCreatorProfile({
         user: { name: 'Adeola Johnson' },
         username: 'adeola',
-        personalizedLink: 'buymeayard/adeola',
+        personalizedLink: 'adeola',
       });
 
       expect(formatted.creatorName).toBe('Adeola Johnson');
-      expect(formatted.name).toBe('Adeola Johnson');
-      expect(formatted.personalizedLink).toBe('buymeayard/adeola');
-      expect(formatted.firstName).toBe('Adeola');
-      expect(formatted.lastName).toBe('Johnson');
+      expect(formatted.slug).toBe('adeola');
+      // Assert redundant name and link fields are stripped
+      expect(formatted.name).toBeUndefined();
+      expect(formatted.displayName).toBeUndefined();
+      expect(formatted.firstName).toBeUndefined();
+      expect(formatted.lastName).toBeUndefined();
+      expect(formatted.username).toBeUndefined();
+      expect(formatted.personalizedLink).toBeUndefined();
     });
   });
 

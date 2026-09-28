@@ -83,7 +83,11 @@ export class AuthController {
       HttpStatus.CREATED,
     );
     if (body && typeof body === 'object' && body.user?.id) {
-      body.isOnboarded = await this.authService.getIsOnboarded(body.user.id);
+      const authFlags = await this.authService.getUserAuthFlags(body.user.id);
+      Object.assign(body, authFlags);
+      if (body.user && typeof body.user === 'object') {
+        Object.assign(body.user, authFlags);
+      }
     }
     return body;
   }
@@ -115,7 +119,11 @@ export class AuthController {
     });
     const body = await this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
     if (body && typeof body === 'object' && body.user?.id) {
-      body.isOnboarded = await this.authService.getIsOnboarded(body.user.id);
+      const authFlags = await this.authService.getUserAuthFlags(body.user.id);
+      Object.assign(body, authFlags);
+      if (body.user && typeof body.user === 'object') {
+        Object.assign(body.user, authFlags);
+      }
     }
     return body;
   }

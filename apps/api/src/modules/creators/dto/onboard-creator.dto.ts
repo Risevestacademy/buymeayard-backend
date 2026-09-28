@@ -22,38 +22,22 @@ export class SocialLinkDto {
 export class OnboardCreatorDto {
   @ApiProperty({
     example: 'Adeola Johnson',
-    description: 'Creator display name entered during onboarding',
-    required: false,
+    description: 'Creator name entered during onboarding',
+    required: true,
   })
   @IsOptional()
   @IsString()
   creatorName?: string;
 
-  @ApiPropertyOptional({
-    example: 'Adeola Johnson',
-    description: 'Alternative alias for creator display name',
-  })
-  @IsOptional()
-  @IsString()
-  displayName?: string;
-
   @ApiProperty({
-    example: 'buymeayard/adeola',
-    description:
-      'Personalized profile link entered by creator (e.g. "buymeayard/adeola" or "adeola")',
-    required: false,
-  })
-  @IsOptional()
-  @IsString()
-  personalizedLink?: string;
-
-  @ApiPropertyOptional({
     example: 'adeola',
-    description: 'Alternative alias for personalized link slug handle',
+    description:
+      'Unique creator URL slug / handle (e.g. "adeola"). Only the slug is needed as the domain can change.',
+    required: true,
   })
   @IsOptional()
   @IsString()
-  username?: string;
+  slug?: string;
 
   @ApiPropertyOptional({
     type: [SocialLinkDto],
