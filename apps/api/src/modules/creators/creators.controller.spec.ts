@@ -10,6 +10,7 @@ describe('CreatorsController', () => {
     findByUsername: jest.Mock;
     onboardCreator: jest.Mock;
     formatCreatorProfile: jest.Mock;
+    checkSlugAvailability: jest.Mock;
   };
 
   const rawCreatorProfile = {
@@ -29,6 +30,7 @@ describe('CreatorsController', () => {
       findByUserId: jest.fn(),
       findByUsername: jest.fn(),
       onboardCreator: jest.fn(),
+      checkSlugAvailability: jest.fn(),
       formatCreatorProfile: jest.fn((p) => {
         if (!p) return p;
         const {
@@ -154,6 +156,31 @@ describe('CreatorsController', () => {
         search: 'adeola',
       });
       expect(result).toEqual(mockCreators);
+    });
+  });
+
+  describe('checkSlug (GET /creators/check-slug)', () => {
+    it('should call creatorsService.checkSlugAvailability with query and userId', async () => {
+      const mockResult = {
+        available: true,
+        slug: 'aesthetefisayo',
+        message: 'Handle is available',
+      };
+      creatorsService.checkSlugAvailability = jest
+        .fn()
+        .mockResolvedValue(mockResult);
+
+      const result = await controller.checkSlug(
+        'aesthetefisayo',
+        undefined,
+        'user-1',
+      );
+
+      expect(creatorsService.checkSlugAvailability).toHaveBeenCalledWith(
+        'aesthetefisayo',
+        'user-1',
+      );
+      expect(result).toEqual(mockResult);
     });
   });
 });

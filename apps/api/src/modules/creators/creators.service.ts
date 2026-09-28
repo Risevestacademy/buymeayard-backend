@@ -87,6 +87,169 @@ export class CreatorsService {
     return creator;
   }
 
+  public static readonly RESERVED_SLUGS = new Set([
+    'admin',
+    'administrator',
+    'api',
+    'app',
+    'audience',
+    'auth',
+    'balance',
+    'billing',
+    'buymeayard',
+    'callback',
+    'checkout',
+    'contact',
+    'create',
+    'creator',
+    'creators',
+    'dashboard',
+    'docs',
+    'explore',
+    'feed',
+    'following',
+    'forgot-password',
+    'help',
+    'home',
+    'kyc',
+    'legal',
+    'login',
+    'logout',
+    'materials',
+    'media',
+    'messages',
+    'moderation',
+    'notifications',
+    'onboarding',
+    'payout',
+    'payouts',
+    'posts',
+    'pricing',
+    'privacy',
+    'profile',
+    'register',
+    'reset-password',
+    'revenue',
+    'search',
+    'settings',
+    'signin',
+    'signout',
+    'signup',
+    'slug',
+    'status',
+    'support',
+    'supporters',
+    'supports',
+    'terms',
+    'users',
+    'verify',
+    'webhook',
+    'webhooks',
+    'yard',
+    'yards',
+    'null',
+    'undefined',
+  ]);
+
+  async checkSlugAvailability(
+    rawSlug: string,
+    currentUserId?: string,
+  ): Promise<{
+    available: boolean;
+    slug: string;
+    reason?: string;
+    message?: string;
+    isCurrent?: boolean;
+  }> {
+    if (!rawSlug || typeof rawSlug !== 'string' || !rawSlug.trim()) {
+      return {
+        available: false,
+        slug: '',
+        reason: 'Handle cannot be empty',
+      };
+    }
+
+    const cleanSlug = rawSlug
+      .replace(/^https?:\/\/[^/]+\//i, '')
+      .replace(/^(buymeayard\/|\/|@)/i, '')
+      .replace(/\/+$/, '')
+      .toLowerCase()
+      .trim();
+
+    if (!cleanSlug) {
+      return {
+        available: false,
+        slug: '',
+        reason: 'Handle cannot be empty',
+      };
+    }
+
+    if (cleanSlug.length < 3) {
+      return {
+        available: false,
+        slug: cleanSlug,
+        reason: 'Handle must be at least 3 characters long',
+      };
+    }
+
+    if (cleanSlug.length > 30) {
+      return {
+        available: false,
+        slug: cleanSlug,
+        reason: 'Handle cannot exceed 30 characters',
+      };
+    }
+
+    if (!/^[a-z0-9_-]+$/.test(cleanSlug)) {
+      return {
+        available: false,
+        slug: cleanSlug,
+        reason:
+          'Handle can only contain letters, numbers, hyphens, and underscores',
+      };
+    }
+
+    if (CreatorsService.RESERVED_SLUGS.has(cleanSlug)) {
+      return {
+        available: false,
+        slug: cleanSlug,
+        reason: 'This handle is reserved and cannot be used',
+      };
+    }
+
+    const existing = await this.prisma.creatorProfile.findFirst({
+      where: {
+        OR: [
+          { username: cleanSlug },
+          { personalizedLink: cleanSlug },
+          { personalizedLink: `buymeayard/${cleanSlug}` },
+        ],
+      },
+    });
+
+    if (existing) {
+      if (currentUserId && existing.userId === currentUserId) {
+        return {
+          available: true,
+          slug: cleanSlug,
+          isCurrent: true,
+          message: 'This is your current handle',
+        };
+      }
+      return {
+        available: false,
+        slug: cleanSlug,
+        reason: 'This handle is already taken',
+      };
+    }
+
+    return {
+      available: true,
+      slug: cleanSlug,
+      message: 'Handle is available',
+    };
+  }
+
   async findByUserId(userId: string) {
     const creator = await this.prisma.creatorProfile.findUnique({
       where: { userId },
@@ -144,6 +307,18 @@ export class CreatorsService {
       throw new BadRequestException(
         'Slug contains invalid characters. Use letters, numbers, hyphens, and underscores only.',
       );
+    }
+
+    if (cleanSlug.length < 3) {
+      throw new BadRequestException('Slug must be at least 3 characters long');
+    }
+
+    if (cleanSlug.length > 30) {
+      throw new BadRequestException('Slug cannot exceed 30 characters');
+    }
+
+    if (CreatorsService.RESERVED_SLUGS.has(cleanSlug)) {
+      throw new BadRequestException('This slug is reserved and cannot be used');
     }
 
     // 3. Ensure uniqueness

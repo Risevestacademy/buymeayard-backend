@@ -18,6 +18,7 @@ import {
   CreatorListResponseDto,
   ApiErrorResponseDto,
 } from './dto/creator-response.dto';
+import { CheckSlugResponseDto } from './dto/check-slug.dto';
 
 @ApiTags('creators')
 @Controller('creators')
@@ -126,6 +127,42 @@ export class CreatorsController {
   ) {
     const profile = await this.creatorsService.onboardCreator(userId, dto);
     return this.creatorsService.formatCreatorProfile(profile);
+  }
+
+  @Public()
+  @Get('check-slug')
+  @ApiOperation({
+    summary: 'Check username / slug availability in real time',
+    description:
+      'Validates syntax, reserved words, and checks uniqueness for creator handle during onboarding.',
+  })
+  @ApiQuery({
+    name: 'slug',
+    required: false,
+    type: String,
+    description:
+      'Creator slug or handle to check (e.g. "aesthetefisayo" or "@aesthetefisayo")',
+    example: 'aesthetefisayo',
+  })
+  @ApiQuery({
+    name: 'username',
+    required: false,
+    type: String,
+    description: 'Alias for slug query parameter',
+    example: 'aesthetefisayo',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Slug availability status returned successfully.',
+    type: CheckSlugResponseDto,
+  })
+  async checkSlug(
+    @Query('slug') slug?: string,
+    @Query('username') username?: string,
+    @CurrentUser('id') userId?: string,
+  ): Promise<CheckSlugResponseDto> {
+    const raw = slug || username || '';
+    return this.creatorsService.checkSlugAvailability(raw, userId);
   }
 
   @Public()

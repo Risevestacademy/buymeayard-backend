@@ -13,6 +13,7 @@ const mockBetterAuthInstance = {
     changePassword: jest.fn(),
     verifyEmail: jest.fn(),
     sendVerificationEmail: jest.fn(),
+    signInSocial: jest.fn(),
   },
 };
 
@@ -458,6 +459,31 @@ describe('AuthService', () => {
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
       });
+    });
+  });
+
+  describe('signInSocial', () => {
+    it('should call signInSocial on betterAuth api and return authorization url', async () => {
+      mockBetterAuthInstance.api.signInSocial.mockResolvedValue({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=test',
+        redirect: true,
+      });
+
+      const res = await service.signInSocial({
+        provider: 'google',
+        callbackURL: 'buymeayard://oauth-callback',
+      });
+
+      expect(mockBetterAuthInstance.api.signInSocial).toHaveBeenCalledWith({
+        body: {
+          provider: 'google',
+          callbackURL: 'buymeayard://oauth-callback',
+          errorCallbackURL: undefined,
+          newUserCallbackURL: undefined,
+        },
+      });
+      expect(res.url).toContain('accounts.google.com');
+      expect(res.redirect).toBe(true);
     });
   });
 });

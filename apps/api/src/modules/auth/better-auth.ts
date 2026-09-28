@@ -105,6 +105,13 @@ export function createBetterAuth(
       'https://buymeayard-main-dev.up.railway.app',
       'https://buymeayard-creator-dev.up.railway.app',
       'https://buymeayard-admin-dev.up.railway.app',
+      'buymeayard://',
+      'buymeayard://*',
+      'exp://',
+      'exp://*',
+      ...(process.env.ADDITIONAL_TRUSTED_ORIGINS
+        ? process.env.ADDITIONAL_TRUSTED_ORIGINS.split(',').map((o) => o.trim())
+        : []),
     ],
     database: prismaAdapter(prisma, {
       provider: 'postgresql',

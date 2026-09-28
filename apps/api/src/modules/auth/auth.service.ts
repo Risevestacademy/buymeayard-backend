@@ -72,6 +72,30 @@ export class AuthService implements OnModuleInit {
     });
   }
 
+  async signInSocial(params: {
+    provider: string;
+    callbackURL?: string;
+    errorCallbackURL?: string;
+    newUserCallbackURL?: string;
+    headers?: Headers;
+  }): Promise<{ url: string; redirect: boolean }> {
+    const defaultCallback =
+      this.configService.get<string>('BETTER_AUTH_URL') ||
+      'http://localhost:3000';
+
+    const res = await (this.getAuth().api as any).signInSocial({
+      body: {
+        provider: params.provider,
+        callbackURL: params.callbackURL || defaultCallback,
+        errorCallbackURL: params.errorCallbackURL,
+        newUserCallbackURL: params.newUserCallbackURL,
+      },
+      ...(params.headers ? { headers: params.headers } : {}),
+    });
+
+    return res as { url: string; redirect: boolean };
+  }
+
   async signOut(params?: { headers?: Headers }): Promise<globalThis.Response> {
     const headers = params?.headers || new Headers();
     return this.getAuth().api.signOut({
