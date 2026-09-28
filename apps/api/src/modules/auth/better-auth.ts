@@ -144,16 +144,29 @@ export function createBetterAuth(
       requireEmailVerification: false,
       sendResetPassword: async ({ user, url, token: _token }, request) => {
         const baseUrl = await getFrontendUrlForReset(user.id);
-        let token = _token;
+        let token =
+          _token && _token !== 'null' && _token !== 'undefined'
+            ? _token
+            : undefined;
         if (!token) {
           try {
             const parsedUrl = new URL(url);
             token =
+              parsedUrl.pathname
+                .split('/reset-password/')[1]
+                ?.split('/')[0]
+                ?.split('?')[0] ||
               parsedUrl.searchParams.get('token') ||
-              parsedUrl.pathname.split('/reset-password/')[1]?.split('?')[0];
+              undefined;
           } catch {
-            token = _token;
+            token = undefined;
           }
+        }
+
+        if (!token) {
+          console.error(
+            `[Auth] Could not extract reset password token for ${user.email} from url=${url}, token=${_token}`,
+          );
         }
 
         // Determine if "from" param should be appended (e.g. ?from=mobile)
@@ -176,7 +189,7 @@ export function createBetterAuth(
         }
 
         const fromQuery = from ? `&from=${encodeURIComponent(from)}` : '';
-        const frontendLink = `${baseUrl}/reset-password?token=${token}${fromQuery}`;
+        const frontendLink = `${baseUrl}/reset-password?token=${token || ''}${fromQuery}`;
         sendEmail(
           user.email,
           'Reset Your Password - BuyMeAYard',
@@ -190,8 +203,32 @@ export function createBetterAuth(
       sendOnSignUp: true,
       sendVerificationEmail: async ({ user, url, token: _token }) => {
         // Always use creator URL — only creators self-register
-        const token = new URL(url).searchParams.get('token');
-        const frontendLink = `${frontendUrls.creator}/verify-email?token=${token}`;
+        let token =
+          _token && _token !== 'null' && _token !== 'undefined'
+            ? _token
+            : undefined;
+        if (!token) {
+          try {
+            const parsedUrl = new URL(url);
+            token =
+              parsedUrl.searchParams.get('token') ||
+              parsedUrl.pathname
+                .split('/verify-email/')[1]
+                ?.split('/')[0]
+                ?.split('?')[0] ||
+              undefined;
+          } catch {
+            token = undefined;
+          }
+        }
+
+        if (!token) {
+          console.error(
+            `[Auth] Could not extract verification token for ${user.email} from url=${url}, token=${_token}`,
+          );
+        }
+
+        const frontendLink = `${frontendUrls.creator}/verify-email?token=${token || ''}`;
         sendEmail(
           user.email,
           'Verify Your Email - BuyMeAYard',
