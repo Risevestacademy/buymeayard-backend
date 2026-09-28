@@ -124,11 +124,11 @@ describe('CreatorsController', () => {
     });
   });
 
-  describe('getCreatorByUsername (GET /creators/:username)', () => {
+  describe('getCreatorBySlug (GET /creators/:slug)', () => {
     it('should return public creator profile formatted with creatorName and slug', async () => {
       creatorsService.findByUsername.mockResolvedValue(rawCreatorProfile);
 
-      const result = await controller.getCreatorByUsername('adeola');
+      const result = await controller.getCreatorBySlug('adeola');
 
       expect(creatorsService.findByUsername).toHaveBeenCalledWith('adeola');
       expect(creatorsService.formatCreatorProfile).toHaveBeenCalled();

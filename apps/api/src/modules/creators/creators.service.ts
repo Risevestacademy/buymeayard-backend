@@ -113,7 +113,11 @@ export class CreatorsService {
 
   async onboardCreator(userId: string, dto: OnboardCreatorDto) {
     // 1. Resolve Creator Name
-    const creatorName = (dto.creatorName || dto.displayName || '').trim();
+    const creatorName = (
+      dto.creatorName ||
+      (dto as any).displayName ||
+      ''
+    ).trim();
     if (!creatorName) {
       throw new BadRequestException('Creator name is required');
     }
@@ -121,8 +125,8 @@ export class CreatorsService {
     // 2. Resolve Slug
     const rawSlug = (
       dto.slug ||
-      dto.username ||
-      dto.personalizedLink ||
+      (dto as any).username ||
+      (dto as any).personalizedLink ||
       ''
     ).trim();
     if (!rawSlug) {

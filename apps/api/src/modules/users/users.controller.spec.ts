@@ -48,8 +48,6 @@ describe('UsersController', () => {
           id: 'cp-1',
           creatorName: 'Alice',
           slug: 'alice',
-          username: 'alice',
-          personalizedLink: 'alice',
           status: 'PROFILE_CREATED',
           kycStatus: 'NOT_SUBMITTED',
         },
@@ -63,6 +61,8 @@ describe('UsersController', () => {
       // Strictly verify no obsolete redundant aliases are present
       expect((result as any).isOnboarded).toBeUndefined();
       expect((result as any).isProfileCompleted).toBeUndefined();
+      expect((result.creatorProfile as any)?.username).toBeUndefined();
+      expect((result.creatorProfile as any)?.personalizedLink).toBeUndefined();
       expect(usersService.findByIdWithRoles).toHaveBeenCalledWith('user-1');
     });
 

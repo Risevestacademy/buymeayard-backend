@@ -31,7 +31,6 @@ export class UsersService {
           select: {
             id: true,
             username: true,
-            personalizedLink: true,
             status: true,
             kycStatus: true,
           },
@@ -82,7 +81,6 @@ export class UsersService {
           select: {
             id: true,
             username: true,
-            personalizedLink: true,
             status: true,
           },
         },

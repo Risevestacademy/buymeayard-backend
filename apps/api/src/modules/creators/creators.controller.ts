@@ -29,7 +29,7 @@ export class CreatorsController {
   @ApiOperation({
     summary: 'Discover active creators',
     description:
-      'Fetches a list of active creator profiles. Supports optional search filter by display name, username slug, or personalized link.',
+      'Fetches a list of active creator profiles. Supports optional search filter by creator name or slug.',
   })
   @ApiQuery({
     name: 'search',
@@ -107,7 +107,7 @@ export class CreatorsController {
   })
   @ApiResponse({
     status: 400,
-    description: 'Missing required fields or invalid personalized link format.',
+    description: 'Missing required fields or invalid slug format.',
     type: ApiErrorResponseDto,
   })
   @ApiResponse({
@@ -117,7 +117,7 @@ export class CreatorsController {
   })
   @ApiResponse({
     status: 409,
-    description: 'Conflict — personalized link or username is already taken.',
+    description: 'Conflict — slug is already taken.',
     type: ApiErrorResponseDto,
   })
   async onboardCreator(
@@ -129,16 +129,15 @@ export class CreatorsController {
   }
 
   @Public()
-  @Get(':username')
+  @Get(':slug')
   @ApiOperation({
-    summary: 'Get public creator profile by username or personalized link',
+    summary: 'Get public creator profile by slug',
     description:
-      'Fetches public details and yard materials for a creator using their username slug or full personalized link identifier.',
+      'Fetches public details and yard materials for a creator using their unique slug handle (e.g. "adeola").',
   })
   @ApiParam({
-    name: 'username',
-    description:
-      'Creator username slug or personalized link (e.g. "adeola" or "buymeayard/adeola")',
+    name: 'slug',
+    description: 'Creator slug handle (e.g. "adeola")',
     example: 'adeola',
   })
   @ApiResponse({
@@ -151,8 +150,8 @@ export class CreatorsController {
     description: 'Creator not found.',
     type: ApiErrorResponseDto,
   })
-  async getCreatorByUsername(@Param('username') username: string) {
-    const profile = await this.creatorsService.findByUsername(username);
+  async getCreatorBySlug(@Param('slug') slug: string) {
+    const profile = await this.creatorsService.findByUsername(slug);
     return this.creatorsService.formatCreatorProfile(profile);
   }
 }
