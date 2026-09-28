@@ -27,6 +27,7 @@ describe('AuthController', () => {
     sendVerificationEmail: jest.Mock;
     userHasRole: jest.Mock;
     getIsOnboarded: jest.Mock;
+    getUserAuthFlags: jest.Mock;
   };
 
   const createMockReqRes = (headers: Record<string, string> = {}) => {
@@ -68,6 +69,12 @@ describe('AuthController', () => {
       sendVerificationEmail: jest.fn(),
       userHasRole: jest.fn(),
       getIsOnboarded: jest.fn().mockResolvedValue(false),
+      getUserAuthFlags: jest.fn().mockResolvedValue({
+        isOnboarded: false,
+        isOnboardingCompleted: false,
+        isProfileSetupCompleted: false,
+        isProfileCompleted: false,
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -111,8 +118,18 @@ describe('AuthController', () => {
       expect(authService.signUpEmail).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(HttpStatus.CREATED);
       expect(result).toEqual({
-        user: { id: 'u1', email: 'alice@example.com' },
+        user: {
+          id: 'u1',
+          email: 'alice@example.com',
+          isOnboarded: false,
+          isOnboardingCompleted: false,
+          isProfileSetupCompleted: false,
+          isProfileCompleted: false,
+        },
         isOnboarded: false,
+        isOnboardingCompleted: false,
+        isProfileSetupCompleted: false,
+        isProfileCompleted: false,
       });
     });
 
@@ -183,9 +200,18 @@ describe('AuthController', () => {
       ]);
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
       expect(result).toEqual({
-        user: { id: 'u1' },
+        user: {
+          id: 'u1',
+          isOnboarded: false,
+          isOnboardingCompleted: false,
+          isProfileSetupCompleted: false,
+          isProfileCompleted: false,
+        },
         token: 'token456',
         isOnboarded: false,
+        isOnboardingCompleted: false,
+        isProfileSetupCompleted: false,
+        isProfileCompleted: false,
       });
     });
 

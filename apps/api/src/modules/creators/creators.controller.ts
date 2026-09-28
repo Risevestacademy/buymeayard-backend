@@ -81,7 +81,7 @@ export class CreatorsController {
   @ApiOperation({
     summary: 'Complete creator profile onboarding',
     description:
-      'Submits creator onboarding details including Creator Name, Personalized Link (e.g. buymeayard/adeola or adeola), and connected social media accounts. Assigns the CREATOR role upon completion.',
+      'Submits creator onboarding details including Creator Name, Slug handle (e.g. "adeola"), and connected social media accounts. Assigns the CREATOR role upon completion.',
   })
   @ApiBody({
     type: OnboardCreatorDto,
@@ -91,20 +91,10 @@ export class CreatorsController {
         summary: 'Standard Onboarding Example',
         value: {
           creatorName: 'Adeola Johnson',
-          personalizedLink: 'buymeayard/adeola',
+          slug: 'adeola',
           socialLinks: [
             { platform: 'twitter', url: 'https://x.com/adeola' },
             { platform: 'instagram', url: 'https://instagram.com/adeola' },
-          ],
-        },
-      },
-      handleOnly: {
-        summary: 'Using Slug Handle Directly',
-        value: {
-          creatorName: 'Adeola Johnson',
-          personalizedLink: 'adeola',
-          socialLinks: [
-            { platform: 'tiktok', url: 'https://tiktok.com/@adeola' },
           ],
         },
       },

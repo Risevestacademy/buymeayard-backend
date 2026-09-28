@@ -118,13 +118,18 @@ export class CreatorsService {
       throw new BadRequestException('Creator name is required');
     }
 
-    // 2. Resolve Personalized Link & Slug
-    const rawLink = (dto.personalizedLink || dto.username || '').trim();
-    if (!rawLink) {
-      throw new BadRequestException('Personalized link is required');
+    // 2. Resolve Slug
+    const rawSlug = (
+      dto.slug ||
+      dto.username ||
+      dto.personalizedLink ||
+      ''
+    ).trim();
+    if (!rawSlug) {
+      throw new BadRequestException('Slug is required');
     }
 
-    const cleanSlug = rawLink
+    const cleanSlug = rawSlug
       .replace(/^https?:\/\/[^/]+\//i, '')
       .replace(/^(buymeayard\/|\/|@)/i, '')
       .replace(/\/+$/, '')
@@ -133,27 +138,23 @@ export class CreatorsService {
 
     if (!cleanSlug || !/^[a-z0-9_-]+$/.test(cleanSlug)) {
       throw new BadRequestException(
-        'Personalized link contains invalid characters. Use letters, numbers, hyphens, and underscores only.',
+        'Slug contains invalid characters. Use letters, numbers, hyphens, and underscores only.',
       );
     }
-
-    const formattedPersonalizedLink = `buymeayard/${cleanSlug}`;
 
     // 3. Ensure uniqueness
     const existingTaken = await this.prisma.creatorProfile.findFirst({
       where: {
         OR: [
           { username: cleanSlug },
-          { personalizedLink: formattedPersonalizedLink },
           { personalizedLink: cleanSlug },
+          { personalizedLink: `buymeayard/${cleanSlug}` },
         ],
       },
     });
 
     if (existingTaken && existingTaken.userId !== userId) {
-      throw new ConflictException(
-        'Personalized link / username is already taken',
-      );
+      throw new ConflictException('Slug / username is already taken');
     }
 
     // 4. Update User name
@@ -174,7 +175,7 @@ export class CreatorsService {
         where: { id: existingProfile.id },
         data: {
           username: cleanSlug,
-          personalizedLink: formattedPersonalizedLink,
+          personalizedLink: cleanSlug,
           status:
             existingProfile.status === 'REGISTERED'
               ? 'PROFILE_CREATED'
@@ -210,7 +211,7 @@ export class CreatorsService {
         data: {
           userId,
           username: cleanSlug,
-          personalizedLink: formattedPersonalizedLink,
+          personalizedLink: cleanSlug,
           status: 'PROFILE_CREATED',
           kycStatus: 'NOT_SUBMITTED',
         },
@@ -337,20 +338,32 @@ export class CreatorsService {
   formatCreatorProfile(profile: any) {
     if (!profile) return profile;
 
-    const creatorName = profile.user?.name || profile.name || '';
-    const [firstName, ...lastNameParts] = creatorName.split(' ');
-    const lastName = lastNameParts.join(' ');
+    const creatorName =
+      profile.creatorName || profile.user?.name || profile.name || '';
+    const rawSlug =
+      profile.username || profile.slug || profile.personalizedLink || '';
+    const cleanSlug = rawSlug
+      .replace(/^https?:\/\/[^/]+\//i, '')
+      .replace(/^(buymeayard\/|\/|@)/i, '')
+      .replace(/\/+$/, '')
+      .toLowerCase()
+      .trim();
+
+    // Strip redundant and confusing duplicate name fields
+    const {
+      name: _name,
+      displayName: _displayName,
+      firstName: _firstName,
+      lastName: _lastName,
+      ...cleanProfile
+    } = profile;
 
     return {
-      ...profile,
-      name: creatorName,
+      ...cleanProfile,
       creatorName,
-      displayName: creatorName,
-      personalizedLink:
-        profile.personalizedLink ||
-        (profile.username ? `buymeayard/${profile.username}` : null),
-      firstName: firstName || null,
-      lastName: lastName || null,
+      slug: cleanSlug,
+      personalizedLink: cleanSlug,
+      username: cleanSlug,
     };
   }
 }

@@ -52,48 +52,28 @@ export class CreatorProfileDataDto {
   userId: string;
 
   @ApiProperty({
+    example: 'Adeola Johnson',
+    description: 'Creator name',
+  })
+  creatorName: string;
+
+  @ApiProperty({
+    example: 'adeola',
+    description: 'Unique creator URL slug handle',
+  })
+  slug: string;
+
+  @ApiProperty({
     example: 'adeola',
     description: 'Unique username / slug for creator routing',
   })
   username: string;
 
   @ApiProperty({
-    example: 'Adeola Johnson',
-    description: 'Creator display name',
-  })
-  displayName: string;
-
-  @ApiProperty({
-    example: 'Adeola Johnson',
-    description: 'Creator name',
-  })
-  name: string;
-
-  @ApiProperty({
-    example: 'Adeola Johnson',
-    description: 'Creator name alias',
-  })
-  creatorName: string;
-
-  @ApiProperty({
-    example: 'buymeayard/adeola',
-    description: 'Personalized public link',
+    example: 'adeola',
+    description: 'Personalized public link slug',
   })
   personalizedLink: string;
-
-  @ApiPropertyOptional({
-    example: 'Adeola',
-    description: 'First name derived from creator name',
-    nullable: true,
-  })
-  firstName?: string | null;
-
-  @ApiPropertyOptional({
-    example: 'Johnson',
-    description: 'Last name derived from creator name',
-    nullable: true,
-  })
-  lastName?: string | null;
 
   @ApiPropertyOptional({
     example: 'Fashion designer in Lagos',

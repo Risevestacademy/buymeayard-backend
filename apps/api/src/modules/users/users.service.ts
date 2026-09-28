@@ -46,6 +46,10 @@ export class UsersService {
       });
     }
 
+    const isOnboarded =
+      user.creatorProfile !== null &&
+      user.creatorProfile.status !== 'REGISTERED';
+
     return {
       id: user.id,
       email: user.email,
@@ -54,11 +58,19 @@ export class UsersService {
       emailVerified: user.emailVerified,
       status: user.status,
       roles: user.roles.map((r) => r.role.name),
-      isOnboarded: user.creatorProfile !== null,
+      isOnboarded,
+      isOnboardingCompleted: isOnboarded,
+      isProfileSetupCompleted: isOnboarded,
+      isProfileCompleted: isOnboarded,
       creatorProfile: user.creatorProfile
         ? {
-            ...user.creatorProfile,
-            name: user.name,
+            id: user.creatorProfile.id,
+            slug: user.creatorProfile.username,
+            username: user.creatorProfile.username,
+            personalizedLink: user.creatorProfile.username,
+            creatorName: user.name || '',
+            status: user.creatorProfile.status,
+            kycStatus: user.creatorProfile.kycStatus,
           }
         : null,
       createdAt: user.createdAt,
@@ -94,8 +106,12 @@ export class UsersService {
       image: user.image,
       creatorProfile: user.creatorProfile
         ? {
-            ...user.creatorProfile,
-            name: user.name,
+            id: user.creatorProfile.id,
+            slug: user.creatorProfile.username,
+            username: user.creatorProfile.username,
+            personalizedLink: user.creatorProfile.username,
+            creatorName: user.name || '',
+            status: user.creatorProfile.status,
           }
         : null,
       createdAt: user.createdAt,
