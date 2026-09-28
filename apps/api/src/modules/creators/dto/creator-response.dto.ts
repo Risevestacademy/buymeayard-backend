@@ -63,18 +63,6 @@ export class CreatorProfileDataDto {
   })
   slug: string;
 
-  @ApiProperty({
-    example: 'adeola',
-    description: 'Unique username / slug for creator routing',
-  })
-  username: string;
-
-  @ApiProperty({
-    example: 'adeola',
-    description: 'Personalized public link slug',
-  })
-  personalizedLink: string;
-
   @ApiPropertyOptional({
     example: 'Fashion designer in Lagos',
     description: 'Creator bio',

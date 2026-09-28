@@ -349,12 +349,14 @@ export class CreatorsService {
       .toLowerCase()
       .trim();
 
-    // Strip redundant and confusing duplicate name fields
+    // Strip redundant and confusing duplicate name and link fields
     const {
       name: _name,
       displayName: _displayName,
       firstName: _firstName,
       lastName: _lastName,
+      username: _username,
+      personalizedLink: _personalizedLink,
       ...cleanProfile
     } = profile;
 
@@ -362,8 +364,6 @@ export class CreatorsService {
       ...cleanProfile,
       creatorName,
       slug: cleanSlug,
-      personalizedLink: cleanSlug,
-      username: cleanSlug,
     };
   }
 }

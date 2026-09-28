@@ -64,8 +64,6 @@ export class UsersService {
         ? {
             id: user.creatorProfile.id,
             slug: user.creatorProfile.username,
-            username: user.creatorProfile.username,
-            personalizedLink: user.creatorProfile.username,
             creatorName: user.name || '',
             status: user.creatorProfile.status,
             kycStatus: user.creatorProfile.kycStatus,
@@ -106,8 +104,6 @@ export class UsersService {
         ? {
             id: user.creatorProfile.id,
             slug: user.creatorProfile.username,
-            username: user.creatorProfile.username,
-            personalizedLink: user.creatorProfile.username,
             creatorName: user.name || '',
             status: user.creatorProfile.status,
           }

@@ -179,11 +179,13 @@ describe('CreatorsService', () => {
 
       expect(formatted.creatorName).toBe('Adeola Johnson');
       expect(formatted.slug).toBe('adeola');
-      // Assert redundant name fields are stripped
+      // Assert redundant name and link fields are stripped
       expect(formatted.name).toBeUndefined();
       expect(formatted.displayName).toBeUndefined();
       expect(formatted.firstName).toBeUndefined();
       expect(formatted.lastName).toBeUndefined();
+      expect(formatted.username).toBeUndefined();
+      expect(formatted.personalizedLink).toBeUndefined();
     });
   });
 

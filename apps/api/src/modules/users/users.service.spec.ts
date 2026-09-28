@@ -45,9 +45,10 @@ describe('UsersService', () => {
       expect(result.roles).toEqual(['CREATOR']);
       expect(result.isOnboardingCompleted).toBe(true);
       expect(result.isProfileSetupCompleted).toBe(true);
-      expect(result.creatorProfile?.username).toBe('adeola');
       expect(result.creatorProfile?.slug).toBe('adeola');
       expect(result.creatorProfile?.creatorName).toBe('Ade');
+      expect((result.creatorProfile as any)?.username).toBeUndefined();
+      expect((result.creatorProfile as any)?.personalizedLink).toBeUndefined();
     });
 
     it('should throw NotFoundException if user does not exist', async () => {
@@ -79,7 +80,9 @@ describe('UsersService', () => {
       const result = await usersService.getPublicProfile('user-1');
       expect(result.id).toBe('user-1');
       expect(result.name).toBe('Ade');
-      expect(result.creatorProfile?.username).toBe('adeola');
+      expect(result.creatorProfile?.slug).toBe('adeola');
+      expect((result.creatorProfile as any)?.username).toBeUndefined();
+      expect((result.creatorProfile as any)?.personalizedLink).toBeUndefined();
       // Assert sensitive fields are undefined in public profile
       expect((result as any).email).toBeUndefined();
       expect((result as any).roles).toBeUndefined();

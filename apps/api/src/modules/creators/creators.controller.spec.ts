@@ -15,9 +15,7 @@ describe('CreatorsController', () => {
   const rawCreatorProfile = {
     id: 'creator-1',
     userId: 'user-1',
-    username: 'adeola',
     slug: 'adeola',
-    personalizedLink: 'adeola',
     creatorName: 'Adeola Johnson',
     status: 'PROFILE_CREATED',
     kycStatus: 'NOT_SUBMITTED',
@@ -38,14 +36,14 @@ describe('CreatorsController', () => {
           displayName: _displayName,
           firstName: _firstName,
           lastName: _lastName,
+          username: _username,
+          personalizedLink: _personalizedLink,
           ...clean
         } = p;
         return {
           ...clean,
           creatorName: p.creatorName || p.user?.name || '',
           slug: p.slug || p.username || '',
-          personalizedLink: p.personalizedLink || p.username || '',
-          username: p.username || p.slug || '',
         };
       }),
     };
@@ -83,8 +81,8 @@ describe('CreatorsController', () => {
       expect(creatorsService.formatCreatorProfile).toHaveBeenCalled();
       expect(result.creatorName).toBe('Adeola Johnson');
       expect(result.slug).toBe('adeola');
-      expect(result.username).toBe('adeola');
-      expect(result.personalizedLink).toBe('adeola');
+      expect(result.username).toBeUndefined();
+      expect(result.personalizedLink).toBeUndefined();
 
       // Verify that redundant name fields are strictly NOT returned
       expect(result.name).toBeUndefined();
@@ -121,6 +119,8 @@ describe('CreatorsController', () => {
       expect(result.displayName).toBeUndefined();
       expect(result.firstName).toBeUndefined();
       expect(result.lastName).toBeUndefined();
+      expect(result.username).toBeUndefined();
+      expect(result.personalizedLink).toBeUndefined();
     });
   });
 
@@ -136,6 +136,8 @@ describe('CreatorsController', () => {
       expect(result.slug).toBe('adeola');
       expect(result.name).toBeUndefined();
       expect(result.displayName).toBeUndefined();
+      expect(result.username).toBeUndefined();
+      expect(result.personalizedLink).toBeUndefined();
     });
   });
 
