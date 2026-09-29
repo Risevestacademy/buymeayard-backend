@@ -12,6 +12,10 @@ describe('CreatorsController', () => {
     onboardCreator: jest.Mock;
     formatCreatorProfile: jest.Mock;
     checkSlugAvailability: jest.Mock;
+    updateProfile: jest.Mock;
+    uploadAvatar: jest.Mock;
+    getCreatorMaterials: jest.Mock;
+    saveCreatorMaterials: jest.Mock;
   };
 
   const rawCreatorProfile = {
@@ -33,6 +37,10 @@ describe('CreatorsController', () => {
       findByUsername: jest.fn(),
       onboardCreator: jest.fn(),
       checkSlugAvailability: jest.fn(),
+      updateProfile: jest.fn(),
+      uploadAvatar: jest.fn(),
+      getCreatorMaterials: jest.fn(),
+      saveCreatorMaterials: jest.fn(),
       formatCreatorProfile: jest.fn((p) => {
         if (!p) return p;
         const {
@@ -179,6 +187,69 @@ describe('CreatorsController', () => {
         'user-1',
       );
       expect(result).toEqual(mockResult);
+    });
+  });
+
+  describe('updateProfile (PUT /creators/me/profile)', () => {
+    it('should update profile via service', async () => {
+      const dto = { creatorName: 'Updated Name', bio: 'Updated bio' };
+      creatorsService.updateProfile.mockResolvedValue({
+        id: 'creator-1',
+        slug: 'adeola',
+        ...dto,
+      });
+
+      const result = await controller.updateProfile('user-1', dto);
+
+      expect(creatorsService.updateProfile).toHaveBeenCalledWith('user-1', dto);
+      expect(result).toEqual({ id: 'creator-1', slug: 'adeola', ...dto });
+    });
+  });
+
+  describe('uploadAvatar (POST /creators/me/avatar)', () => {
+    it('should delegate avatar upload to service', async () => {
+      const mockFile = { buffer: Buffer.from('data') } as Express.Multer.File;
+      creatorsService.uploadAvatar.mockResolvedValue({
+        avatarUrl: 'https://cdn.buymeayard.com/avatar.jpg',
+      });
+
+      const result = await controller.uploadAvatar('user-1', mockFile);
+
+      expect(creatorsService.uploadAvatar).toHaveBeenCalledWith(
+        'user-1',
+        mockFile,
+      );
+      expect(result.avatarUrl).toBe('https://cdn.buymeayard.com/avatar.jpg');
+    });
+  });
+
+  describe('getMyMaterials (GET /creators/me/materials)', () => {
+    it('should return creator materials', async () => {
+      const mockMaterials = [{ id: 'cm-1', price: 500000 }];
+      creatorsService.getCreatorMaterials.mockResolvedValue(mockMaterials);
+
+      const result = await controller.getMyMaterials('user-1');
+
+      expect(creatorsService.getCreatorMaterials).toHaveBeenCalledWith(
+        'user-1',
+      );
+      expect(result).toEqual(mockMaterials);
+    });
+  });
+
+  describe('saveMyMaterials (PUT /creators/me/materials)', () => {
+    it('should save creator materials', async () => {
+      const dto = { materials: [{ materialId: 'mat-1', price: 500000 }] };
+      const mockMaterials = [{ id: 'cm-1', ...dto.materials[0] }];
+      creatorsService.saveCreatorMaterials.mockResolvedValue(mockMaterials);
+
+      const result = await controller.saveMyMaterials('user-1', dto);
+
+      expect(creatorsService.saveCreatorMaterials).toHaveBeenCalledWith(
+        'user-1',
+        dto,
+      );
+      expect(result).toEqual(mockMaterials);
     });
   });
 });

@@ -38,6 +38,122 @@ export class CreatorSocialLinkResponseDto {
   updatedAt: Date;
 }
 
+export class PlatformMaterialDto {
+  @ApiProperty({
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    description: 'Platform material ID',
+  })
+  id: string;
+
+  @ApiProperty({
+    example: 'ankara',
+    description: 'Material slug handle',
+  })
+  slug: string;
+
+  @ApiProperty({
+    example: 'Ankara',
+    description: 'Material display name',
+  })
+  name: string;
+
+  @ApiPropertyOptional({
+    example: 'African wax print fabric widely used in fashion and crafts',
+    description: 'Material description',
+    nullable: true,
+  })
+  description?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'https://cdn.buymeayard.com/materials/ankara.png',
+    description: 'Material image or icon URL',
+    nullable: true,
+  })
+  iconUrl?: string | null;
+
+  @ApiProperty({
+    example: 500000,
+    description:
+      'Default baseline price per yard in kobo (minor currency unit). 500000 = ₦5,000',
+  })
+  basePrice: number;
+
+  @ApiProperty({
+    example: 'ACTIVE',
+    description: 'Platform material status',
+    enum: ['ACTIVE', 'INACTIVE', 'ARCHIVED'],
+  })
+  status: string;
+}
+
+export class CreatorMaterialResponseDto {
+  @ApiProperty({
+    example: 'cm-9a8b7c6d-5e4f-3210-fedc-ba9876543210',
+    description: 'Creator material configuration ID',
+  })
+  id: string;
+
+  @ApiProperty({
+    example: 'c1d09ec2-67a4-4f9e-a89c-3e6f9a0d81b4',
+    description: 'Associated creator profile ID',
+  })
+  creatorId: string;
+
+  @ApiProperty({
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    description: 'Platform material catalogue ID',
+  })
+  materialId: string;
+
+  @ApiProperty({
+    example: 500000,
+    description:
+      'Custom price per yard set by creator in kobo (minor units). 500000 = ₦5,000',
+  })
+  price: number;
+
+  @ApiPropertyOptional({
+    example: 'Premium Ankara',
+    description: 'Optional custom display title chosen by creator',
+    nullable: true,
+  })
+  displayName?: string | null;
+
+  @ApiProperty({
+    example: 'ACTIVE',
+    description: 'Status of this material in creator menu',
+    enum: ['ACTIVE', 'INACTIVE'],
+  })
+  status: string;
+
+  @ApiPropertyOptional({
+    type: PlatformMaterialDto,
+    description: 'Underlying platform catalogue material details',
+  })
+  material?: PlatformMaterialDto;
+
+  @ApiProperty({
+    example: '2026-09-25T14:00:00.000Z',
+    description: 'Creation timestamp',
+  })
+  createdAt: Date;
+
+  @ApiProperty({
+    example: '2026-09-25T14:00:00.000Z',
+    description: 'Last update timestamp',
+  })
+  updatedAt: Date;
+}
+
+export class AvatarUploadResponseDto {
+  @ApiProperty({
+    example:
+      'https://res.cloudinary.com/buymeayard/image/upload/v1727627400/avatars/creator-123.jpg',
+    description: 'Direct CDN URL of uploaded creator avatar',
+  })
+  avatarUrl: string;
+}
+
 export class CreatorProfileDataDto {
   @ApiProperty({
     example: 'c1d09ec2-67a4-4f9e-a89c-3e6f9a0d81b4',
@@ -105,6 +221,13 @@ export class CreatorProfileDataDto {
     description: 'List of connected social links',
   })
   socialLinks: CreatorSocialLinkResponseDto[];
+
+  @ApiPropertyOptional({
+    type: [CreatorMaterialResponseDto],
+    description:
+      'List of active yard materials with custom pricing configured by creator',
+  })
+  materials?: CreatorMaterialResponseDto[];
 
   @ApiProperty({
     example: '2026-09-25T14:00:00.000Z',
