@@ -29,8 +29,8 @@ describe('UsersService', () => {
         roles: [{ role: { name: 'CREATOR' } }],
         creatorProfile: {
           id: 'creator-1',
-          username: 'adeola',
-          personalizedLink: 'buymeayard/adeola',
+          slug: 'adeola',
+          creatorName: 'Ade',
           status: 'ACTIVE',
           kycStatus: 'VERIFIED',
         },
@@ -68,8 +68,8 @@ describe('UsersService', () => {
         image: 'https://example.com/avatar.jpg',
         creatorProfile: {
           id: 'creator-1',
-          username: 'adeola',
-          personalizedLink: 'buymeayard.com/adeola',
+          slug: 'adeola',
+          creatorName: 'Ade',
           status: 'ACTIVE',
         },
         createdAt: new Date(),

@@ -30,7 +30,8 @@ export class UsersService {
         creatorProfile: {
           select: {
             id: true,
-            username: true,
+            slug: true,
+            creatorName: true,
             status: true,
             kycStatus: true,
           },
@@ -62,8 +63,8 @@ export class UsersService {
       creatorProfile: user.creatorProfile
         ? {
             id: user.creatorProfile.id,
-            slug: user.creatorProfile.username,
-            creatorName: user.name || '',
+            slug: user.creatorProfile.slug,
+            creatorName: user.creatorProfile.creatorName || user.name || '',
             status: user.creatorProfile.status,
             kycStatus: user.creatorProfile.kycStatus,
           }
@@ -80,7 +81,8 @@ export class UsersService {
         creatorProfile: {
           select: {
             id: true,
-            username: true,
+            slug: true,
+            creatorName: true,
             status: true,
           },
         },
@@ -101,8 +103,8 @@ export class UsersService {
       creatorProfile: user.creatorProfile
         ? {
             id: user.creatorProfile.id,
-            slug: user.creatorProfile.username,
-            creatorName: user.name || '',
+            slug: user.creatorProfile.slug,
+            creatorName: user.creatorProfile.creatorName || user.name || '',
             status: user.creatorProfile.status,
           }
         : null,

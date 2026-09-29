@@ -132,7 +132,7 @@ export class CreatorsController {
   @Public()
   @Get('check-slug')
   @ApiOperation({
-    summary: 'Check username / slug availability in real time',
+    summary: 'Check slug availability in real time',
     description:
       'Validates syntax, reserved words, and checks uniqueness for creator handle during onboarding.',
   })
@@ -144,13 +144,6 @@ export class CreatorsController {
       'Creator slug or handle to check (e.g. "aesthetefisayo" or "@aesthetefisayo")',
     example: 'aesthetefisayo',
   })
-  @ApiQuery({
-    name: 'username',
-    required: false,
-    type: String,
-    description: 'Alias for slug query parameter',
-    example: 'aesthetefisayo',
-  })
   @ApiResponse({
     status: 200,
     description: 'Slug availability status returned successfully.',
@@ -158,10 +151,9 @@ export class CreatorsController {
   })
   async checkSlug(
     @Query('slug') slug?: string,
-    @Query('username') username?: string,
     @CurrentUser('id') userId?: string,
   ): Promise<CheckSlugResponseDto> {
-    const raw = slug || username || '';
+    const raw = slug || '';
     return this.creatorsService.checkSlugAvailability(raw, userId);
   }
 
@@ -188,7 +180,7 @@ export class CreatorsController {
     type: ApiErrorResponseDto,
   })
   async getCreatorBySlug(@Param('slug') slug: string) {
-    const profile = await this.creatorsService.findByUsername(slug);
+    const profile = await this.creatorsService.findBySlug(slug);
     return this.creatorsService.formatCreatorProfile(profile);
   }
 }
