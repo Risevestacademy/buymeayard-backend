@@ -1,15 +1,26 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import {
+  STORAGE_PROVIDER,
+  StorageProvider,
+} from '../../infrastructure/storage/storage-provider.interface';
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
 
 @Injectable()
 export class CreatorsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(STORAGE_PROVIDER)
+    private readonly storage: StorageProvider,
+  ) {}
 
   async findAll(_query?: { search?: string }) {
     const where: any = {
@@ -63,6 +74,9 @@ export class CreatorsService {
         },
         socialLinks: true,
         materials: {
+          where: {
+            status: 'ACTIVE',
+          },
           include: {
             material: true,
           },
@@ -254,7 +268,14 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
-        materials: true,
+        materials: {
+          where: {
+            status: 'ACTIVE',
+          },
+          include: {
+            material: true,
+          },
+        },
       },
     });
 
@@ -492,6 +513,174 @@ export class CreatorsService {
     });
 
     return this.formatCreatorProfile(updated);
+  }
+
+  // -----------------------------------------------------------
+  // Profile Update (post-onboarding edits)
+  // -----------------------------------------------------------
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    const data: Record<string, any> = {};
+
+    if (dto.creatorName !== undefined) {
+      const name = dto.creatorName.trim();
+      if (!name) {
+        throw new BadRequestException('Creator name cannot be empty');
+      }
+      data.creatorName = name;
+
+      // Keep the user.name in sync
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { name },
+      });
+    }
+
+    if (dto.bio !== undefined) {
+      const bio = dto.bio.trim();
+      if (bio.length > 160) {
+        throw new BadRequestException('Bio cannot exceed 160 characters');
+      }
+      data.bio = bio || null;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return this.findByUserId(userId);
+    }
+
+    await this.prisma.creatorProfile.update({
+      where: { id: profile.id },
+      data,
+    });
+
+    return this.findByUserId(userId);
+  }
+
+  // -----------------------------------------------------------
+  // Avatar Upload
+  // -----------------------------------------------------------
+
+  async uploadAvatar(userId: string, file: Express.Multer.File) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    const result = await this.storage.uploadFile(file.buffer, {
+      folder: 'avatars',
+      publicId: `creator-${profile.id}`,
+      resourceType: 'image',
+    });
+
+    await this.prisma.creatorProfile.update({
+      where: { id: profile.id },
+      data: { avatarUrl: result.secureUrl },
+    });
+
+    return {
+      avatarUrl: result.secureUrl,
+    };
+  }
+
+  // -----------------------------------------------------------
+  // Creator Materials (Yard Menu)
+  // -----------------------------------------------------------
+
+  async getCreatorMaterials(userId: string) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    return this.prisma.creatorMaterial.findMany({
+      where: { creatorId: profile.id, status: 'ACTIVE' },
+      include: { material: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async saveCreatorMaterials(userId: string, dto: SaveCreatorMaterialsDto) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    // Validate that all referenced materials exist in the platform catalogue
+    const materialIds = dto.materials.map((m) => m.materialId);
+    const catalogueMaterials = await this.prisma.material.findMany({
+      where: { id: { in: materialIds }, status: 'ACTIVE' },
+    });
+
+    const foundIds = new Set(catalogueMaterials.map((m) => m.id));
+    const missing = materialIds.filter((id) => !foundIds.has(id));
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Materials not found in catalogue: ${missing.join(', ')}`,
+      );
+    }
+
+    // Use a transaction: upsert each submitted material, deactivate the rest
+    await this.prisma.$transaction(async (tx) => {
+      // Upsert each material the creator wants active
+      for (const item of dto.materials) {
+        await tx.creatorMaterial.upsert({
+          where: {
+            creatorId_materialId: {
+              creatorId: profile.id,
+              materialId: item.materialId,
+            },
+          },
+          create: {
+            creatorId: profile.id,
+            materialId: item.materialId,
+            price: item.price,
+            displayName: item.displayName || null,
+            status: 'ACTIVE',
+          },
+          update: {
+            price: item.price,
+            displayName: item.displayName || null,
+            status: 'ACTIVE',
+          },
+        });
+      }
+
+      // Deactivate any materials the creator did not include
+      if (materialIds.length > 0) {
+        await tx.creatorMaterial.updateMany({
+          where: {
+            creatorId: profile.id,
+            materialId: { notIn: materialIds },
+            status: 'ACTIVE',
+          },
+          data: { status: 'INACTIVE' },
+        });
+      }
+    });
+
+    // Return the updated menu
+    return this.prisma.creatorMaterial.findMany({
+      where: { creatorId: profile.id, status: 'ACTIVE' },
+      include: { material: true },
+      orderBy: { createdAt: 'asc' },
+    });
   }
 
   formatCreatorProfile(profile: any) {

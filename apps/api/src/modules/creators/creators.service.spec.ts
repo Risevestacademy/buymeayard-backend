@@ -8,7 +8,13 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 
 describe('CreatorsService', () => {
   let service: CreatorsService;
+  let storage: {
+    uploadFile: jest.Mock;
+    deleteFile: jest.Mock;
+    getSignedUrl: jest.Mock;
+  };
   let prisma: {
+    $transaction: jest.Mock;
     user: {
       update: jest.Mock;
     };
@@ -33,10 +39,32 @@ describe('CreatorsService', () => {
     authAccount: {
       findMany: jest.Mock;
     };
+    material: {
+      findMany: jest.Mock;
+    };
+    creatorMaterial: {
+      findMany: jest.Mock;
+      upsert: jest.Mock;
+      updateMany: jest.Mock;
+    };
   };
 
   beforeEach(() => {
+    storage = {
+      uploadFile: jest.fn().mockResolvedValue({
+        storageKey: 'mock_key',
+        url: 'https://cdn.buymeayard.com/mock.jpg',
+        secureUrl: 'https://cdn.buymeayard.com/mock.jpg',
+        bytes: 1024,
+      }),
+      deleteFile: jest.fn().mockResolvedValue(true),
+      getSignedUrl: jest
+        .fn()
+        .mockResolvedValue('https://cdn.buymeayard.com/mock.jpg'),
+    };
+
     prisma = {
+      $transaction: jest.fn((callback) => callback(prisma)),
       user: {
         update: jest
           .fn()
@@ -67,9 +95,17 @@ describe('CreatorsService', () => {
       authAccount: {
         findMany: jest.fn().mockResolvedValue([]),
       },
+      material: {
+        findMany: jest.fn(),
+      },
+      creatorMaterial: {
+        findMany: jest.fn(),
+        upsert: jest.fn(),
+        updateMany: jest.fn(),
+      },
     };
 
-    service = new CreatorsService(prisma as unknown as PrismaService);
+    service = new CreatorsService(prisma as unknown as PrismaService, storage);
   });
 
   describe('onboardCreator', () => {
@@ -269,6 +305,198 @@ describe('CreatorsService', () => {
       expect(res.available).toBe(true);
       expect(res.slug).toBe('aesthetefisayo');
       expect(res.message).toBe('Handle is available');
+    });
+  });
+
+  describe('updateProfile', () => {
+    it('should throw NotFoundException if profile does not exist', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(
+        service.updateProfile('user-1', { creatorName: 'Adeola' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if creatorName is empty', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'creator-1',
+        userId: 'user-1',
+      });
+      await expect(
+        service.updateProfile('user-1', { creatorName: '   ' }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should update profile and user name', async () => {
+      prisma.creatorProfile.findUnique
+        .mockResolvedValueOnce({
+          id: 'creator-1',
+          userId: 'user-1',
+          creatorName: 'Old Name',
+          bio: 'Old bio',
+        })
+        .mockResolvedValueOnce({
+          id: 'creator-1',
+          userId: 'user-1',
+          creatorName: 'New Name',
+          bio: 'New bio',
+          slug: 'newname',
+        });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'creator-1',
+        userId: 'user-1',
+        creatorName: 'New Name',
+        bio: 'New bio',
+        slug: 'newname',
+      });
+
+      const res = await service.updateProfile('user-1', {
+        creatorName: 'New Name',
+        bio: 'New bio',
+      });
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { name: 'New Name' },
+      });
+      expect(prisma.creatorProfile.update).toHaveBeenCalled();
+      expect(res.creatorName).toBe('New Name');
+    });
+  });
+
+  describe('uploadAvatar', () => {
+    it('should throw NotFoundException if creator profile not found', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      const mockFile = {
+        buffer: Buffer.from('test'),
+      } as Express.Multer.File;
+
+      await expect(service.uploadAvatar('user-1', mockFile)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should upload avatar and update creator profile avatarUrl', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'creator-1',
+        userId: 'user-1',
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'creator-1',
+        avatarUrl: 'https://cdn.buymeayard.com/mock.jpg',
+      });
+
+      const mockFile = {
+        buffer: Buffer.from('avatar-image-data'),
+      } as Express.Multer.File;
+
+      const res = await service.uploadAvatar('user-1', mockFile);
+
+      expect(storage.uploadFile).toHaveBeenCalledWith(mockFile.buffer, {
+        folder: 'avatars',
+        publicId: 'creator-creator-1',
+        resourceType: 'image',
+      });
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith({
+        where: { id: 'creator-1' },
+        data: { avatarUrl: 'https://cdn.buymeayard.com/mock.jpg' },
+      });
+      expect(res.avatarUrl).toBe('https://cdn.buymeayard.com/mock.jpg');
+    });
+  });
+
+  describe('getCreatorMaterials', () => {
+    it('should throw NotFoundException if profile does not exist', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(service.getCreatorMaterials('user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should return active materials for creator', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'creator-1',
+        userId: 'user-1',
+      });
+      prisma.creatorMaterial.findMany.mockResolvedValue([
+        {
+          id: 'cm-1',
+          creatorId: 'creator-1',
+          materialId: 'mat-1',
+          price: 500000,
+          status: 'ACTIVE',
+        },
+      ]);
+
+      const res = await service.getCreatorMaterials('user-1');
+      expect(res).toHaveLength(1);
+      expect(prisma.creatorMaterial.findMany).toHaveBeenCalledWith({
+        where: { creatorId: 'creator-1', status: 'ACTIVE' },
+        include: { material: true },
+        orderBy: { createdAt: 'asc' },
+      });
+    });
+  });
+
+  describe('saveCreatorMaterials', () => {
+    it('should throw NotFoundException if profile does not exist', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(
+        service.saveCreatorMaterials('user-1', { materials: [] }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if material is not found in catalogue', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'creator-1',
+        userId: 'user-1',
+      });
+      prisma.material.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.saveCreatorMaterials('user-1', {
+          materials: [{ materialId: 'mat-invalid', price: 500000 }],
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should upsert creator materials and deactivate omitted ones', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'creator-1',
+        userId: 'user-1',
+      });
+      prisma.material.findMany.mockResolvedValue([
+        { id: 'mat-1', name: 'Ankara', status: 'ACTIVE' },
+      ]);
+      prisma.creatorMaterial.upsert.mockResolvedValue({
+        id: 'cm-1',
+        creatorId: 'creator-1',
+        materialId: 'mat-1',
+        price: 500000,
+      });
+      prisma.creatorMaterial.updateMany.mockResolvedValue({ count: 1 });
+      prisma.creatorMaterial.findMany.mockResolvedValue([
+        {
+          id: 'cm-1',
+          creatorId: 'creator-1',
+          materialId: 'mat-1',
+          price: 500000,
+        },
+      ]);
+
+      const res = await service.saveCreatorMaterials('user-1', {
+        materials: [{ materialId: 'mat-1', price: 500000 }],
+      });
+
+      expect(prisma.creatorMaterial.upsert).toHaveBeenCalled();
+      expect(prisma.creatorMaterial.updateMany).toHaveBeenCalledWith({
+        where: {
+          creatorId: 'creator-1',
+          materialId: { notIn: ['mat-1'] },
+          status: 'ACTIVE',
+        },
+        data: { status: 'INACTIVE' },
+      });
+      expect(res).toHaveLength(1);
     });
   });
 });
