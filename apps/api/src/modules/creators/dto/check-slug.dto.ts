@@ -3,7 +3,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CheckSlugDto {
   @ApiProperty({
-    description: 'The username / handle / slug to check for availability',
+    description: 'The creator handle / slug to check for availability',
     example: 'aesthetefisayo',
   })
   @IsString()
@@ -13,7 +13,7 @@ export class CheckSlugDto {
 
 export class CheckSlugResponseDto {
   @ApiProperty({
-    description: 'Whether the slug / username is available for registration',
+    description: 'Whether the slug handle is available for registration',
     example: true,
   })
   available!: boolean;

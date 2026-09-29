@@ -85,12 +85,12 @@ describe('CreatorsService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw ConflictException if slug or username is taken by another user', async () => {
-      prisma.creatorProfile.findFirst.mockResolvedValue({
+    it('should throw ConflictException if slug is taken by another user', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
         id: 'creator-other',
         userId: 'other-user',
-        username: 'adeola',
-        personalizedLink: 'adeola',
+        slug: 'adeola',
+        creatorName: 'Other Creator',
       });
 
       await expect(
@@ -102,14 +102,14 @@ describe('CreatorsService', () => {
     });
 
     it('should create new creator profile and assign CREATOR role for first-time onboarding', async () => {
-      prisma.creatorProfile.findFirst.mockResolvedValue(null);
       prisma.creatorProfile.findUnique
-        .mockResolvedValueOnce(null) // first check existing profile
+        .mockResolvedValueOnce(null) // uniqueness check for slug
+        .mockResolvedValueOnce(null) // first check existing profile for user
         .mockResolvedValueOnce({
           id: 'creator-1',
           userId: 'user-1',
-          username: 'adeola',
-          personalizedLink: 'adeola',
+          creatorName: 'Adeola Johnson',
+          slug: 'adeola',
           status: 'PROFILE_CREATED',
           socialLinks: [],
           materials: [],
@@ -119,8 +119,8 @@ describe('CreatorsService', () => {
       prisma.creatorProfile.create.mockResolvedValue({
         id: 'creator-1',
         userId: 'user-1',
-        username: 'adeola',
-        personalizedLink: 'adeola',
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
         status: 'PROFILE_CREATED',
         user: { name: 'Adeola Johnson' },
       });
@@ -141,8 +141,8 @@ describe('CreatorsService', () => {
       expect(prisma.creatorProfile.create).toHaveBeenCalledWith({
         data: {
           userId: 'user-1',
-          username: 'adeola',
-          personalizedLink: 'adeola',
+          creatorName: 'Adeola Johnson',
+          slug: 'adeola',
           status: 'PROFILE_CREATED',
           kycStatus: 'NOT_SUBMITTED',
         },
@@ -173,8 +173,8 @@ describe('CreatorsService', () => {
     it('should format creator profile with only creatorName and clean slug', () => {
       const formatted = service.formatCreatorProfile({
         user: { name: 'Adeola Johnson' },
-        username: 'adeola',
-        personalizedLink: 'adeola',
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
       });
 
       expect(formatted.creatorName).toBe('Adeola Johnson');
@@ -189,22 +189,22 @@ describe('CreatorsService', () => {
     });
   });
 
-  describe('findByUsername', () => {
-    it('should resolve by username or personalizedLink', async () => {
-      prisma.creatorProfile.findFirst.mockResolvedValue({
+  describe('findBySlug', () => {
+    it('should resolve creator by slug', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
         id: 'creator-1',
-        username: 'adeola',
-        personalizedLink: 'buymeayard/adeola',
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
         user: { name: 'Adeola Johnson' },
       });
 
-      const res = await service.findByUsername('buymeayard/adeola');
-      expect(res.username).toBe('adeola');
+      const res = await service.findBySlug('adeola');
+      expect(res.slug).toBe('adeola');
     });
 
     it('should throw NotFoundException if creator is not found', async () => {
-      prisma.creatorProfile.findFirst.mockResolvedValue(null);
-      await expect(service.findByUsername('unknown')).rejects.toThrow(
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(service.findBySlug('unknown')).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -236,10 +236,10 @@ describe('CreatorsService', () => {
     });
 
     it('should return available: false if slug is already taken by another user', async () => {
-      prisma.creatorProfile.findFirst.mockResolvedValue({
+      prisma.creatorProfile.findUnique.mockResolvedValue({
         id: 'creator-other',
         userId: 'other-user',
-        username: 'taken_handle',
+        slug: 'taken_handle',
       });
 
       const res = await service.checkSlugAvailability(
@@ -251,10 +251,10 @@ describe('CreatorsService', () => {
     });
 
     it('should return available: true and isCurrent: true if slug belongs to current user', async () => {
-      prisma.creatorProfile.findFirst.mockResolvedValue({
+      prisma.creatorProfile.findUnique.mockResolvedValue({
         id: 'creator-self',
         userId: 'my-user',
-        username: 'my_handle',
+        slug: 'my_handle',
       });
 
       const res = await service.checkSlugAvailability('my_handle', 'my-user');
@@ -263,7 +263,7 @@ describe('CreatorsService', () => {
     });
 
     it('should return available: true for a valid and unique slug', async () => {
-      prisma.creatorProfile.findFirst.mockResolvedValue(null);
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
 
       const res = await service.checkSlugAvailability('@aesthetefisayo');
       expect(res.available).toBe(true);

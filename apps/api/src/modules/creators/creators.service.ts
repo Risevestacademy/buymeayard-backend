@@ -18,9 +18,9 @@ export class CreatorsService {
 
     if (_query?.search) {
       where.OR = [
+        { creatorName: { contains: _query.search, mode: 'insensitive' } },
         { user: { name: { contains: _query.search, mode: 'insensitive' } } },
-        { username: { contains: _query.search, mode: 'insensitive' } },
-        { personalizedLink: { contains: _query.search, mode: 'insensitive' } },
+        { slug: { contains: _query.search, mode: 'insensitive' } },
       ];
     }
 
@@ -42,24 +42,16 @@ export class CreatorsService {
     return creators.map((creator) => this.formatCreatorProfile(creator));
   }
 
-  async findByUsername(usernameOrLink: string) {
-    const cleanSlug = usernameOrLink
+  async findBySlug(slug: string) {
+    const cleanSlug = slug
       .replace(/^https?:\/\/[^/]+\//i, '')
       .replace(/^(buymeayard\/|\/|@)/i, '')
       .replace(/\/+$/, '')
       .toLowerCase()
       .trim();
 
-    const formattedLink = `buymeayard/${cleanSlug}`;
-
-    const creator = await this.prisma.creatorProfile.findFirst({
-      where: {
-        OR: [
-          { username: cleanSlug },
-          { personalizedLink: formattedLink },
-          { personalizedLink: usernameOrLink },
-        ],
-      },
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { slug: cleanSlug },
       include: {
         user: {
           select: {
@@ -80,11 +72,16 @@ export class CreatorsService {
 
     if (!creator) {
       throw new NotFoundException(
-        `Creator with identifier "${usernameOrLink}" not found`,
+        `Creator with identifier "${slug}" not found`,
       );
     }
 
     return creator;
+  }
+
+  // Alias for backward compatibility
+  async findByUsername(identifier: string) {
+    return this.findBySlug(identifier);
   }
 
   public static readonly RESERVED_SLUGS = new Set([
@@ -217,14 +214,8 @@ export class CreatorsService {
       };
     }
 
-    const existing = await this.prisma.creatorProfile.findFirst({
-      where: {
-        OR: [
-          { username: cleanSlug },
-          { personalizedLink: cleanSlug },
-          { personalizedLink: `buymeayard/${cleanSlug}` },
-        ],
-      },
+    const existing = await this.prisma.creatorProfile.findUnique({
+      where: { slug: cleanSlug },
     });
 
     if (existing) {
@@ -286,12 +277,7 @@ export class CreatorsService {
     }
 
     // 2. Resolve Slug
-    const rawSlug = (
-      dto.slug ||
-      (dto as any).username ||
-      (dto as any).personalizedLink ||
-      ''
-    ).trim();
+    const rawSlug = (dto.slug || '').trim();
     if (!rawSlug) {
       throw new BadRequestException('Slug is required');
     }
@@ -322,18 +308,12 @@ export class CreatorsService {
     }
 
     // 3. Ensure uniqueness
-    const existingTaken = await this.prisma.creatorProfile.findFirst({
-      where: {
-        OR: [
-          { username: cleanSlug },
-          { personalizedLink: cleanSlug },
-          { personalizedLink: `buymeayard/${cleanSlug}` },
-        ],
-      },
+    const existingTaken = await this.prisma.creatorProfile.findUnique({
+      where: { slug: cleanSlug },
     });
 
     if (existingTaken && existingTaken.userId !== userId) {
-      throw new ConflictException('Slug / username is already taken');
+      throw new ConflictException('Slug is already taken');
     }
 
     // 4. Update User name
@@ -353,8 +333,8 @@ export class CreatorsService {
       profile = await this.prisma.creatorProfile.update({
         where: { id: existingProfile.id },
         data: {
-          username: cleanSlug,
-          personalizedLink: cleanSlug,
+          creatorName,
+          slug: cleanSlug,
           status:
             existingProfile.status === 'REGISTERED'
               ? 'PROFILE_CREATED'
@@ -389,8 +369,8 @@ export class CreatorsService {
       profile = await this.prisma.creatorProfile.create({
         data: {
           userId,
-          username: cleanSlug,
-          personalizedLink: cleanSlug,
+          creatorName,
+          slug: cleanSlug,
           status: 'PROFILE_CREATED',
           kycStatus: 'NOT_SUBMITTED',
         },
@@ -519,8 +499,7 @@ export class CreatorsService {
 
     const creatorName =
       profile.creatorName || profile.user?.name || profile.name || '';
-    const rawSlug =
-      profile.username || profile.slug || profile.personalizedLink || '';
+    const rawSlug = profile.slug || '';
     const cleanSlug = rawSlug
       .replace(/^https?:\/\/[^/]+\//i, '')
       .replace(/^(buymeayard\/|\/|@)/i, '')

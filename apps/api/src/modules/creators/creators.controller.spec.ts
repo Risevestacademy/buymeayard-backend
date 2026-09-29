@@ -7,6 +7,7 @@ describe('CreatorsController', () => {
   let creatorsService: {
     findAll: jest.Mock;
     findByUserId: jest.Mock;
+    findBySlug: jest.Mock;
     findByUsername: jest.Mock;
     onboardCreator: jest.Mock;
     formatCreatorProfile: jest.Mock;
@@ -28,6 +29,7 @@ describe('CreatorsController', () => {
     creatorsService = {
       findAll: jest.fn(),
       findByUserId: jest.fn(),
+      findBySlug: jest.fn(),
       findByUsername: jest.fn(),
       onboardCreator: jest.fn(),
       checkSlugAvailability: jest.fn(),
@@ -128,11 +130,11 @@ describe('CreatorsController', () => {
 
   describe('getCreatorBySlug (GET /creators/:slug)', () => {
     it('should return public creator profile formatted with creatorName and slug', async () => {
-      creatorsService.findByUsername.mockResolvedValue(rawCreatorProfile);
+      creatorsService.findBySlug.mockResolvedValue(rawCreatorProfile);
 
       const result = await controller.getCreatorBySlug('adeola');
 
-      expect(creatorsService.findByUsername).toHaveBeenCalledWith('adeola');
+      expect(creatorsService.findBySlug).toHaveBeenCalledWith('adeola');
       expect(creatorsService.formatCreatorProfile).toHaveBeenCalled();
       expect(result.creatorName).toBe('Adeola Johnson');
       expect(result.slug).toBe('adeola');
@@ -170,11 +172,7 @@ describe('CreatorsController', () => {
         .fn()
         .mockResolvedValue(mockResult);
 
-      const result = await controller.checkSlug(
-        'aesthetefisayo',
-        undefined,
-        'user-1',
-      );
+      const result = await controller.checkSlug('aesthetefisayo', 'user-1');
 
       expect(creatorsService.checkSlugAvailability).toHaveBeenCalledWith(
         'aesthetefisayo',
