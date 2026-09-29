@@ -68,7 +68,6 @@ export class CreatorsService {
           select: {
             id: true,
             name: true,
-            email: true,
             image: true,
           },
         },
