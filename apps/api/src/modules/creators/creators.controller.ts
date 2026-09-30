@@ -38,6 +38,7 @@ import {
   ApiErrorResponseDto,
 } from './dto/creator-response.dto';
 import { CheckSlugResponseDto } from './dto/check-slug.dto';
+import { CreatorShareLinkResponseDto } from './dto/share-link.dto';
 
 @ApiTags('creators')
 @Controller('creators')
@@ -314,6 +315,33 @@ export class CreatorsController {
     return this.creatorsService.saveCreatorMaterials(userId, dto);
   }
 
+  @Get('me/share-link')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Get creator share link & QR code metadata',
+    description:
+      'Returns public URL, scannable QR code, promotional sharing text, and direct social share links for Twitter, WhatsApp, Facebook, LinkedIn, and Telegram.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Share link metadata returned successfully.',
+    type: CreatorShareLinkResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid session token.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator profile not found.',
+    type: ApiErrorResponseDto,
+  })
+  async getMyShareLink(@CurrentUser('id') userId: string) {
+    return this.creatorsService.getShareLink(userId);
+  }
+
   @Public()
   @Get('check-slug')
   @ApiOperation({
@@ -367,5 +395,31 @@ export class CreatorsController {
   async getCreatorBySlug(@Param('slug') slug: string) {
     const profile = await this.creatorsService.findBySlug(slug);
     return this.creatorsService.formatCreatorProfile(profile);
+  }
+
+  @Public()
+  @Get(':slug/share-link')
+  @ApiOperation({
+    summary: 'Get public creator share link & QR code metadata by slug',
+    description:
+      'Public endpoint to fetch share metadata, QR code, and social links for a creator support page by slug handle.',
+  })
+  @ApiParam({
+    name: 'slug',
+    description: 'Creator slug handle (e.g. "adeola")',
+    example: 'adeola',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Share link metadata returned successfully.',
+    type: CreatorShareLinkResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator not found.',
+    type: ApiErrorResponseDto,
+  })
+  async getShareLinkBySlug(@Param('slug') slug: string) {
+    return this.creatorsService.getShareLinkBySlug(slug);
   }
 }

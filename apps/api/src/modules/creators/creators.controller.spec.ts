@@ -16,6 +16,8 @@ describe('CreatorsController', () => {
     uploadAvatar: jest.Mock;
     getCreatorMaterials: jest.Mock;
     saveCreatorMaterials: jest.Mock;
+    getShareLink: jest.Mock;
+    getShareLinkBySlug: jest.Mock;
   };
 
   const rawCreatorProfile = {
@@ -41,6 +43,8 @@ describe('CreatorsController', () => {
       uploadAvatar: jest.fn(),
       getCreatorMaterials: jest.fn(),
       saveCreatorMaterials: jest.fn(),
+      getShareLink: jest.fn(),
+      getShareLinkBySlug: jest.fn(),
       formatCreatorProfile: jest.fn((p) => {
         if (!p) return p;
         const {
@@ -250,6 +254,56 @@ describe('CreatorsController', () => {
         dto,
       );
       expect(result).toEqual(mockMaterials);
+    });
+  });
+
+  describe('getMyShareLink (GET /creators/me/share-link)', () => {
+    it('should delegate share link generation to service for logged in creator', async () => {
+      const mockShareData = {
+        publicUrl: 'https://buymeayard.com/adeola',
+        slug: 'adeola',
+        qrCodeUrl:
+          'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=...',
+        shareText: 'Support my creative work on Buy Me a Yard!',
+        socialLinks: {
+          twitter: 'https://twitter.com/intent/tweet?...',
+          whatsapp: 'https://api.whatsapp.com/send?...',
+          facebook: 'https://www.facebook.com/sharer/...',
+          linkedin: 'https://www.linkedin.com/sharing/...',
+          telegram: 'https://t.me/share/...',
+        },
+      };
+      creatorsService.getShareLink.mockResolvedValue(mockShareData);
+
+      const result = await controller.getMyShareLink('user-1');
+
+      expect(creatorsService.getShareLink).toHaveBeenCalledWith('user-1');
+      expect(result).toEqual(mockShareData);
+    });
+  });
+
+  describe('getShareLinkBySlug (GET /creators/:slug/share-link)', () => {
+    it('should delegate share link lookup by slug to service', async () => {
+      const mockShareData = {
+        publicUrl: 'https://buymeayard.com/adeola',
+        slug: 'adeola',
+        qrCodeUrl:
+          'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=...',
+        shareText: 'Support my creative work on Buy Me a Yard!',
+        socialLinks: {
+          twitter: 'https://twitter.com/intent/tweet?...',
+          whatsapp: 'https://api.whatsapp.com/send?...',
+          facebook: 'https://www.facebook.com/sharer/...',
+          linkedin: 'https://www.linkedin.com/sharing/...',
+          telegram: 'https://t.me/share/...',
+        },
+      };
+      creatorsService.getShareLinkBySlug.mockResolvedValue(mockShareData);
+
+      const result = await controller.getShareLinkBySlug('adeola');
+
+      expect(creatorsService.getShareLinkBySlug).toHaveBeenCalledWith('adeola');
+      expect(result).toEqual(mockShareData);
     });
   });
 });
