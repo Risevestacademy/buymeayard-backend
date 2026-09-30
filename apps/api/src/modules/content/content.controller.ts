@@ -10,12 +10,12 @@ export class ContentController {
   constructor(private readonly contentService: ContentService) {}
 
   @Public()
-  @Get('creators/:slug/posts')
+  @Get('creators/:username/posts')
   @ApiOperation({ summary: 'Get published posts for a creator' })
   async getPosts(
-    @Param('slug') slug: string,
+    @Param('username') username: string,
     @CurrentUser('id') viewerUserId?: string,
   ) {
-    return this.contentService.findPostsForCreator(slug, viewerUserId);
+    return this.contentService.findPostsForCreator(username, viewerUserId);
   }
 }

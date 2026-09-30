@@ -7,9 +7,9 @@ import { ErrorCodes } from '../../common/errors/error-codes';
 export class ContentService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findPostsForCreator(creatorSlug: string, viewerUserId?: string) {
+  async findPostsForCreator(creatorUsername: string, viewerUserId?: string) {
     const creator = await this.prisma.creatorProfile.findUnique({
-      where: { slug: creatorSlug },
+      where: { username: creatorUsername },
     });
 
     if (!creator) {

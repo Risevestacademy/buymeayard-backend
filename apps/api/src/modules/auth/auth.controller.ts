@@ -6,11 +6,10 @@ import {
   Req,
   Res,
   All,
-  Query,
-  Param,
   HttpCode,
   HttpStatus,
   HttpException,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,8 +17,6 @@ import {
   ApiResponse as SwaggerResponse,
   ApiBearerAuth,
   ApiHeader,
-  ApiParam,
-  ApiQuery,
   ApiExcludeEndpoint,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -28,15 +25,12 @@ import { AuthService } from './auth.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { RegisterDto } from './dto/register.dto';
+import { RegisterCreatorDto } from './dto/register-creator.dto';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
-import {
-  SocialSignInDto,
-  SocialSignInResponseDto,
-} from './dto/social-sign-in.dto';
 import { fromNodeHeaders } from '../../common/utils/headers.util';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import {
@@ -61,7 +55,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Register a new user account with email and password',
     description:
-      'Creates a new user account. All users are registered as CREATORS by default.',
+      'Creates a new user account and automatically assigns the SUPPORTER role. This endpoint is strictly restricted to web clients. Mobile applications cannot register new accounts.',
   })
   @SwaggerResponse({
     status: 201,
@@ -72,6 +66,11 @@ export class AuthController {
     description: 'Invalid input data or validation error.',
   })
   @SwaggerResponse({
+    status: 403,
+    description:
+      'Registration is blocked on mobile platforms (REGISTRATION_WEB_ONLY).',
+  })
+  @SwaggerResponse({
     status: 409,
     description: 'User with this email already exists.',
   })
@@ -80,24 +79,48 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const webRes = await this.authService.signUpEmail({
+    // Registration is web-only — creator accounts are created on web
+    if (isMobileRequest(req.headers)) {
+      throw new ForbiddenException({
+        code: ErrorCodes.REGISTRATION_WEB_ONLY,
+        message:
+          'Account registration is only available on web. Please visit our website to create an account.',
+      });
+    }
+
+    const webRes = await this.authService.signUpEmailWithRole({
       ...dto,
       headers: fromNodeHeaders(req.headers),
     });
-    const body = await this.handleAuthResponse(
-      webRes,
-      req,
-      res,
-      HttpStatus.CREATED,
+    return this.handleAuthResponse(webRes, req, res, HttpStatus.CREATED);
+  }
+
+  @Public()
+  @Post('register-creator')
+  @ApiOperation({
+    summary: 'Register a new creator account',
+    description:
+      'Creates a new user account, assigns the CREATOR role, and initializes their Creator Profile. This is the primary onboarding endpoint for creators.',
+  })
+  @SwaggerResponse({
+    status: 201,
+    description: 'Creator account successfully created.',
+  })
+  @SwaggerResponse({
+    status: 400,
+    description: 'Validation failed or username/email already exists.',
+  })
+  async registerCreator(
+    @Body() dto: RegisterCreatorDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const webRes = await this.authService.signUpCreator(
+      dto,
+      fromNodeHeaders(req.headers),
     );
-    if (body && typeof body === 'object' && body.user?.id) {
-      const authFlags = await this.authService.getUserAuthFlags(body.user.id);
-      Object.assign(body, authFlags);
-      if (body.user && typeof body.user === 'object') {
-        Object.assign(body.user, authFlags);
-      }
-    }
-    return body;
+
+    return this.handleAuthResponse(webRes, req, res, HttpStatus.CREATED);
   }
 
   @Public()
@@ -106,7 +129,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Log in with email and password',
     description:
-      'Authenticates a user and starts a session. Web clients will receive an HTTP-only session cookie. Mobile clients will receive a JSON token.',
+      'Authenticates a user and starts a session. Web clients will receive an HTTP-only session cookie. Mobile clients will receive a JSON token and must have the CREATOR role, otherwise access is denied.',
   })
   @SwaggerResponse({
     status: 200,
@@ -115,6 +138,11 @@ export class AuthController {
   @SwaggerResponse({
     status: 400,
     description: 'Invalid credentials or validation error.',
+  })
+  @SwaggerResponse({
+    status: 403,
+    description:
+      'Mobile access denied. Only creators can log in from the mobile app (MOBILE_ACCESS_DENIED).',
   })
   async login(
     @Body() dto: LoginDto,
@@ -125,120 +153,34 @@ export class AuthController {
       ...dto,
       headers: fromNodeHeaders(req.headers),
     });
-    const body = await this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
-    if (body && typeof body === 'object' && body.user?.id) {
-      const authFlags = await this.authService.getUserAuthFlags(body.user.id);
-      Object.assign(body, authFlags);
-      if (body.user && typeof body.user === 'object') {
-        Object.assign(body.user, authFlags);
+
+    // If login succeeded and request is from mobile, enforce CREATOR role
+    if (webRes.ok && isMobileRequest(req.headers)) {
+      const cloned = webRes.clone();
+      const body = await cloned.json();
+      const userId = body?.user?.id;
+
+      if (userId) {
+        const isCreator = await this.authService.userHasRole(userId, 'CREATOR');
+        if (!isCreator) {
+          // Invalidate the session that was just created
+          try {
+            await this.authService.signOut({
+              headers: fromNodeHeaders(req.headers),
+            });
+          } catch {
+            // Best effort — session will expire naturally if sign-out fails
+          }
+          throw new ForbiddenException({
+            code: ErrorCodes.MOBILE_ACCESS_DENIED,
+            message:
+              'The mobile app is only available for creators. Please use the web platform or apply to become a creator.',
+          });
+        }
       }
     }
-    return body;
-  }
 
-  @Public()
-  @Post('social/sign-in')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Initiate social OAuth sign-in (Google, Apple) for web and mobile',
-    description:
-      'Generates the OAuth authorization URL for the requested provider. For mobile apps (React Native), provide a custom deep link callbackURL (e.g. "buymeayard://oauth-callback") to receive the session callback in an in-app browser session.',
-  })
-  @SwaggerResponse({
-    status: 200,
-    description: 'OAuth authorization URL returned successfully.',
-    type: SocialSignInResponseDto,
-  })
-  @SwaggerResponse({
-    status: 400,
-    description: 'Invalid provider or parameters.',
-  })
-  async socialSignIn(
-    @Body() dto: SocialSignInDto,
-    @Req() req: Request,
-  ): Promise<SocialSignInResponseDto> {
-    const isMobile = isMobileRequest(req.headers);
-    const callbackURL =
-      dto.callbackURL || (isMobile ? 'buymeayard://oauth-callback' : undefined);
-
-    const result = await this.authService.signInSocial({
-      provider: dto.provider,
-      callbackURL,
-      errorCallbackURL: dto.errorCallbackURL,
-      newUserCallbackURL: dto.newUserCallbackURL,
-      headers: fromNodeHeaders(req.headers),
-    });
-
-    return {
-      url: result.url,
-      redirect: result.redirect ?? true,
-    };
-  }
-
-  @Public()
-  @Get('social/:provider')
-  @ApiOperation({
-    summary:
-      'Direct browser OAuth redirect for social provider (Google, Apple)',
-    description:
-      'Redirects browser clients directly to the provider OAuth consent screen, or returns JSON URL if requested via API.',
-  })
-  @ApiParam({
-    name: 'provider',
-    description: 'OAuth provider name (e.g. google, apple, twitter, facebook)',
-    example: 'google',
-  })
-  @ApiQuery({
-    name: 'callbackURL',
-    required: false,
-    description:
-      'Where to redirect after OAuth authentication (e.g. "buymeayard://oauth-callback" or "http://localhost:3000/dashboard")',
-    example: 'buymeayard://oauth-callback',
-  })
-  @ApiQuery({
-    name: 'redirect',
-    required: false,
-    type: Boolean,
-    description: 'Set to false to return JSON URL instead of 302 redirect',
-  })
-  @SwaggerResponse({
-    status: 302,
-    description: 'Redirects browser to OAuth provider login.',
-  })
-  @SwaggerResponse({
-    status: 200,
-    description: 'JSON URL returned if redirect=false or JSON requested.',
-    type: SocialSignInResponseDto,
-  })
-  async directSocialRedirect(
-    @Param('provider') provider: string,
-    @Query('callbackURL') callbackURL: string | undefined,
-    @Query('redirect') redirectParam: string | undefined,
-    @Req() req: Request,
-    @Res() res: Response,
-  ) {
-    const isMobile = isMobileRequest(req.headers);
-    const effectiveCallback =
-      callbackURL || (isMobile ? 'buymeayard://oauth-callback' : undefined);
-
-    const result = await this.authService.signInSocial({
-      provider,
-      callbackURL: effectiveCallback,
-      headers: fromNodeHeaders(req.headers),
-    });
-
-    const wantsJson =
-      redirectParam === 'false' ||
-      (req.headers.accept && req.headers.accept.includes('application/json'));
-
-    if (wantsJson) {
-      return res.status(HttpStatus.OK).json({
-        url: result.url,
-        redirect: result.redirect ?? true,
-      });
-    }
-
-    return res.redirect(result.url);
+    return this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
   }
 
   @Public()
@@ -300,11 +242,8 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const isMobile = isMobileRequest(req.headers);
-    const from = dto.from || (isMobile ? 'mobile' : undefined);
     const webRes = await this.authService.forgotPassword({
       email: dto.email,
-      ...(from ? { from } : {}),
       headers: fromNodeHeaders(req.headers),
     });
     return this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
