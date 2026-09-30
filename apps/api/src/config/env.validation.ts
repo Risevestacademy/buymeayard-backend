@@ -22,8 +22,12 @@ export const envSchema = z.object({
   PAYSTACK_PUBLIC_KEY: z.string().default('pk_test_mock'),
   PAYSTACK_WEBHOOK_SECRET: z.string().default('webhook_secret_mock'),
 
-  RESEND_API_KEY: z.string().optional(),
-  EMAIL_FROM: z.string().default('noreply@buymeayard.com'),
+  BREVO_API_KEY: z.string().optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  EMAIL_FROM: z.string().default('BuyMeAYard <buymeayard@gmail.com>'),
 
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),
