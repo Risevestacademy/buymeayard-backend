@@ -45,7 +45,7 @@ export class SupportsService {
       });
     }
 
-    let subtotal = 0;
+    let subtotal = 0n;
     const itemsToCreate = [];
 
     for (const item of dto.items) {
@@ -72,7 +72,7 @@ export class SupportsService {
         });
       }
 
-      const itemTotal = creatorMat.price * item.quantity;
+      const itemTotal = creatorMat.price * BigInt(item.quantity);
       subtotal += itemTotal;
 
       itemsToCreate.push({

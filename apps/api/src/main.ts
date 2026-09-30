@@ -6,6 +6,12 @@ import * as cookieParser from 'cookie-parser';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 
+// Global BigInt JSON serialization support (safe up to 90 Trillion Naira)
+(BigInt.prototype as any).toJSON = function () {
+  const int = Number(this);
+  return int <= Number.MAX_SAFE_INTEGER ? int : this.toString();
+};
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     rawBody: true, // Required for webhook cryptographic signature verification
