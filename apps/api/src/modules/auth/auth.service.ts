@@ -5,6 +5,7 @@ import type { IncomingHttpHeaders } from 'http';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { createBetterAuth, AuthInstance } from './better-auth';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { RegisterCreatorDto } from './dto/register-creator.dto';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -42,6 +43,76 @@ export class AuthService implements OnModuleInit {
     return this.getSessionFromHeaders(headers);
   }
 
+  /**
+   * Register a new user and auto-assign the SUPPORTER role.
+   * Every account starts as a supporter by default.
+   */
+  async signUpEmailWithRole(params: {
+    email: string;
+    password: string;
+    name?: string;
+    headers?: Headers;
+  }): Promise<globalThis.Response> {
+    const webRes = await this.signUpEmail(params);
+
+    // Only assign role if registration succeeded
+    if (webRes.ok) {
+      try {
+        // Clone the response so we can read the body without consuming the original
+        const cloned = webRes.clone();
+        const body = await cloned.json();
+        const userId = body?.user?.id;
+
+        if (userId) {
+          await this.assignSupporterRole(userId);
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Failed to assign SUPPORTER role after registration: ${error}`,
+        );
+      }
+    }
+
+    return webRes;
+  }
+
+  /**
+   * Register a new user and auto-assign the CREATOR role,
+   * initializing their CreatorProfile.
+   */
+  async signUpCreator(
+    dto: RegisterCreatorDto,
+    headers?: Headers,
+  ): Promise<globalThis.Response> {
+    const fullName = `${dto.firstName} ${dto.lastName}`.trim();
+
+    const webRes = await this.signUpEmail({
+      email: dto.email,
+      password: dto.password,
+      name: fullName,
+      headers,
+    });
+
+    // Only assign role and profile if registration succeeded
+    if (webRes.ok) {
+      try {
+        const cloned = webRes.clone();
+        const body = await cloned.json();
+        const userId = body?.user?.id;
+
+        if (userId) {
+          await this.assignCreatorRoleAndProfile(userId, dto);
+        }
+      } catch (error) {
+        this.logger.warn(
+          `Failed to assign CREATOR role/profile after registration: ${error}`,
+        );
+      }
+    }
+
+    return webRes;
+  }
+
   async signUpEmail(params: {
     email: string;
     password: string;
@@ -74,30 +145,6 @@ export class AuthService implements OnModuleInit {
     });
   }
 
-  async signInSocial(params: {
-    provider: string;
-    callbackURL?: string;
-    errorCallbackURL?: string;
-    newUserCallbackURL?: string;
-    headers?: Headers;
-  }): Promise<{ url: string; redirect: boolean }> {
-    const defaultCallback =
-      this.configService.get<string>('BETTER_AUTH_URL') ||
-      'http://localhost:3000';
-
-    const res = await (this.getAuth().api as any).signInSocial({
-      body: {
-        provider: params.provider,
-        callbackURL: params.callbackURL || defaultCallback,
-        errorCallbackURL: params.errorCallbackURL,
-        newUserCallbackURL: params.newUserCallbackURL,
-      },
-      ...(params.headers ? { headers: params.headers } : {}),
-    });
-
-    return res as { url: string; redirect: boolean };
-  }
-
   async signOut(params?: { headers?: Headers }): Promise<globalThis.Response> {
     const headers = params?.headers || new Headers();
     return this.getAuth().api.signOut({
@@ -108,16 +155,12 @@ export class AuthService implements OnModuleInit {
 
   async forgotPassword(params: {
     email: string;
-    from?: string;
     headers?: Headers;
   }): Promise<globalThis.Response> {
-    const redirectTo = params.from
-      ? `/reset-password?from=${encodeURIComponent(params.from)}`
-      : '/reset-password';
     return this.getAuth().api.requestPasswordReset({
       body: {
         email: params.email,
-        redirectTo,
+        redirectTo: '/reset-password',
       },
       ...(params.headers ? { headers: params.headers } : {}),
       asResponse: true,
@@ -188,28 +231,84 @@ export class AuthService implements OnModuleInit {
   }
 
   /**
-   * Returns whether a user has completed creator onboarding
-   * (i.e. a CreatorProfile exists and status is not REGISTERED).
+   * Assign the SUPPORTER role to a newly registered user.
    */
-  async getIsOnboarded(userId: string): Promise<boolean> {
-    const profile = await this.prisma.creatorProfile.findUnique({
-      where: { userId },
-      select: { id: true, status: true },
+  private async assignSupporterRole(userId: string): Promise<void> {
+    const supporterRole = await this.prisma.role.findUnique({
+      where: { name: 'SUPPORTER' },
     });
-    return profile !== null && profile.status !== 'REGISTERED';
+
+    if (!supporterRole) {
+      this.logger.error(
+        'SUPPORTER role not found in database. Run seeds first.',
+      );
+      return;
+    }
+
+    await this.prisma.userRole.upsert({
+      where: {
+        userId_roleId: {
+          userId,
+          roleId: supporterRole.id,
+        },
+      },
+      update: {},
+      create: {
+        userId,
+        roleId: supporterRole.id,
+      },
+    });
+
+    this.logger.log(`Assigned SUPPORTER role to user ${userId}`);
   }
 
   /**
-   * Returns onboarding and profile setup completion flags for a user.
+   * Assign the CREATOR role and initialize the CreatorProfile.
    */
-  async getUserAuthFlags(userId: string): Promise<{
-    isOnboardingCompleted: boolean;
-    isProfileSetupCompleted: boolean;
-  }> {
-    const isCompleted = await this.getIsOnboarded(userId);
-    return {
-      isOnboardingCompleted: isCompleted,
-      isProfileSetupCompleted: isCompleted,
-    };
+  private async assignCreatorRoleAndProfile(
+    userId: string,
+    dto: RegisterCreatorDto,
+  ): Promise<void> {
+    const creatorRole = await this.prisma.role.findUnique({
+      where: { name: 'CREATOR' },
+    });
+
+    if (!creatorRole) {
+      this.logger.error('CREATOR role not found in database. Run seeds first.');
+      return;
+    }
+
+    // Run this in a transaction to ensure both role and profile are created together
+    await this.prisma.$transaction(async (tx) => {
+      // 1. Assign Role
+      await tx.userRole.upsert({
+        where: {
+          userId_roleId: {
+            userId,
+            roleId: creatorRole.id,
+          },
+        },
+        update: {},
+        create: {
+          userId,
+          roleId: creatorRole.id,
+        },
+      });
+
+      // 2. Create Profile
+      await tx.creatorProfile.create({
+        data: {
+          userId,
+          username: dto.username,
+          displayName: `${dto.firstName} ${dto.lastName}`.trim(),
+          status: 'REGISTERED',
+          kycStatus: 'NOT_SUBMITTED',
+        },
+      });
+    });
+
+    this.logger.log(
+      `Assigned CREATOR role and initialized profile for user ${userId}`,
+    );
   }
 }

@@ -26,5 +26,4 @@ export class AppController {
       () => this.prismaHealth.pingCheck('database', this.prismaService),
     ]);
   }
-
 }

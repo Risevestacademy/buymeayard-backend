@@ -2,7 +2,7 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service'; // adjust path to your actual PrismaService
-import { Prisma} from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 export interface RecordAuditLogParams {
   actorId?: string;

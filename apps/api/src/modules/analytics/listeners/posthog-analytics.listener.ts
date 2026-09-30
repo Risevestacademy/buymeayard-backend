@@ -3,7 +3,11 @@
 import { Injectable } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PostHogService } from '../posthog.service';
-import { USER_EVENTS, UserCreatedEvent, UserLoginEvent } from '../events/user.events';
+import {
+  USER_EVENTS,
+  UserCreatedEvent,
+  UserLoginEvent,
+} from '../events/user.events';
 
 @Injectable()
 export class PostHogAnalyticsListener {
