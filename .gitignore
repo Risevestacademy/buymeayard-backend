@@ -16,11 +16,12 @@ build/
 
 # Environment variables & secrets (Safe: keeps .env.example)
 .env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 .env.*
-!.env.example
-!.env.test.example
-*.env
-*.env.local
+
 
 # Certificates & Private Keys
 *.pem
@@ -63,3 +64,7 @@ scratch/
 # Logs
 logs/
 *.log
+
+# Prisma
+/prisma/*.db
+/prisma/*.db-journal
