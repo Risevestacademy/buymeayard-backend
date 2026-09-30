@@ -154,10 +154,12 @@ Public and verified profile configuration for creators.
 | :--- | :--- | :---: | :---: | :--- | :--- |
 | `id` | `UUID` | No | `uuid()` | `PRIMARY KEY` | Creator profile ID |
 | `userId` | `UUID` | No | — | `UNIQUE, FK -> users(id)` | Associated user account |
-| `creatorName`| `VARCHAR` | Yes | `NULL` | — | Creator public display name |
-| `slug` | `VARCHAR` | No | — | `UNIQUE, INDEX` | Handle / store URL slug (e.g. `adeola`) |
+| `username` | `VARCHAR` | No | — | `UNIQUE, INDEX` | Handle (e.g. `/adeola`) |
+| `displayName`| `VARCHAR` | No | — | — | Public creator title |
 | `bio` | `TEXT` | Yes | `NULL` | — | Creator mission/biography |
 | `avatarUrl` | `VARCHAR` | Yes | `NULL` | — | Display avatar asset URL |
+| `coverUrl` | `VARCHAR` | Yes | `NULL` | — | Banner asset URL |
+| `categoryId` | `UUID` | Yes | `NULL` | `INDEX, FK -> creator_categories(id)` | Creator genre / category |
 | `status` | `VARCHAR` | No | `'REGISTERED'` | `'REGISTERED', 'PROFILE_CREATED', 'KYC_PENDING', 'VERIFIED', 'ACTIVE', 'SUSPENDED'` | Creator lifecycle state |
 | `kycStatus` | `VARCHAR` | No | `'NOT_SUBMITTED'` | `'NOT_SUBMITTED', 'PENDING', 'VERIFIED', 'REJECTED', 'NEEDS_REVIEW'` | Identity compliance state |
 | `createdAt` | `TIMESTAMPTZ` | No | `now()` | — | Onboarding timestamp |
