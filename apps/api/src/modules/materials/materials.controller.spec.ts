@@ -61,9 +61,15 @@ describe('MaterialsController', () => {
   });
 
   it('should get material by slug', async () => {
-    const res = await controller.getMaterialBySlug('ankara');
+    (mockService as any).findByIdOrSlug = jest.fn().mockResolvedValue({
+      id: '1',
+      name: 'Ankara',
+      slug: 'ankara',
+      defaultPrice: 100000,
+    });
+    const res = await controller.getMaterialByIdOrSlug('ankara');
     expect(res.name).toBe('Ankara');
-    expect(mockService.findCatalogueBySlug).toHaveBeenCalledWith('ankara');
+    expect((mockService as any).findByIdOrSlug).toHaveBeenCalledWith('ankara');
   });
 
   it('should calculate yards or amount', async () => {
@@ -75,5 +81,55 @@ describe('MaterialsController', () => {
     const res = await controller.calculate('50000', undefined);
     expect(res.calculatedYards).toBe(50);
     expect((mockService as any).calculate).toHaveBeenCalledWith(50000, undefined);
+  });
+
+  it('should create material', async () => {
+    (mockService as any).createMaterial = jest.fn().mockResolvedValue({
+      id: 'm-new',
+      name: 'Velvet Lace',
+    });
+
+    const res = await controller.createMaterial({ name: 'Velvet Lace' });
+    expect(res.id).toBe('m-new');
+    expect((mockService as any).createMaterial).toHaveBeenCalledWith({
+      name: 'Velvet Lace',
+    });
+  });
+
+  it('should update material', async () => {
+    (mockService as any).updateMaterial = jest.fn().mockResolvedValue({
+      id: 'm-1',
+      name: 'Updated Ankara',
+    });
+
+    const res = await controller.updateMaterial('m-1', {
+      name: 'Updated Ankara',
+    });
+    expect(res.name).toBe('Updated Ankara');
+    expect((mockService as any).updateMaterial).toHaveBeenCalledWith('m-1', {
+      name: 'Updated Ankara',
+    });
+  });
+
+  it('should delete material', async () => {
+    (mockService as any).deleteMaterial = jest.fn().mockResolvedValue({
+      success: true,
+      message: 'Material deleted successfully',
+    });
+
+    const res = await controller.deleteMaterial('m-1');
+    expect(res.success).toBe(true);
+    expect((mockService as any).deleteMaterial).toHaveBeenCalledWith('m-1');
+  });
+
+  it('should get material by id or slug', async () => {
+    (mockService as any).findByIdOrSlug = jest.fn().mockResolvedValue({
+      id: 'm-1',
+      name: 'Ankara',
+    });
+
+    const res = await controller.getMaterialByIdOrSlug('m-1');
+    expect(res.name).toBe('Ankara');
+    expect((mockService as any).findByIdOrSlug).toHaveBeenCalledWith('m-1');
   });
 });

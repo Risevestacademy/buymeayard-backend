@@ -1,15 +1,20 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
@@ -20,6 +25,8 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { UserRole } from '@buymeayard/types';
 import { UpdateBasePriceDto } from './dto/update-base-price.dto';
+import { CreateMaterialDto } from './dto/create-material.dto';
+import { UpdateMaterialDto } from './dto/update-material.dto';
 
 @ApiTags('materials')
 @Controller('materials')
@@ -29,8 +36,15 @@ export class MaterialsController {
   @Public()
   @Get()
   @ApiOperation({ summary: 'Get platform materials catalogue' })
-  async getMaterials() {
-    return this.materialsService.findAllCatalogue();
+  @ApiQuery({
+    name: 'all',
+    required: false,
+    type: Boolean,
+    description: 'Whether to include inactive materials (default: false)',
+  })
+  async getMaterials(@Query('all') all?: string) {
+    const includeAll = all === 'true' || all === '1';
+    return this.materialsService.findAllCatalogue(includeAll);
   }
 
   @Public()
@@ -78,6 +92,24 @@ export class MaterialsController {
     );
   }
 
+  @Post()
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Add a new platform material (Admin only)',
+    description:
+      'Creates a new fabric material with its own ID in the database and automatically applies the universal platform base price.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Material created successfully.',
+  })
+  async createMaterial(@Body() dto: CreateMaterialDto) {
+    return this.materialsService.createMaterial(dto);
+  }
+
   @Patch('base-price')
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
@@ -95,10 +127,52 @@ export class MaterialsController {
     return this.materialsService.updateBasePrice(dto);
   }
 
+  @Patch(':id')
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Edit an existing material (Admin only)',
+    description: 'Updates material name, description, imageUrl, slug, or status.',
+  })
+  @ApiParam({ name: 'id', description: 'Material ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Material updated successfully.',
+  })
+  async updateMaterial(
+    @Param('id') id: string,
+    @Body() dto: UpdateMaterialDto,
+  ) {
+    return this.materialsService.updateMaterial(id, dto);
+  }
+
+  @Delete(':id')
+  @ApiBearerAuth()
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Delete or deactivate a material (Admin only)',
+    description:
+      'Permanently removes material if no support items reference it, or deactivates it (soft-delete) to preserve historical transactions.',
+  })
+  @ApiParam({ name: 'id', description: 'Material ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Material deleted or deactivated successfully.',
+  })
+  async deleteMaterial(@Param('id') id: string) {
+    return this.materialsService.deleteMaterial(id);
+  }
+
   @Public()
-  @Get(':slug')
-  @ApiOperation({ summary: 'Get catalogue material by slug' })
-  async getMaterialBySlug(@Param('slug') slug: string) {
-    return this.materialsService.findCatalogueBySlug(slug);
+  @Get(':idOrSlug')
+  @ApiOperation({ summary: 'Get catalogue material by ID or slug' })
+  @ApiParam({
+    name: 'idOrSlug',
+    description: 'Material ID (UUID) or material slug (e.g. "ankara")',
+  })
+  async getMaterialByIdOrSlug(@Param('idOrSlug') idOrSlug: string) {
+    return this.materialsService.findByIdOrSlug(idOrSlug);
   }
 }

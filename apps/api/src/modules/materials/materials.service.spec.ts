@@ -14,8 +14,12 @@ describe('MaterialsService', () => {
       material: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         updateMany: jest.fn(),
         upsert: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
       },
       creatorMaterial: {
         updateMany: jest.fn(),
@@ -61,17 +65,17 @@ describe('MaterialsService', () => {
     });
   });
 
-  describe('findCatalogueBySlug', () => {
-    it('should return material by slug', async () => {
+  describe('findByIdOrSlug / findCatalogueBySlug', () => {
+    it('should return material by slug or id', async () => {
       const mockMat = { id: 'mat-1', name: 'Ankara', slug: 'ankara' };
-      mockPrisma.material.findUnique.mockResolvedValue(mockMat);
+      mockPrisma.material.findFirst.mockResolvedValue(mockMat);
 
       const result = await service.findCatalogueBySlug('ankara');
       expect(result).toEqual(mockMat);
     });
 
     it('should throw NotFoundException if slug not found', async () => {
-      mockPrisma.material.findUnique.mockResolvedValue(null);
+      mockPrisma.material.findFirst.mockResolvedValue(null);
 
       await expect(service.findCatalogueBySlug('nonexistent')).rejects.toThrow(
         NotFoundException,
@@ -185,5 +189,112 @@ describe('MaterialsService', () => {
       expect(result.totalAmount).toBe(1000);
     });
   });
+
+  describe('createMaterial', () => {
+    it('should create new material with generated slug and universal base price', async () => {
+      mockPrisma.material.findUnique.mockResolvedValue(null);
+      mockPrisma.material.findMany.mockResolvedValue([
+        { id: '1', defaultPrice: 100000, currency: 'NGN' },
+      ]);
+      mockPrisma.material.create.mockResolvedValue({
+        id: 'new-id',
+        name: 'Velvet Lace',
+        slug: 'velvet-lace',
+        defaultPrice: 100000,
+        currency: 'NGN',
+        status: 'ACTIVE',
+      });
+
+      const res = await service.createMaterial({
+        name: 'Velvet Lace',
+        description: 'Luxury velvet fabric',
+      });
+
+      expect(res.name).toBe('Velvet Lace');
+      expect(mockPrisma.material.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          name: 'Velvet Lace',
+          slug: 'velvet-lace',
+          defaultPrice: 100000,
+          currency: 'NGN',
+          status: 'ACTIVE',
+        }),
+      });
+    });
+
+    it('should throw ConflictException if slug already exists', async () => {
+      mockPrisma.material.findUnique.mockResolvedValue({ id: 'existing-id' });
+
+      await expect(
+        service.createMaterial({ name: 'Ankara', slug: 'ankara' }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('updateMaterial', () => {
+    it('should update material fields', async () => {
+      mockPrisma.material.findUnique.mockResolvedValue({
+        id: 'mat-1',
+        name: 'Ankara',
+        slug: 'ankara',
+      });
+      mockPrisma.material.update.mockResolvedValue({
+        id: 'mat-1',
+        name: 'Updated Ankara',
+        slug: 'updated-ankara',
+      });
+
+      const res = await service.updateMaterial('mat-1', {
+        name: 'Updated Ankara',
+      });
+
+      expect(res.name).toBe('Updated Ankara');
+      expect(mockPrisma.material.update).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException if material does not exist', async () => {
+      mockPrisma.material.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateMaterial('mat-none', { name: 'Test' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('deleteMaterial', () => {
+    it('should delete material permanently if no support history exists', async () => {
+      mockPrisma.material.findUnique.mockResolvedValue({
+        id: 'mat-1',
+        creatorMaterials: [{ supportItems: [] }],
+      });
+      mockPrisma.material.delete.mockResolvedValue({ id: 'mat-1' });
+
+      const res = await service.deleteMaterial('mat-1');
+      expect(res.success).toBe(true);
+      expect(mockPrisma.material.delete).toHaveBeenCalledWith({
+        where: { id: 'mat-1' },
+      });
+    });
+
+    it('should soft-delete (deactivate) material if support items exist', async () => {
+      mockPrisma.material.findUnique.mockResolvedValue({
+        id: 'mat-1',
+        creatorMaterials: [{ supportItems: [{ id: 'sup-item-1' }] }],
+      });
+      mockPrisma.material.update.mockResolvedValue({
+        id: 'mat-1',
+        status: 'INACTIVE',
+      });
+
+      const res = await service.deleteMaterial('mat-1');
+      expect(res.success).toBe(true);
+      expect(res.status).toBe('INACTIVE');
+      expect(mockPrisma.material.update).toHaveBeenCalledWith({
+        where: { id: 'mat-1' },
+        data: { status: 'INACTIVE' },
+      });
+    });
+  });
 });
+
 

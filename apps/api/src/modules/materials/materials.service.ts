@@ -1,6 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { UpdateBasePriceDto } from './dto/update-base-price.dto';
+import { CreateMaterialDto } from './dto/create-material.dto';
+import { UpdateMaterialDto } from './dto/update-material.dto';
 import { MoneyUtil } from '../../common/utils/money.util';
 
 const DEFAULT_PLATFORM_MATERIALS = [
@@ -30,27 +36,154 @@ const DEFAULT_PLATFORM_MATERIALS = [
 export class MaterialsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async findAllCatalogue() {
+  async findAllCatalogue(all = false) {
+    const where = all ? {} : { status: 'ACTIVE' };
     const materials = await this.prisma.material.findMany({
-      where: { status: 'ACTIVE' },
+      where,
       orderBy: { createdAt: 'asc' },
     });
 
-    if (materials.length === 0) {
+    if (materials.length === 0 && !all) {
       return this.ensureDefaultCatalogue(100000, 'NGN');
     }
 
     return materials;
   }
 
-  async findCatalogueBySlug(slug: string) {
-    const material = await this.prisma.material.findUnique({
-      where: { slug },
+  async findByIdOrSlug(idOrSlug: string) {
+    const material = await this.prisma.material.findFirst({
+      where: {
+        OR: [{ id: idOrSlug }, { slug: idOrSlug.toLowerCase().trim() }],
+      },
     });
     if (!material) {
-      throw new NotFoundException(`Material with slug ${slug} not found`);
+      throw new NotFoundException(`Material "${idOrSlug}" not found`);
     }
     return material;
+  }
+
+  async findCatalogueBySlug(slug: string) {
+    return this.findByIdOrSlug(slug);
+  }
+
+  async createMaterial(dto: CreateMaterialDto) {
+    const cleanSlug = (dto.slug || dto.name)
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+
+    const existing = await this.prisma.material.findUnique({
+      where: { slug: cleanSlug },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `Material with slug "${cleanSlug}" already exists`,
+      );
+    }
+
+    const basePriceInfo = await this.getBasePrice();
+
+    return this.prisma.material.create({
+      data: {
+        name: dto.name.trim(),
+        slug: cleanSlug,
+        description: dto.description?.trim() || null,
+        imageUrl: dto.imageUrl?.trim() || null,
+        defaultPrice: basePriceInfo.basePriceMinor,
+        currency: basePriceInfo.currency,
+        status: 'ACTIVE',
+      },
+    });
+  }
+
+  async updateMaterial(id: string, dto: UpdateMaterialDto) {
+    const material = await this.prisma.material.findUnique({
+      where: { id },
+    });
+    if (!material) {
+      throw new NotFoundException(`Material with id "${id}" not found`);
+    }
+
+    let finalSlug = material.slug;
+    if (dto.slug || (dto.name && !material.slug)) {
+      finalSlug = (dto.slug || dto.name!)
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+
+      if (finalSlug !== material.slug) {
+        const existing = await this.prisma.material.findUnique({
+          where: { slug: finalSlug },
+        });
+        if (existing && existing.id !== id) {
+          throw new ConflictException(
+            `Material with slug "${finalSlug}" already exists`,
+          );
+        }
+      }
+    }
+
+    return this.prisma.material.update({
+      where: { id },
+      data: {
+        name: dto.name !== undefined ? dto.name.trim() : undefined,
+        slug: finalSlug,
+        description:
+          dto.description !== undefined
+            ? dto.description?.trim() || null
+            : undefined,
+        imageUrl:
+          dto.imageUrl !== undefined ? dto.imageUrl?.trim() || null : undefined,
+        status: dto.status !== undefined ? dto.status : undefined,
+      },
+    });
+  }
+
+  async deleteMaterial(id: string) {
+    const material = await this.prisma.material.findUnique({
+      where: { id },
+      include: {
+        creatorMaterials: {
+          include: {
+            supportItems: { take: 1 },
+          },
+        },
+      },
+    });
+
+    if (!material) {
+      throw new NotFoundException(`Material with id "${id}" not found`);
+    }
+
+    const hasSupports = material.creatorMaterials.some(
+      (cm) => cm.supportItems && cm.supportItems.length > 0,
+    );
+
+    if (hasSupports) {
+      await this.prisma.material.update({
+        where: { id },
+        data: { status: 'INACTIVE' },
+      });
+      return {
+        success: true,
+        message:
+          'Material deactivated (soft-deleted) as it has historical support records',
+        materialId: id,
+        status: 'INACTIVE',
+      };
+    }
+
+    await this.prisma.material.delete({
+      where: { id },
+    });
+
+    return {
+      success: true,
+      message: 'Material deleted successfully',
+      materialId: id,
+    };
   }
 
   async getBasePrice() {
