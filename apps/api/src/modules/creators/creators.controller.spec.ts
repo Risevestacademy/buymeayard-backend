@@ -16,6 +16,7 @@ describe('CreatorsController', () => {
     uploadAvatar: jest.Mock;
     getCreatorMaterials: jest.Mock;
     saveCreatorMaterials: jest.Mock;
+    createCustomMaterial: jest.Mock;
     getShareLink: jest.Mock;
     getShareLinkBySlug: jest.Mock;
   };
@@ -43,6 +44,7 @@ describe('CreatorsController', () => {
       uploadAvatar: jest.fn(),
       getCreatorMaterials: jest.fn(),
       saveCreatorMaterials: jest.fn(),
+      createCustomMaterial: jest.fn(),
       getShareLink: jest.fn(),
       getShareLinkBySlug: jest.fn(),
       formatCreatorProfile: jest.fn((p) => {
@@ -254,6 +256,19 @@ describe('CreatorsController', () => {
         dto,
       );
       expect(result).toEqual(mockMaterials);
+    });
+  });
+
+  describe('createCustomMaterial (POST /creators/me/materials/custom)', () => {
+    it('should create custom material for creator', async () => {
+      const dto = { name: 'Silk Velvet', description: 'Custom' };
+      const mockResult = { id: 'cm-custom', displayName: 'Silk Velvet', isCustom: true };
+      creatorsService.createCustomMaterial.mockResolvedValue(mockResult);
+
+      const result = await controller.createCustomMaterial('user-1', dto);
+
+      expect(creatorsService.createCustomMaterial).toHaveBeenCalledWith('user-1', dto);
+      expect(result).toEqual(mockResult);
     });
   });
 

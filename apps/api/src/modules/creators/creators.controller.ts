@@ -30,6 +30,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
+import { CreateCustomMaterialDto } from './dto/create-custom-material.dto';
 import {
   CreatorResponseDto,
   CreatorListResponseDto,
@@ -313,6 +314,26 @@ export class CreatorsController {
     @Body() dto: SaveCreatorMaterialsDto,
   ) {
     return this.creatorsService.saveCreatorMaterials(userId, dto);
+  }
+
+  @Post('me/materials/custom')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Add a custom material / appearance for the creator',
+    description:
+      'Creates a personal custom material belonging only to the authenticated creator and adds it to their active materials.',
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Custom material created successfully.',
+    type: CreatorMaterialResponseDto,
+  })
+  async createCustomMaterial(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateCustomMaterialDto,
+  ) {
+    return this.creatorsService.createCustomMaterial(userId, dto);
   }
 
   @Get('me/share-link')

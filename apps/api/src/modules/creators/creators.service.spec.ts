@@ -41,9 +41,13 @@ describe('CreatorsService', () => {
     };
     material: {
       findMany: jest.Mock;
+      findFirst: jest.Mock;
+      create: jest.Mock;
     };
     creatorMaterial: {
       findMany: jest.Mock;
+      findFirst: jest.Mock;
+      create: jest.Mock;
       upsert: jest.Mock;
       updateMany: jest.Mock;
     };
@@ -97,9 +101,13 @@ describe('CreatorsService', () => {
       },
       material: {
         findMany: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
       },
       creatorMaterial: {
         findMany: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
         upsert: jest.fn(),
         updateMany: jest.fn(),
       },
@@ -434,6 +442,51 @@ describe('CreatorsService', () => {
         include: { material: true },
         orderBy: { createdAt: 'asc' },
       });
+    });
+  });
+
+  describe('createCustomMaterial', () => {
+    it('should create custom material scoped to creator and link to creator materials', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'creator-1',
+        slug: 'fisayo',
+      });
+      prisma.material.findFirst.mockResolvedValue({
+        id: 'mat-primary',
+        defaultPrice: 100000,
+        currency: 'NGN',
+      });
+      prisma.material.create.mockResolvedValue({
+        id: 'mat-custom-1',
+        name: 'Silk Velvet',
+        creatorId: 'creator-1',
+        defaultPrice: 100000,
+        currency: 'NGN',
+      });
+      prisma.creatorMaterial.create.mockResolvedValue({
+        id: 'cm-custom-1',
+        creatorId: 'creator-1',
+        materialId: 'mat-custom-1',
+        price: 100000,
+        displayName: 'Silk Velvet',
+        material: { id: 'mat-custom-1', creatorId: 'creator-1' },
+      });
+
+      const res = await service.createCustomMaterial('user-1', {
+        name: 'Silk Velvet',
+        description: 'Luxury custom fabric',
+      });
+
+      expect(res.isCustom).toBe(true);
+      expect(prisma.material.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          creatorId: 'creator-1',
+          name: 'Silk Velvet',
+          defaultPrice: 100000,
+          currency: 'NGN',
+        }),
+      });
+      expect(prisma.creatorMaterial.create).toHaveBeenCalled();
     });
   });
 

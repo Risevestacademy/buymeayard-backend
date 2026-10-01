@@ -126,6 +126,7 @@ model CreatorProfile {
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   socialLinks    CreatorSocialLink[]
   materials      CreatorMaterial[]
+  customMaterials Material[]          @relation("CustomMaterials")
   supports       Support[]           @relation("CreatorSupports")
   payouts        Payout[]
   payoutMethods  PayoutMethod[]
@@ -156,7 +157,8 @@ model CreatorSocialLink {
 
 model Material {
   id           String   @id @default(uuid())
-  name         String   // Ankara, Lace, Aso-oke, Adire
+  creatorId    String?  // null for platform materials; creator profile id for custom creator materials
+  name         String   // Ankara, Lace, Aso-oke, Adire or custom
   slug         String   @unique
   description  String?
   imageUrl     String?
@@ -166,8 +168,10 @@ model Material {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  creator          CreatorProfile?   @relation("CustomMaterials", fields: [creatorId], references: [id], onDelete: Cascade)
   creatorMaterials CreatorMaterial[]
 
+  @@index([creatorId])
   @@map("materials")
 }
 

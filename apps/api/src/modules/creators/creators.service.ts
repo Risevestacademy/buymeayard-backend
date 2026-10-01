@@ -13,6 +13,7 @@ import {
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
+import { CreateCustomMaterialDto } from './dto/create-custom-material.dto';
 import { CreatorShareLinkDataDto } from './dto/share-link.dto';
 
 @Injectable()
@@ -606,11 +607,71 @@ export class CreatorsService {
       throw new NotFoundException('Creator profile not found');
     }
 
-    return this.prisma.creatorMaterial.findMany({
+    const items = await this.prisma.creatorMaterial.findMany({
       where: { creatorId: profile.id, status: 'ACTIVE' },
       include: { material: true },
       orderBy: { createdAt: 'asc' },
     });
+
+    return items.map((item) => ({
+      ...item,
+      isCustom: Boolean(item.material?.creatorId),
+    }));
+  }
+
+  async createCustomMaterial(userId: string, dto: CreateCustomMaterialDto) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    const baseSlug = (dto.name || 'custom')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    const randomSuffix = Math.random().toString(36).substring(2, 7);
+    const slug = `${profile.slug}-${baseSlug}-${randomSuffix}`;
+
+    const primaryMat = await this.prisma.material.findFirst({
+      where: { status: 'ACTIVE', creatorId: null },
+    });
+    const defaultPrice = primaryMat?.defaultPrice ?? 100000;
+    const currency = primaryMat?.currency ?? 'NGN';
+
+    const material = await this.prisma.material.create({
+      data: {
+        creatorId: profile.id,
+        name: dto.name.trim(),
+        slug,
+        description: dto.description?.trim() || null,
+        imageUrl: dto.imageUrl?.trim() || null,
+        defaultPrice,
+        currency,
+        status: 'ACTIVE',
+      },
+    });
+
+    const creatorMaterial = await this.prisma.creatorMaterial.create({
+      data: {
+        creatorId: profile.id,
+        materialId: material.id,
+        price: defaultPrice,
+        currency,
+        displayName: dto.name.trim(),
+        description: dto.description?.trim() || null,
+        status: 'ACTIVE',
+      },
+      include: { material: true },
+    });
+
+    return {
+      ...creatorMaterial,
+      isCustom: true,
+    };
   }
 
   async saveCreatorMaterials(userId: string, dto: SaveCreatorMaterialsDto) {
@@ -622,10 +683,14 @@ export class CreatorsService {
       throw new NotFoundException('Creator profile not found');
     }
 
-    // Validate that all referenced materials exist in the platform catalogue
+    // Validate that all referenced materials exist in the catalogue (platform or owned by this creator)
     const materialIds = dto.materials.map((m) => m.materialId);
     const catalogueMaterials = await this.prisma.material.findMany({
-      where: { id: { in: materialIds }, status: 'ACTIVE' },
+      where: {
+        id: { in: materialIds },
+        status: 'ACTIVE',
+        OR: [{ creatorId: null }, { creatorId: profile.id }],
+      },
     });
 
     const foundIds = new Set(catalogueMaterials.map((m) => m.id));

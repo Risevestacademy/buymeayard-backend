@@ -37,7 +37,10 @@ export class MaterialsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAllCatalogue(all = false) {
-    const where = all ? {} : { status: 'ACTIVE' };
+    const where: any = { creatorId: null };
+    if (!all) {
+      where.status = 'ACTIVE';
+    }
     const materials = await this.prisma.material.findMany({
       where,
       orderBy: { createdAt: 'asc' },
