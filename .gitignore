@@ -5,32 +5,61 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
-# Turborepo
+# Turborepo & Build
 .turbo/
-
-# Build & Dist
 dist/
 build/
 *.tsbuildinfo
 
-# Environment variables
+# Environment variables & secrets (Safe: keeps .env.example)
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.*
+
+
+# Certificates & Private Keys
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+id_rsa*
+id_ed25519*
+*credentials*.json
+*service-account*.json
+
+# SQLite & Local Database Dumps
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.db
+*.db-journal
+*.sql.gz
+*.dump
 
 # Testing & Coverage
 coverage/
 *.lcov
 
-# IDE & Editor
+# IDE, Editors & AI Assistants
 .idea/
 .vscode/
 *.swp
 *.swo
+*~
 .DS_Store
+Thumbs.db
+.gemini/
+.cursor/
+.claude/
+scratch/
 
 # Logs
 logs/

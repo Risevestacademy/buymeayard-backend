@@ -20,9 +20,9 @@ describe('MoneyUtil', () => {
   describe('calculateSplit', () => {
     it('should calculate 10% platform fee and 90% creator earnings on ₦10,000 (1,000,000 kobo)', () => {
       const split = MoneyUtil.calculateSplit(1000000, 10);
-      expect(split.platformFee).toBe(100000);
-      expect(split.creatorAmount).toBe(900000);
-      expect(split.platformFee + split.creatorAmount).toBe(1000000);
+      expect(split.platformFee).toBe(100000n);
+      expect(split.creatorAmount).toBe(900000n);
+      expect(split.platformFee + split.creatorAmount).toBe(1000000n);
     });
 
     it('should throw if total amount is <= 0', () => {

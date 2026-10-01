@@ -160,7 +160,7 @@ model Material {
   slug         String   @unique
   description  String?
   imageUrl     String?
-  defaultPrice Int      @default(0) // Minor units (kobo)
+  defaultPrice BigInt   @default(0) // Minor units (kobo)
   currency     String   @default("NGN")
   status       String   @default("ACTIVE")
   createdAt    DateTime @default(now())
@@ -175,7 +175,7 @@ model CreatorMaterial {
   id          String   @id @default(uuid())
   creatorId   String
   materialId  String
-  price       Int      // Minor units (kobo)
+  price       BigInt   // Minor units (kobo)
   currency    String   @default("NGN")
   displayName String?
   description String?
@@ -200,10 +200,10 @@ model Support {
   id            String   @id @default(uuid())
   supporterId   String
   creatorId     String
-  subtotal      Int      // Minor units
-  platformFee   Int      // Minor units
-  creatorAmount Int      // Minor units
-  totalAmount   Int      // Minor units (creatorAmount + platformFee)
+  subtotal      BigInt   // Minor units
+  platformFee   BigInt   // Minor units
+  creatorAmount BigInt   // Minor units
+  totalAmount   BigInt   // Minor units (creatorAmount + platformFee)
   currency      String   @default("NGN")
   message       String?
   isAnonymous   Boolean  @default(false)
@@ -227,9 +227,9 @@ model SupportItem {
   supportId            String
   creatorMaterialId    String
   materialNameSnapshot String   // Historical snapshot of material name
-  unitPrice            Int      // Historical price snapshot in minor units
+  unitPrice            BigInt   // Historical price snapshot in minor units
   quantity             Int      // Must be > 0
-  totalPrice           Int      // unitPrice * quantity
+  totalPrice           BigInt   // unitPrice * quantity
   currency             String   @default("NGN")
   createdAt            DateTime @default(now())
 
@@ -245,7 +245,7 @@ model Payment {
   provider             String    @default("PAYSTACK")
   providerReference    String
   providerTransactionId String?
-  amount               Int       // Minor units
+  amount               BigInt    // Minor units
   currency             String    @default("NGN")
   status               String    @default("PENDING") // PENDING, PROCESSING, SUCCESS, FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
   paidAt               DateTime?
@@ -282,7 +282,7 @@ model PaymentEvent {
 model Refund {
   id                String   @id @default(uuid())
   paymentId         String
-  amount            Int      // Minor units
+  amount            BigInt   // Minor units
   currency          String   @default("NGN")
   reason            String?
   providerReference String?
@@ -321,7 +321,7 @@ model LedgerEntry {
   transactionId String
   entryType     String   // SUPPORT_PAYMENT, PLATFORM_FEE, PAYOUT_RESERVATION, PAYOUT_COMPLETED, PAYOUT_REVERSED, REFUND, ADJUSTMENT
   direction     String   // CREDIT, DEBIT
-  amount        Int      // Minor units (positive integer)
+  amount        BigInt   // Minor units (positive integer)
   currency      String   @default("NGN")
   reference     String
   metadata      Json?
@@ -339,7 +339,7 @@ model Payout {
   id                String    @id @default(uuid())
   creatorId         String
   accountId         String
-  amount            Int       // Minor units
+  amount            BigInt    // Minor units
   currency          String    @default("NGN")
   status            String    @default("REQUESTED") // REQUESTED, PENDING, PROCESSING, SUCCESS, FAILED, CANCELLED
   provider          String    @default("PAYSTACK")

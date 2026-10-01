@@ -55,6 +55,7 @@ import { AuditLogInterceptor } from './modules/admin/interceptors/audit-log.inte
         autoLogging: false,
       },
     }),
+    EventEmitterModule.forRoot(),
     TerminusModule,
     DatabaseModule,
     InfrastructurePaymentsModule,
