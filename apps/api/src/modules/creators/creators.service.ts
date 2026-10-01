@@ -636,10 +636,16 @@ export class CreatorsService {
       );
     }
 
+    const catalogueMap = new Map(catalogueMaterials.map((c) => [c.id, c]));
+
     // Use a transaction: upsert each submitted material, deactivate the rest
     await this.prisma.$transaction(async (tx) => {
       // Upsert each material the creator wants active
       for (const item of dto.materials) {
+        const defaultPrice =
+          catalogueMap.get(item.materialId)?.defaultPrice ?? 100000;
+        const price = item.price ?? defaultPrice;
+
         await tx.creatorMaterial.upsert({
           where: {
             creatorId_materialId: {
@@ -650,12 +656,12 @@ export class CreatorsService {
           create: {
             creatorId: profile.id,
             materialId: item.materialId,
-            price: item.price,
+            price,
             displayName: item.displayName || null,
             status: 'ACTIVE',
           },
           update: {
-            price: item.price,
+            price,
             displayName: item.displayName || null,
             status: 'ACTIVE',
           },

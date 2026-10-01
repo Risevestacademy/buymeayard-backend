@@ -147,4 +147,43 @@ describe('MaterialsService', () => {
       expect(result.updatedCreatorMaterialsCount).toBe(12);
     });
   });
+
+  describe('calculate', () => {
+    beforeEach(() => {
+      mockPrisma.material.findMany.mockResolvedValue([
+        { id: '1', name: 'Ankara', defaultPrice: 100000, currency: 'NGN' },
+      ]);
+    });
+
+    it('should calculate yards from amount (e.g. 50,000 NGN -> 50 yards at 1,000 NGN/yard)', async () => {
+      const result = await service.calculate(50000);
+      expect(result.basePricePerYard).toBe(1000);
+      expect(result.calculatedYards).toBe(50);
+      expect(result.effectiveAmount).toBe(50000);
+      expect(result.remainder).toBe(0);
+      expect(result.summary).toContain('50,000 NGN gifts 50 yards');
+    });
+
+    it('should handle amount with remainder (e.g. 5,500 NGN -> 5 yards, 500 remainder)', async () => {
+      const result = await service.calculate(5500);
+      expect(result.calculatedYards).toBe(5);
+      expect(result.effectiveAmount).toBe(5000);
+      expect(result.remainder).toBe(500);
+    });
+
+    it('should calculate total amount from yards (e.g. 50 yards -> 50,000 NGN)', async () => {
+      const result = await service.calculate(undefined, 50);
+      expect(result.yards).toBe(50);
+      expect(result.totalAmount).toBe(50000);
+      expect(result.totalAmountMinor).toBe(5000000);
+      expect(result.summary).toContain('50 yards of material equals 50,000 NGN');
+    });
+
+    it('should default to 1 yard when no arguments provided', async () => {
+      const result = await service.calculate();
+      expect(result.yards).toBe(1);
+      expect(result.totalAmount).toBe(1000);
+    });
+  });
 });
+

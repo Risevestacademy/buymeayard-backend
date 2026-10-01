@@ -127,6 +127,48 @@ export class MaterialsService {
     };
   }
 
+  async calculate(amount?: number, yards?: number) {
+    const basePriceInfo = await this.getBasePrice();
+    const basePricePerYard = basePriceInfo.basePrice;
+    const basePriceMinor = basePriceInfo.basePriceMinor;
+    const currency = basePriceInfo.currency;
+
+    if (amount !== undefined && !isNaN(amount) && amount > 0) {
+      const calculatedYards = Math.floor(amount / basePricePerYard);
+      const effectiveAmount = calculatedYards * basePricePerYard;
+      const remainder = amount - effectiveAmount;
+
+      return {
+        basePricePerYard,
+        basePriceMinor,
+        currency,
+        inputAmount: amount,
+        calculatedYards,
+        effectiveAmount,
+        effectiveAmountMinor: MoneyUtil.toMinorUnits(effectiveAmount),
+        remainder,
+        summary: `${amount.toLocaleString()} ${currency} gifts ${calculatedYards} yard${calculatedYards === 1 ? '' : 's'} of material at ${basePricePerYard.toLocaleString()} ${currency} per yard.`,
+      };
+    }
+
+    const yardQty =
+      yards !== undefined && !isNaN(yards) && yards > 0
+        ? Math.round(yards)
+        : 1;
+    const totalAmount = yardQty * basePricePerYard;
+    const totalAmountMinor = yardQty * basePriceMinor;
+
+    return {
+      basePricePerYard,
+      basePriceMinor,
+      currency,
+      yards: yardQty,
+      totalAmount,
+      totalAmountMinor,
+      summary: `${yardQty} yard${yardQty === 1 ? '' : 's'} of material equals ${totalAmount.toLocaleString()} ${currency} at ${basePricePerYard.toLocaleString()} ${currency} per yard.`,
+    };
+  }
+
   private async ensureDefaultCatalogue(priceMinor: number, currency: string) {
     const created: any[] = [];
     for (const m of DEFAULT_PLATFORM_MATERIALS) {

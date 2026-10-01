@@ -65,4 +65,15 @@ describe('MaterialsController', () => {
     expect(res.name).toBe('Ankara');
     expect(mockService.findCatalogueBySlug).toHaveBeenCalledWith('ankara');
   });
+
+  it('should calculate yards or amount', async () => {
+    (mockService as any).calculate = jest.fn().mockResolvedValue({
+      calculatedYards: 50,
+      effectiveAmount: 50000,
+    });
+
+    const res = await controller.calculate('50000', undefined);
+    expect(res.calculatedYards).toBe(50);
+    expect((mockService as any).calculate).toHaveBeenCalledWith(50000, undefined);
+  });
 });

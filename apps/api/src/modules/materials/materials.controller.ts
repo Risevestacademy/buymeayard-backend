@@ -1,7 +1,16 @@
-import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -35,6 +44,38 @@ export class MaterialsController {
   })
   async getBasePrice() {
     return this.materialsService.getBasePrice();
+  }
+
+  @Public()
+  @Get('calculate')
+  @ApiOperation({
+    summary:
+      'Calculate yards from amount or amount from yards using universal base price',
+  })
+  @ApiQuery({
+    name: 'amount',
+    required: false,
+    type: Number,
+    description: 'Amount in major currency units (e.g. 50000 NGN)',
+  })
+  @ApiQuery({
+    name: 'yards',
+    required: false,
+    type: Number,
+    description: 'Number of yards to calculate cost for (e.g. 50)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Calculation result returned successfully.',
+  })
+  async calculate(
+    @Query('amount') amount?: string,
+    @Query('yards') yards?: string,
+  ) {
+    return this.materialsService.calculate(
+      amount ? Number(amount) : undefined,
+      yards ? Number(yards) : undefined,
+    );
   }
 
   @Patch('base-price')
