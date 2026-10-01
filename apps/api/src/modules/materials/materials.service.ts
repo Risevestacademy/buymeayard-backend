@@ -16,9 +16,14 @@ const DEFAULT_PLATFORM_MATERIALS = [
     description: 'Traditional vibrant African wax print fabric',
   },
   {
-    name: 'Lace',
-    slug: 'lace',
-    description: 'Intricate and elegant luxury lace fabric',
+    name: 'Adire',
+    slug: 'adire',
+    description: 'Indigo-dyed patterned fabric from Nigeria',
+  },
+  {
+    name: 'Ochafu',
+    slug: 'ochafu',
+    description: 'Classic traditional woven textile fabric from Nigeria',
   },
   {
     name: 'Aso-Oke',
@@ -26,9 +31,14 @@ const DEFAULT_PLATFORM_MATERIALS = [
     description: 'Hand-woven prestige cloth from Nigeria',
   },
   {
-    name: 'Adire',
-    slug: 'adire',
-    description: 'Indigo-dyed patterned fabric from Nigeria',
+    name: 'Akwete',
+    slug: 'akwete',
+    description: 'Distinctive hand-woven textile cloth from Nigeria',
+  },
+  {
+    name: 'Lace',
+    slug: 'lace',
+    description: 'Intricate and elegant luxury lace fabric',
   },
 ];
 

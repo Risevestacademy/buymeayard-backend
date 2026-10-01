@@ -60,8 +60,8 @@ describe('MaterialsService', () => {
       );
 
       const result = await service.findAllCatalogue();
-      expect(mockPrisma.material.upsert).toHaveBeenCalledTimes(4);
-      expect(result.length).toBe(4);
+      expect(mockPrisma.material.upsert).toHaveBeenCalledTimes(6);
+      expect(result.length).toBe(6);
     });
   });
 
