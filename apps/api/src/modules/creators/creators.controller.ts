@@ -3,6 +3,7 @@ import {
   Get,
   Put,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -40,6 +41,8 @@ import {
 } from './dto/creator-response.dto';
 import { CheckSlugResponseDto } from './dto/check-slug.dto';
 import { CreatorShareLinkResponseDto } from './dto/share-link.dto';
+import { UpdateSupporterSettingsDto } from './dto/update-supporter-settings.dto';
+import { UpdatePageStatusDto } from './dto/update-page-status.dto';
 
 @ApiTags('creators')
 @Controller('creators')
@@ -334,6 +337,78 @@ export class CreatorsController {
     @Body() dto: CreateCustomMaterialDto,
   ) {
     return this.creatorsService.createCustomMaterial(userId, dto);
+  }
+
+  @Patch('me/supporter-settings')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Update supporter interactions settings',
+    description:
+      'Updates supporter interaction settings such as the personalized thank-you message shown after payment and in receipt emails.',
+  })
+  @ApiBody({ type: UpdateSupporterSettingsDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Supporter settings updated successfully.',
+    type: CreatorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid session token.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator profile not found.',
+    type: ApiErrorResponseDto,
+  })
+  async updateSupporterSettings(
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdateSupporterSettingsDto,
+  ) {
+    const profile = await this.creatorsService.updateSupporterSettings(
+      userId,
+      dto,
+    );
+    return this.creatorsService.formatCreatorProfile(profile);
+  }
+
+  @Patch('me/page-status')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Publish or unpublish creator support page',
+    description:
+      'Toggles public availability of the creator page. When publishing (isPublished = true), validates that all required setup fields (creatorName, slug, bio, avatar, thank-you message, and active materials) are fulfilled.',
+  })
+  @ApiBody({ type: UpdatePageStatusDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Creator page status updated successfully.',
+    type: CreatorResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Cannot publish profile — required setup fields are incomplete.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid session token.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator profile not found.',
+    type: ApiErrorResponseDto,
+  })
+  async updatePageStatus(
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdatePageStatusDto,
+  ) {
+    const profile = await this.creatorsService.updatePageStatus(userId, dto);
+    return this.creatorsService.formatCreatorProfile(profile);
   }
 
   @Get('me/share-link')

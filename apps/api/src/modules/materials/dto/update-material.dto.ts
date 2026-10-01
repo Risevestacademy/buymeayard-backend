@@ -35,6 +35,30 @@ export class UpdateMaterialDto {
   imageUrl?: string;
 
   @ApiPropertyOptional({
+    example: 'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill/materials/ankara-sm',
+    description: 'Updated small thumbnail URL for fabric cards/grids',
+  })
+  @IsOptional()
+  @IsString()
+  thumbnailSmallUrl?: string;
+
+  @ApiPropertyOptional({
+    example: 'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill/materials/ankara-lg',
+    description: 'Updated large thumbnail URL for detail preview',
+  })
+  @IsOptional()
+  @IsString()
+  thumbnailLargeUrl?: string;
+
+  @ApiPropertyOptional({
+    example: '#7F3516',
+    description: 'Updated hexadecimal color representation for UI theme/swatch',
+  })
+  @IsOptional()
+  @IsString()
+  color?: string;
+
+  @ApiPropertyOptional({
     example: 'ACTIVE',
     enum: ['ACTIVE', 'INACTIVE'],
     description: 'Availability status of the material',
@@ -43,3 +67,4 @@ export class UpdateMaterialDto {
   @IsIn(['ACTIVE', 'INACTIVE'])
   status?: string;
 }
+

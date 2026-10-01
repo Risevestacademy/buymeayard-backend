@@ -78,6 +78,27 @@ export class PlatformMaterialDto {
   })
   basePrice: number;
 
+  @ApiPropertyOptional({
+    example: 'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill/materials/ankara-sm',
+    description: 'Small thumbnail image URL for card/grid display (approx 80x80)',
+    nullable: true,
+  })
+  thumbnailSmallUrl?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill/materials/ankara-lg',
+    description: 'Large preview thumbnail URL for material detail views (approx 400x400)',
+    nullable: true,
+  })
+  thumbnailLargeUrl?: string | null;
+
+  @ApiPropertyOptional({
+    example: '#7F3516',
+    description: 'Hexadecimal color code for theme swatch (e.g. #7F3516)',
+    nullable: true,
+  })
+  color?: string | null;
+
   @ApiProperty({
     example: 'ACTIVE',
     description: 'Platform material status',
@@ -118,6 +139,45 @@ export class CreatorMaterialResponseDto {
     nullable: true,
   })
   displayName?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Ankara',
+    description: 'Material name',
+  })
+  name?: string;
+
+  @ApiPropertyOptional({
+    example: 'ankara',
+    description: 'Material slug handle',
+  })
+  slug?: string;
+
+  @ApiPropertyOptional({
+    example: '#7F3516',
+    description: 'Hexadecimal color representation (e.g. #7F3516)',
+    nullable: true,
+  })
+  color?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill/materials/ankara-sm',
+    description: 'Small thumbnail image URL for card/grid display (approx 80x80)',
+    nullable: true,
+  })
+  thumbnailSmallUrl?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill/materials/ankara-lg',
+    description: 'Large preview thumbnail URL for material detail views (approx 400x400)',
+    nullable: true,
+  })
+  thumbnailLargeUrl?: string | null;
+
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Whether this is a creator custom material',
+  })
+  isCustom?: boolean;
 
   @ApiProperty({
     example: 'ACTIVE',
@@ -192,6 +252,26 @@ export class CreatorProfileDataDto {
     nullable: true,
   })
   avatarUrl?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Thank you so much for your support! 🙏 I appreciate every yard.',
+    description: 'Personalized thank-you message shown after payment and in receipt email.',
+    nullable: true,
+  })
+  thankYouMessage?: string | null;
+
+  @ApiProperty({
+    example: true,
+    description:
+      'Whether to display supporter count and public contributions on the creator page',
+  })
+  showSupportersOnPage: boolean;
+
+  @ApiProperty({
+    example: false,
+    description: 'Whether the creator support page is publicly visible',
+  })
+  isPublished: boolean;
 
   @ApiProperty({
     example: 'PROFILE_CREATED',

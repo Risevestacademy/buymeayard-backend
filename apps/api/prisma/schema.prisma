@@ -112,16 +112,19 @@ model UserRole {
 // --------------------------------------------------------
 
 model CreatorProfile {
-  id             String              @id @default(uuid())
-  userId         String              @unique
-  creatorName    String?
-  slug           String              @unique
-  bio            String?
-  avatarUrl      String?
-  status         String              @default("REGISTERED") // REGISTERED, PROFILE_CREATED, KYC_PENDING, VERIFIED, ACTIVE, SUSPENDED, BANNED, DEACTIVATED
-  kycStatus      String              @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  id               String              @id @default(uuid())
+  userId           String              @unique
+  creatorName      String?
+  slug             String              @unique
+  bio              String?
+  avatarUrl        String?
+  thankYouMessage       String?             // Shown after payment and in receipt email
+  showSupportersOnPage  Boolean             @default(true) // Display supporter count and public contributions
+  isPublished           Boolean             @default(false) // Must pass completeness check to publish
+  status           String              @default("REGISTERED") // REGISTERED, PROFILE_CREATED, KYC_PENDING, VERIFIED, ACTIVE, SUSPENDED, BANNED, DEACTIVATED
+  kycStatus        String              @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
 
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   socialLinks    CreatorSocialLink[]
@@ -156,17 +159,20 @@ model CreatorSocialLink {
 // --------------------------------------------------------
 
 model Material {
-  id           String   @id @default(uuid())
-  creatorId    String?  // null for platform materials; creator profile id for custom creator materials
-  name         String   // Ankara, Lace, Aso-oke, Adire or custom
-  slug         String   @unique
-  description  String?
-  imageUrl     String?
-  defaultPrice Int      @default(0) // Minor units (kobo)
-  currency     String   @default("NGN")
-  status       String   @default("ACTIVE")
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  creatorId          String?  // null for platform materials; creator profile id for custom creator materials
+  name               String   // Ankara, Lace, Aso-oke, Adire or custom
+  slug               String   @unique
+  description        String?
+  imageUrl           String?  // Legacy / fallback image
+  thumbnailSmallUrl  String?  // Small card thumbnail (e.g. 80x80 for grid selectors)
+  thumbnailLargeUrl  String?  // Large preview image (e.g. 400x400 for material detail)
+  color              String?  // Hexadecimal color code (e.g. #7F3516)
+  defaultPrice       Int      @default(0) // Minor units (kobo)
+  currency           String   @default("NGN")
+  status             String   @default("ACTIVE")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   creator          CreatorProfile?   @relation("CustomMaterials", fields: [creatorId], references: [id], onDelete: Cascade)
   creatorMaterials CreatorMaterial[]

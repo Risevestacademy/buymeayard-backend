@@ -19,6 +19,8 @@ describe('CreatorsController', () => {
     createCustomMaterial: jest.Mock;
     getShareLink: jest.Mock;
     getShareLinkBySlug: jest.Mock;
+    updateSupporterSettings: jest.Mock;
+    updatePageStatus: jest.Mock;
   };
 
   const rawCreatorProfile = {
@@ -47,6 +49,8 @@ describe('CreatorsController', () => {
       createCustomMaterial: jest.fn(),
       getShareLink: jest.fn(),
       getShareLinkBySlug: jest.fn(),
+      updateSupporterSettings: jest.fn(),
+      updatePageStatus: jest.fn(),
       formatCreatorProfile: jest.fn((p) => {
         if (!p) return p;
         const {
@@ -319,6 +323,47 @@ describe('CreatorsController', () => {
 
       expect(creatorsService.getShareLinkBySlug).toHaveBeenCalledWith('adeola');
       expect(result).toEqual(mockShareData);
+    });
+  });
+
+  describe('updateSupporterSettings (PATCH /creators/me/supporter-settings)', () => {
+    it('should update thank-you message and showSupportersOnPage flag', async () => {
+      creatorsService.updateSupporterSettings.mockResolvedValue({
+        ...rawCreatorProfile,
+        thankYouMessage: 'Thank you for your generous yards! 🙏',
+        showSupportersOnPage: true,
+      });
+
+      const result = await controller.updateSupporterSettings('user-1', {
+        thankYouMessage: 'Thank you for your generous yards! 🙏',
+        showSupportersOnPage: true,
+      });
+
+      expect(creatorsService.updateSupporterSettings).toHaveBeenCalledWith('user-1', {
+        thankYouMessage: 'Thank you for your generous yards! 🙏',
+        showSupportersOnPage: true,
+      });
+      expect(creatorsService.formatCreatorProfile).toHaveBeenCalled();
+      expect(result.thankYouMessage).toBe('Thank you for your generous yards! 🙏');
+    });
+  });
+
+  describe('updatePageStatus (PATCH /creators/me/page-status)', () => {
+    it('should update page published status and format profile', async () => {
+      creatorsService.updatePageStatus.mockResolvedValue({
+        ...rawCreatorProfile,
+        isPublished: true,
+      });
+
+      const result = await controller.updatePageStatus('user-1', {
+        isPublished: true,
+      });
+
+      expect(creatorsService.updatePageStatus).toHaveBeenCalledWith('user-1', {
+        isPublished: true,
+      });
+      expect(creatorsService.formatCreatorProfile).toHaveBeenCalled();
+      expect(result.isPublished).toBe(true);
     });
   });
 });

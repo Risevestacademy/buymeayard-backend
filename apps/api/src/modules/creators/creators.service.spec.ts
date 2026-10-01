@@ -230,6 +230,54 @@ describe('CreatorsService', () => {
       expect(formatted.lastName).toBeUndefined();
       expect(formatted.username).toBeUndefined();
       expect(formatted.personalizedLink).toBeUndefined();
+
+      // Assert live and supporter flags
+      expect(formatted.showSupportersOnPage).toBe(true);
+      expect(formatted.isPublished).toBe(false);
+    });
+
+    it('should include formatted material info with thumbnails, color, and price', () => {
+      const formatted = service.formatCreatorProfile({
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
+        materials: [
+          {
+            id: 'cm-1',
+            creatorId: 'c-1',
+            materialId: 'm-1',
+            price: 150000,
+            currency: 'NGN',
+            displayName: 'Special Ankara',
+            material: {
+              id: 'm-1',
+              name: 'Ankara',
+              slug: 'ankara',
+              description: 'African print',
+              color: '#7F3516',
+              thumbnailSmallUrl: 'https://cdn.example.com/ankara-sm.png',
+              thumbnailLargeUrl: 'https://cdn.example.com/ankara-lg.png',
+              defaultPrice: 100000,
+              currency: 'NGN',
+              status: 'ACTIVE',
+            },
+          },
+        ],
+      });
+
+      expect(formatted.materials).toHaveLength(1);
+      expect(formatted.materials[0].name).toBe('Ankara');
+      expect(formatted.materials[0].displayName).toBe('Special Ankara');
+      expect(formatted.materials[0].color).toBe('#7F3516');
+      expect(formatted.materials[0].thumbnailSmallUrl).toBe(
+        'https://cdn.example.com/ankara-sm.png',
+      );
+      expect(formatted.materials[0].thumbnailLargeUrl).toBe(
+        'https://cdn.example.com/ankara-lg.png',
+      );
+      expect(formatted.materials[0].price).toBe(150000);
+      expect(formatted.materials[0].isCustom).toBe(false);
+      expect(formatted.materials[0].material).toBeDefined();
+      expect(formatted.materials[0].material.color).toBe('#7F3516');
     });
   });
 
@@ -637,6 +685,130 @@ describe('CreatorsService', () => {
       await expect(service.getShareLinkBySlug('nonexistent')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('updateSupporterSettings', () => {
+    it('should update thank-you message', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        thankYouMessage: 'Thank you for your generosity! 🎉',
+      });
+
+      const res = await service.updateSupporterSettings('u-1', {
+        thankYouMessage: 'Thank you for your generosity! 🎉',
+      });
+
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: {
+            thankYouMessage: 'Thank you for your generosity! 🎉',
+          },
+        }),
+      );
+      expect(res.thankYouMessage).toBe('Thank you for your generosity! 🎉');
+    });
+
+    it('should toggle showSupportersOnPage setting', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        showSupportersOnPage: false,
+      });
+
+      const res = await service.updateSupporterSettings('u-1', {
+        showSupportersOnPage: false,
+      });
+
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: {
+            showSupportersOnPage: false,
+          },
+        }),
+      );
+      expect(res.showSupportersOnPage).toBe(false);
+    });
+  });
+
+  describe('updatePageStatus', () => {
+    it('should reject publishing if required setup fields are incomplete', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        creatorName: 'Adeola',
+        slug: 'adeola',
+        bio: null, // missing bio
+        avatarUrl: null, // missing avatar
+        thankYouMessage: null, // missing thank-you message
+        materials: [], // missing materials
+      });
+
+      await expect(
+        service.updatePageStatus('u-1', { isPublished: true }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should allow publishing when all required setup fields are filled', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
+        bio: 'Fashion designer in Lagos',
+        avatarUrl: 'https://example.com/avatar.jpg',
+        thankYouMessage: 'Thank you so much! 🙏',
+        materials: [{ id: 'cm-1', status: 'ACTIVE' }],
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        isPublished: true,
+      });
+
+      const res = await service.updatePageStatus('u-1', { isPublished: true });
+
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: { isPublished: true },
+        }),
+      );
+      expect(res.isPublished).toBe(true);
+    });
+
+    it('should allow unpublishing without validating completeness', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        creatorName: null,
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        isPublished: false,
+      });
+
+      const res = await service.updatePageStatus('u-1', { isPublished: false });
+
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: { isPublished: false },
+        }),
+      );
+      expect(res.isPublished).toBe(false);
     });
   });
 });
