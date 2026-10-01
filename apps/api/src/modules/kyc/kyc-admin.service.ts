@@ -23,7 +23,7 @@ import { KycQueueQueryDto } from './dto/admin-kyc.dto';
 
 const CREATOR_SELECT = {
   id: true,
-  username: true,
+  slug: true,
   status: true,
   kycStatus: true,
   kycVerifiedAt: true,

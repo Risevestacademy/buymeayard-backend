@@ -4,6 +4,7 @@ import { fromNodeHeaders } from '../../common/utils/headers.util';
 import type { IncomingHttpHeaders } from 'http';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { createBetterAuth, AuthInstance } from './better-auth';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -13,10 +14,11 @@ export class AuthService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   onModuleInit() {
-    this.auth = createBetterAuth(this.prisma, {
+    this.auth = createBetterAuth(this.prisma, this.eventEmitter, {
       secret: this.configService.get<string>('BETTER_AUTH_SECRET'),
       baseURL: this.configService.get<string>('BETTER_AUTH_URL'),
     });
@@ -72,6 +74,30 @@ export class AuthService implements OnModuleInit {
     });
   }
 
+  async signInSocial(params: {
+    provider: string;
+    callbackURL?: string;
+    errorCallbackURL?: string;
+    newUserCallbackURL?: string;
+    headers?: Headers;
+  }): Promise<{ url: string; redirect: boolean }> {
+    const defaultCallback =
+      this.configService.get<string>('BETTER_AUTH_URL') ||
+      'http://localhost:3000';
+
+    const res = await (this.getAuth().api as any).signInSocial({
+      body: {
+        provider: params.provider,
+        callbackURL: params.callbackURL || defaultCallback,
+        errorCallbackURL: params.errorCallbackURL,
+        newUserCallbackURL: params.newUserCallbackURL,
+      },
+      ...(params.headers ? { headers: params.headers } : {}),
+    });
+
+    return res as { url: string; redirect: boolean };
+  }
+
   async signOut(params?: { headers?: Headers }): Promise<globalThis.Response> {
     const headers = params?.headers || new Headers();
     return this.getAuth().api.signOut({
@@ -82,12 +108,16 @@ export class AuthService implements OnModuleInit {
 
   async forgotPassword(params: {
     email: string;
+    from?: string;
     headers?: Headers;
   }): Promise<globalThis.Response> {
+    const redirectTo = params.from
+      ? `/reset-password?from=${encodeURIComponent(params.from)}`
+      : '/reset-password';
     return this.getAuth().api.requestPasswordReset({
       body: {
         email: params.email,
-        redirectTo: '/reset-password',
+        redirectTo,
       },
       ...(params.headers ? { headers: params.headers } : {}),
       asResponse: true,
@@ -159,13 +189,27 @@ export class AuthService implements OnModuleInit {
 
   /**
    * Returns whether a user has completed creator onboarding
-   * (i.e. a CreatorProfile exists for them).
+   * (i.e. a CreatorProfile exists and status is not REGISTERED).
    */
   async getIsOnboarded(userId: string): Promise<boolean> {
     const profile = await this.prisma.creatorProfile.findUnique({
       where: { userId },
-      select: { id: true },
+      select: { id: true, status: true },
     });
-    return profile !== null;
+    return profile !== null && profile.status !== 'REGISTERED';
+  }
+
+  /**
+   * Returns onboarding and profile setup completion flags for a user.
+   */
+  async getUserAuthFlags(userId: string): Promise<{
+    isOnboardingCompleted: boolean;
+    isProfileSetupCompleted: boolean;
+  }> {
+    const isCompleted = await this.getIsOnboarded(userId);
+    return {
+      isOnboardingCompleted: isCompleted,
+      isProfileSetupCompleted: isCompleted,
+    };
   }
 }

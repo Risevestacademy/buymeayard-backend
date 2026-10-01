@@ -33,11 +33,11 @@ From the repo root:
 pnpm install
 pnpm --filter @buymeayard/types build
 pnpm db:up                    # Postgres + Redis in Docker
-pnpm db:migrate               # applies all migrations, including 20260927120000_kyc_didit_integration
+pnpm db:migrate               # applies all migrations, including 20261001120000_kyc_didit_integration
 cd apps/api && pnpm prisma db seed && cd ../..   # roles + super admin
 ```
 
-> **Check the KYC migration is applied.** If `npx prisma migrate status` (run in `apps/api`) lists `20260927120000_kyc_didit_integration` as not yet applied, every KYC request will fail with a 500.
+> **Check the KYC migration is applied.** If `npx prisma migrate status` (run in `apps/api`) lists `20261001120000_kyc_didit_integration` as not yet applied, every KYC request will fail with a 500.
 
 ### 2.2 Seed the materials catalogue
 

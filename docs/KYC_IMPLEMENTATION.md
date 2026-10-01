@@ -72,7 +72,7 @@ The old `POST /creators/me/kyc` (which stored arbitrary JSON) is removed. Creato
 
 ## 4. Data model
 
-Migration `20260927120000_kyc_didit_integration`:
+Migration `20261001120000_kyc_didit_integration`:
 
 - **`kyc_submissions`**: one row per verification attempt.
   - `providerReference` holds the Didit session ID, with `@@unique([provider, providerReference])`.
@@ -287,13 +287,13 @@ The unit tests cover:
   - The Paystack provider is mocked, and its signature comparison isn't constant-time.
   - The ledger write happens outside the payment transaction.
   - `GET /supports/:id` and `POST /payments/initialize` have no ownership checks.
-  - `GET /creators/:username/posts` never sees the viewer.
+  - `GET /creators/:slug/posts` never sees the viewer.
 
 ## 13. File map
 
 ```
 packages/types/src/enums.ts, kyc.ts          shared enums + request/response types
-apps/api/prisma/schema.prisma, migrations/20260927120000_kyc_didit_integration/
+apps/api/prisma/schema.prisma, migrations/20261001120000_kyc_didit_integration/
 apps/api/src/config/env.validation.ts        Didit env vars (required in production)
 apps/api/src/infrastructure/kyc/             provider interface, Didit client, signature, mapper
 apps/api/src/modules/kyc/                    state rules, transition engine, services, controllers, DTOs

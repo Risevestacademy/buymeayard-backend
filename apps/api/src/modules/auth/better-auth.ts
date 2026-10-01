@@ -3,16 +3,43 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
+import { isMobileRequest } from '../../common/utils/client-detection.util';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { USER_EVENTS } from '../analytics/events/user.events';
 
 export interface BetterAuthOptions {
   secret?: string;
   baseURL?: string;
 }
 
+function isEventEmitter(val: unknown): val is EventEmitter2 {
+  return (
+    val !== null &&
+    typeof val === 'object' &&
+    typeof (val as Record<string, unknown>).emit === 'function'
+  );
+}
+
 export function createBetterAuth(
   prisma: PrismaClient,
-  options?: BetterAuthOptions,
+  eventEmitterOrOptions?: EventEmitter2 | BetterAuthOptions,
+  maybeOptions?: BetterAuthOptions,
 ) {
+  let eventEmitter: EventEmitter2 | undefined;
+  let options: BetterAuthOptions | undefined;
+
+  if (isEventEmitter(eventEmitterOrOptions)) {
+    eventEmitter = eventEmitterOrOptions;
+    options = maybeOptions;
+  } else if (
+    eventEmitterOrOptions &&
+    typeof eventEmitterOrOptions === 'object'
+  ) {
+    options = eventEmitterOrOptions;
+    eventEmitter = undefined;
+  } else {
+    options = maybeOptions;
+  }
   const emailFrom =
     process.env.EMAIL_FROM || 'BuyMeAYard <buymeayard@gmail.com>';
   const smtpPort = parseInt(process.env.SMTP_PORT || '587');
@@ -104,6 +131,13 @@ export function createBetterAuth(
       'https://buymeayard-main-dev.up.railway.app',
       'https://buymeayard-creator-dev.up.railway.app',
       'https://buymeayard-admin-dev.up.railway.app',
+      'buymeayard://',
+      'buymeayard://*',
+      'exp://',
+      'exp://*',
+      ...(process.env.ADDITIONAL_TRUSTED_ORIGINS
+        ? process.env.ADDITIONAL_TRUSTED_ORIGINS.split(',').map((o) => o.trim())
+        : []),
     ],
     database: prismaAdapter(prisma, {
       provider: 'postgresql',
@@ -141,10 +175,54 @@ export function createBetterAuth(
     emailAndPassword: {
       enabled: true,
       requireEmailVerification: false,
-      sendResetPassword: async ({ user, url, token: _token }) => {
+      sendResetPassword: async ({ user, url, token: _token }, request) => {
         const baseUrl = await getFrontendUrlForReset(user.id);
-        const token = new URL(url).searchParams.get('token');
-        const frontendLink = `${baseUrl}/reset-password?token=${token}`;
+        let token =
+          _token && _token !== 'null' && _token !== 'undefined'
+            ? _token
+            : undefined;
+        if (!token) {
+          try {
+            const parsedUrl = new URL(url);
+            token =
+              parsedUrl.pathname
+                .split('/reset-password/')[1]
+                ?.split('/')[0]
+                ?.split('?')[0] ||
+              parsedUrl.searchParams.get('token') ||
+              undefined;
+          } catch {
+            token = undefined;
+          }
+        }
+
+        if (!token) {
+          console.error(
+            `[Auth] Could not extract reset password token for ${user.email} from url=${url}, token=${_token}`,
+          );
+        }
+
+        // Determine if "from" param should be appended (e.g. ?from=mobile)
+        let from: string | undefined;
+        try {
+          const callbackURL = new URL(url).searchParams.get('callbackURL');
+          if (callbackURL) {
+            const decoded = decodeURIComponent(callbackURL);
+            const dummyUrl = new URL(decoded, 'http://localhost');
+            from = dummyUrl.searchParams.get('from') || undefined;
+          }
+        } catch {
+          // fallback
+        }
+
+        if (!from && request?.headers) {
+          if (isMobileRequest(request.headers)) {
+            from = 'mobile';
+          }
+        }
+
+        const fromQuery = from ? `&from=${encodeURIComponent(from)}` : '';
+        const frontendLink = `${baseUrl}/reset-password?token=${token || ''}${fromQuery}`;
         sendEmail(
           user.email,
           'Reset Your Password - BuyMeAYard',
@@ -158,8 +236,32 @@ export function createBetterAuth(
       sendOnSignUp: true,
       sendVerificationEmail: async ({ user, url, token: _token }) => {
         // Always use creator URL — only creators self-register
-        const token = new URL(url).searchParams.get('token');
-        const frontendLink = `${frontendUrls.creator}/verify-email?token=${token}`;
+        let token =
+          _token && _token !== 'null' && _token !== 'undefined'
+            ? _token
+            : undefined;
+        if (!token) {
+          try {
+            const parsedUrl = new URL(url);
+            token =
+              parsedUrl.searchParams.get('token') ||
+              parsedUrl.pathname
+                .split('/verify-email/')[1]
+                ?.split('/')[0]
+                ?.split('?')[0] ||
+              undefined;
+          } catch {
+            token = undefined;
+          }
+        }
+
+        if (!token) {
+          console.error(
+            `[Auth] Could not extract verification token for ${user.email} from url=${url}, token=${_token}`,
+          );
+        }
+
+        const frontendLink = `${frontendUrls.creator}/verify-email?token=${token || ''}`;
         sendEmail(
           user.email,
           'Verify Your Email - BuyMeAYard',
@@ -187,6 +289,49 @@ export function createBetterAuth(
       },
     },
     databaseHooks: {
+      user: {
+        create: {
+          after: async (user: any) => {
+            if (eventEmitter) {
+              eventEmitter.emit(USER_EVENTS.CREATED, {
+                userId: user.id,
+                email: user.email,
+                name: user.name ?? undefined,
+              });
+            }
+          },
+        },
+      },
+      /**
+       * Session Creation Lifecycle Hook:
+       * In Better Auth, `session.create` is invoked exclusively when a new user authentication
+       * session is established (email/password sign-in, social OAuth callback, or new device login).
+       * Token refreshes do NOT trigger `session.create` — Better Auth updates the existing session's
+       * `expiresAt` via `session.update`.
+       * Emitting `USER_EVENTS.LOGIN` here provides complete coverage across all sign-in vectors without
+       * false positives from session refreshes.
+       */
+      session: {
+        create: {
+          after: async (session: any) => {
+            if (eventEmitter) {
+              try {
+                const user = await prisma.user.findUnique({
+                  where: { id: session.userId },
+                  select: { email: true },
+                });
+                eventEmitter.emit(USER_EVENTS.LOGIN, {
+                  userId: session.userId,
+                  email: user?.email ?? '',
+                  ipAddress: session.ipAddress ?? undefined,
+                });
+              } catch {
+                // Non-blocking for session creation
+              }
+            }
+          },
+        },
+      },
       account: {
         create: {
           after: async (account) => {
@@ -242,15 +387,6 @@ export function createBetterAuth(
             } catch (err) {
               console.error(`[Auth] Failed to sync social link:`, err);
             }
-          },
-        },
-      },
-      user: {
-        create: {
-          after: async (user) => {
-            // No roles or profiles are assigned at registration.
-            // Users complete onboarding explicitly via PUT /api/v1/creators/me/onboarding.
-            console.log(`[Auth] New user registered: ${user.id}`);
           },
         },
       },

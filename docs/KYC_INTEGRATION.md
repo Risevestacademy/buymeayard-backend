@@ -109,7 +109,7 @@ Fallbacks: redirect to `verificationUrl` (it returns to `<creator-portal>/kyc/co
 
 ## 5. Contributions are gated
 
-Until a creator is verified (`creatorStatus: "ACTIVE"`), `POST /api/v1/supports` and `POST /api/v1/payments/initialize` return **403 `CREATOR_NOT_ACTIVE`**. On the public supporter page, check `status` on `GET /api/v1/creators/:username`. If it isn't `ACTIVE`, show "Not accepting contributions yet" instead of the checkout. Payouts require both `kycStatus: "VERIFIED"` and `creatorStatus: "ACTIVE"`.
+Until a creator is verified (`creatorStatus: "ACTIVE"`), `POST /api/v1/supports` and `POST /api/v1/payments/initialize` return **403 `CREATOR_NOT_ACTIVE`**. On the public supporter page, check `status` on `GET /api/v1/creators/:slug`. If it isn't `ACTIVE`, show "Not accepting contributions yet" instead of the checkout. Payouts require both `kycStatus: "VERIFIED"` and `creatorStatus: "ACTIVE"`.
 
 ## 6. Admin portal
 

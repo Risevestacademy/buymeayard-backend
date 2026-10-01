@@ -6,6 +6,8 @@ import {
   Req,
   Res,
   All,
+  Query,
+  Param,
   HttpCode,
   HttpStatus,
   HttpException,
@@ -16,6 +18,8 @@ import {
   ApiResponse as SwaggerResponse,
   ApiBearerAuth,
   ApiHeader,
+  ApiParam,
+  ApiQuery,
   ApiExcludeEndpoint,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -29,6 +33,10 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import {
+  SocialSignInDto,
+  SocialSignInResponseDto,
+} from './dto/social-sign-in.dto';
 import { fromNodeHeaders } from '../../common/utils/headers.util';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import {
@@ -83,7 +91,11 @@ export class AuthController {
       HttpStatus.CREATED,
     );
     if (body && typeof body === 'object' && body.user?.id) {
-      body.isOnboarded = await this.authService.getIsOnboarded(body.user.id);
+      const authFlags = await this.authService.getUserAuthFlags(body.user.id);
+      Object.assign(body, authFlags);
+      if (body.user && typeof body.user === 'object') {
+        Object.assign(body.user, authFlags);
+      }
     }
     return body;
   }
@@ -115,9 +127,118 @@ export class AuthController {
     });
     const body = await this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
     if (body && typeof body === 'object' && body.user?.id) {
-      body.isOnboarded = await this.authService.getIsOnboarded(body.user.id);
+      const authFlags = await this.authService.getUserAuthFlags(body.user.id);
+      Object.assign(body, authFlags);
+      if (body.user && typeof body.user === 'object') {
+        Object.assign(body.user, authFlags);
+      }
     }
     return body;
+  }
+
+  @Public()
+  @Post('social/sign-in')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Initiate social OAuth sign-in (Google, Apple) for web and mobile',
+    description:
+      'Generates the OAuth authorization URL for the requested provider. For mobile apps (React Native), provide a custom deep link callbackURL (e.g. "buymeayard://oauth-callback") to receive the session callback in an in-app browser session.',
+  })
+  @SwaggerResponse({
+    status: 200,
+    description: 'OAuth authorization URL returned successfully.',
+    type: SocialSignInResponseDto,
+  })
+  @SwaggerResponse({
+    status: 400,
+    description: 'Invalid provider or parameters.',
+  })
+  async socialSignIn(
+    @Body() dto: SocialSignInDto,
+    @Req() req: Request,
+  ): Promise<SocialSignInResponseDto> {
+    const isMobile = isMobileRequest(req.headers);
+    const callbackURL =
+      dto.callbackURL || (isMobile ? 'buymeayard://oauth-callback' : undefined);
+
+    const result = await this.authService.signInSocial({
+      provider: dto.provider,
+      callbackURL,
+      errorCallbackURL: dto.errorCallbackURL,
+      newUserCallbackURL: dto.newUserCallbackURL,
+      headers: fromNodeHeaders(req.headers),
+    });
+
+    return {
+      url: result.url,
+      redirect: result.redirect ?? true,
+    };
+  }
+
+  @Public()
+  @Get('social/:provider')
+  @ApiOperation({
+    summary:
+      'Direct browser OAuth redirect for social provider (Google, Apple)',
+    description:
+      'Redirects browser clients directly to the provider OAuth consent screen, or returns JSON URL if requested via API.',
+  })
+  @ApiParam({
+    name: 'provider',
+    description: 'OAuth provider name (e.g. google, apple, twitter, facebook)',
+    example: 'google',
+  })
+  @ApiQuery({
+    name: 'callbackURL',
+    required: false,
+    description:
+      'Where to redirect after OAuth authentication (e.g. "buymeayard://oauth-callback" or "http://localhost:3000/dashboard")',
+    example: 'buymeayard://oauth-callback',
+  })
+  @ApiQuery({
+    name: 'redirect',
+    required: false,
+    type: Boolean,
+    description: 'Set to false to return JSON URL instead of 302 redirect',
+  })
+  @SwaggerResponse({
+    status: 302,
+    description: 'Redirects browser to OAuth provider login.',
+  })
+  @SwaggerResponse({
+    status: 200,
+    description: 'JSON URL returned if redirect=false or JSON requested.',
+    type: SocialSignInResponseDto,
+  })
+  async directSocialRedirect(
+    @Param('provider') provider: string,
+    @Query('callbackURL') callbackURL: string | undefined,
+    @Query('redirect') redirectParam: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const isMobile = isMobileRequest(req.headers);
+    const effectiveCallback =
+      callbackURL || (isMobile ? 'buymeayard://oauth-callback' : undefined);
+
+    const result = await this.authService.signInSocial({
+      provider,
+      callbackURL: effectiveCallback,
+      headers: fromNodeHeaders(req.headers),
+    });
+
+    const wantsJson =
+      redirectParam === 'false' ||
+      (req.headers.accept && req.headers.accept.includes('application/json'));
+
+    if (wantsJson) {
+      return res.status(HttpStatus.OK).json({
+        url: result.url,
+        redirect: result.redirect ?? true,
+      });
+    }
+
+    return res.redirect(result.url);
   }
 
   @Public()
@@ -179,8 +300,11 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const isMobile = isMobileRequest(req.headers);
+    const from = dto.from || (isMobile ? 'mobile' : undefined);
     const webRes = await this.authService.forgotPassword({
       email: dto.email,
+      ...(from ? { from } : {}),
       headers: fromNodeHeaders(req.headers),
     });
     return this.handleAuthResponse(webRes, req, res, HttpStatus.OK);

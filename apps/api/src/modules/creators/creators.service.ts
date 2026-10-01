@@ -1,15 +1,27 @@
 import {
   Injectable,
+  Inject,
   NotFoundException,
   ConflictException,
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import {
+  STORAGE_PROVIDER,
+  StorageProvider,
+} from '../../infrastructure/storage/storage-provider.interface';
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
+import { CreatorShareLinkDataDto } from './dto/share-link.dto';
 
 @Injectable()
 export class CreatorsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(STORAGE_PROVIDER)
+    private readonly storage: StorageProvider,
+  ) {}
 
   async findAll(_query?: { search?: string }) {
     const where: any = {
@@ -18,9 +30,9 @@ export class CreatorsService {
 
     if (_query?.search) {
       where.OR = [
+        { creatorName: { contains: _query.search, mode: 'insensitive' } },
         { user: { name: { contains: _query.search, mode: 'insensitive' } } },
-        { username: { contains: _query.search, mode: 'insensitive' } },
-        { personalizedLink: { contains: _query.search, mode: 'insensitive' } },
+        { slug: { contains: _query.search, mode: 'insensitive' } },
       ];
     }
 
@@ -42,35 +54,29 @@ export class CreatorsService {
     return creators.map((creator) => this.formatCreatorProfile(creator));
   }
 
-  async findByUsername(usernameOrLink: string) {
-    const cleanSlug = usernameOrLink
+  async findBySlug(slug: string) {
+    const cleanSlug = slug
       .replace(/^https?:\/\/[^/]+\//i, '')
       .replace(/^(buymeayard\/|\/|@)/i, '')
       .replace(/\/+$/, '')
       .toLowerCase()
       .trim();
 
-    const formattedLink = `buymeayard/${cleanSlug}`;
-
-    const creator = await this.prisma.creatorProfile.findFirst({
-      where: {
-        OR: [
-          { username: cleanSlug },
-          { personalizedLink: formattedLink },
-          { personalizedLink: usernameOrLink },
-        ],
-      },
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { slug: cleanSlug },
       include: {
         user: {
           select: {
             id: true,
             name: true,
-            email: true,
             image: true,
           },
         },
         socialLinks: true,
         materials: {
+          where: {
+            status: 'ACTIVE',
+          },
           include: {
             material: true,
           },
@@ -80,11 +86,173 @@ export class CreatorsService {
 
     if (!creator) {
       throw new NotFoundException(
-        `Creator with identifier "${usernameOrLink}" not found`,
+        `Creator with identifier "${slug}" not found`,
       );
     }
 
     return creator;
+  }
+
+  // Alias for backward compatibility
+  async findByUsername(identifier: string) {
+    return this.findBySlug(identifier);
+  }
+
+  public static readonly RESERVED_SLUGS = new Set([
+    'admin',
+    'administrator',
+    'api',
+    'app',
+    'audience',
+    'auth',
+    'balance',
+    'billing',
+    'buymeayard',
+    'callback',
+    'checkout',
+    'contact',
+    'create',
+    'creator',
+    'creators',
+    'dashboard',
+    'docs',
+    'explore',
+    'feed',
+    'following',
+    'forgot-password',
+    'help',
+    'home',
+    'kyc',
+    'legal',
+    'login',
+    'logout',
+    'materials',
+    'media',
+    'messages',
+    'moderation',
+    'notifications',
+    'onboarding',
+    'payout',
+    'payouts',
+    'posts',
+    'pricing',
+    'privacy',
+    'profile',
+    'register',
+    'reset-password',
+    'revenue',
+    'search',
+    'settings',
+    'signin',
+    'signout',
+    'signup',
+    'slug',
+    'status',
+    'support',
+    'supporters',
+    'supports',
+    'terms',
+    'users',
+    'verify',
+    'webhook',
+    'webhooks',
+    'yard',
+    'yards',
+    'null',
+    'undefined',
+  ]);
+
+  async checkSlugAvailability(
+    rawSlug: string,
+    currentUserId?: string,
+  ): Promise<{
+    available: boolean;
+    slug: string;
+    reason?: string;
+    message?: string;
+    isCurrent?: boolean;
+  }> {
+    if (!rawSlug || typeof rawSlug !== 'string' || !rawSlug.trim()) {
+      return {
+        available: false,
+        slug: '',
+        reason: 'Handle cannot be empty',
+      };
+    }
+
+    const cleanSlug = rawSlug
+      .replace(/^https?:\/\/[^/]+\//i, '')
+      .replace(/^(buymeayard\/|\/|@)/i, '')
+      .replace(/\/+$/, '')
+      .toLowerCase()
+      .trim();
+
+    if (!cleanSlug) {
+      return {
+        available: false,
+        slug: '',
+        reason: 'Handle cannot be empty',
+      };
+    }
+
+    if (cleanSlug.length < 3) {
+      return {
+        available: false,
+        slug: cleanSlug,
+        reason: 'Handle must be at least 3 characters long',
+      };
+    }
+
+    if (cleanSlug.length > 30) {
+      return {
+        available: false,
+        slug: cleanSlug,
+        reason: 'Handle cannot exceed 30 characters',
+      };
+    }
+
+    if (!/^[a-z0-9_-]+$/.test(cleanSlug)) {
+      return {
+        available: false,
+        slug: cleanSlug,
+        reason:
+          'Handle can only contain letters, numbers, hyphens, and underscores',
+      };
+    }
+
+    if (CreatorsService.RESERVED_SLUGS.has(cleanSlug)) {
+      return {
+        available: false,
+        slug: cleanSlug,
+        reason: 'This handle is reserved and cannot be used',
+      };
+    }
+
+    const existing = await this.prisma.creatorProfile.findUnique({
+      where: { slug: cleanSlug },
+    });
+
+    if (existing) {
+      if (currentUserId && existing.userId === currentUserId) {
+        return {
+          available: true,
+          slug: cleanSlug,
+          isCurrent: true,
+          message: 'This is your current handle',
+        };
+      }
+      return {
+        available: false,
+        slug: cleanSlug,
+        reason: 'This handle is already taken',
+      };
+    }
+
+    return {
+      available: true,
+      slug: cleanSlug,
+      message: 'Handle is available',
+    };
   }
 
   async findByUserId(userId: string) {
@@ -100,7 +268,14 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
-        materials: true,
+        materials: {
+          where: {
+            status: 'ACTIVE',
+          },
+          include: {
+            material: true,
+          },
+        },
       },
     });
 
@@ -113,18 +288,22 @@ export class CreatorsService {
 
   async onboardCreator(userId: string, dto: OnboardCreatorDto) {
     // 1. Resolve Creator Name
-    const creatorName = (dto.creatorName || dto.displayName || '').trim();
+    const creatorName = (
+      dto.creatorName ||
+      (dto as any).displayName ||
+      ''
+    ).trim();
     if (!creatorName) {
       throw new BadRequestException('Creator name is required');
     }
 
-    // 2. Resolve Personalized Link & Slug
-    const rawLink = (dto.personalizedLink || dto.username || '').trim();
-    if (!rawLink) {
-      throw new BadRequestException('Personalized link is required');
+    // 2. Resolve Slug
+    const rawSlug = (dto.slug || '').trim();
+    if (!rawSlug) {
+      throw new BadRequestException('Slug is required');
     }
 
-    const cleanSlug = rawLink
+    const cleanSlug = rawSlug
       .replace(/^https?:\/\/[^/]+\//i, '')
       .replace(/^(buymeayard\/|\/|@)/i, '')
       .replace(/\/+$/, '')
@@ -133,27 +312,29 @@ export class CreatorsService {
 
     if (!cleanSlug || !/^[a-z0-9_-]+$/.test(cleanSlug)) {
       throw new BadRequestException(
-        'Personalized link contains invalid characters. Use letters, numbers, hyphens, and underscores only.',
+        'Slug contains invalid characters. Use letters, numbers, hyphens, and underscores only.',
       );
     }
 
-    const formattedPersonalizedLink = `buymeayard/${cleanSlug}`;
+    if (cleanSlug.length < 3) {
+      throw new BadRequestException('Slug must be at least 3 characters long');
+    }
+
+    if (cleanSlug.length > 30) {
+      throw new BadRequestException('Slug cannot exceed 30 characters');
+    }
+
+    if (CreatorsService.RESERVED_SLUGS.has(cleanSlug)) {
+      throw new BadRequestException('This slug is reserved and cannot be used');
+    }
 
     // 3. Ensure uniqueness
-    const existingTaken = await this.prisma.creatorProfile.findFirst({
-      where: {
-        OR: [
-          { username: cleanSlug },
-          { personalizedLink: formattedPersonalizedLink },
-          { personalizedLink: cleanSlug },
-        ],
-      },
+    const existingTaken = await this.prisma.creatorProfile.findUnique({
+      where: { slug: cleanSlug },
     });
 
     if (existingTaken && existingTaken.userId !== userId) {
-      throw new ConflictException(
-        'Personalized link / username is already taken',
-      );
+      throw new ConflictException('Slug is already taken');
     }
 
     // 4. Update User name
@@ -173,8 +354,8 @@ export class CreatorsService {
       profile = await this.prisma.creatorProfile.update({
         where: { id: existingProfile.id },
         data: {
-          username: cleanSlug,
-          personalizedLink: formattedPersonalizedLink,
+          creatorName,
+          slug: cleanSlug,
           status:
             existingProfile.status === 'REGISTERED'
               ? 'PROFILE_CREATED'
@@ -209,8 +390,8 @@ export class CreatorsService {
       profile = await this.prisma.creatorProfile.create({
         data: {
           userId,
-          username: cleanSlug,
-          personalizedLink: formattedPersonalizedLink,
+          creatorName,
+          slug: cleanSlug,
           status: 'PROFILE_CREATED',
           kycStatus: 'NOT_SUBMITTED',
         },
@@ -334,23 +515,286 @@ export class CreatorsService {
     return this.formatCreatorProfile(updated);
   }
 
+  // -----------------------------------------------------------
+  // Profile Update (post-onboarding edits)
+  // -----------------------------------------------------------
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    const data: Record<string, any> = {};
+
+    if (dto.creatorName !== undefined) {
+      const name = dto.creatorName.trim();
+      if (!name) {
+        throw new BadRequestException('Creator name cannot be empty');
+      }
+      data.creatorName = name;
+
+      // Keep the user.name in sync
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { name },
+      });
+    }
+
+    if (dto.bio !== undefined) {
+      const bio = dto.bio.trim();
+      if (bio.length > 160) {
+        throw new BadRequestException('Bio cannot exceed 160 characters');
+      }
+      data.bio = bio || null;
+    }
+
+    if (Object.keys(data).length === 0) {
+      return this.findByUserId(userId);
+    }
+
+    await this.prisma.creatorProfile.update({
+      where: { id: profile.id },
+      data,
+    });
+
+    return this.findByUserId(userId);
+  }
+
+  // -----------------------------------------------------------
+  // Avatar Upload
+  // -----------------------------------------------------------
+
+  async uploadAvatar(userId: string, file: Express.Multer.File) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    const result = await this.storage.uploadFile(file.buffer, {
+      folder: 'avatars',
+      publicId: `creator-${profile.id}`,
+      resourceType: 'image',
+    });
+
+    await this.prisma.creatorProfile.update({
+      where: { id: profile.id },
+      data: { avatarUrl: result.secureUrl },
+    });
+
+    return {
+      avatarUrl: result.secureUrl,
+    };
+  }
+
+  // -----------------------------------------------------------
+  // Creator Materials (Yard Menu)
+  // -----------------------------------------------------------
+
+  async getCreatorMaterials(userId: string) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    return this.prisma.creatorMaterial.findMany({
+      where: { creatorId: profile.id, status: 'ACTIVE' },
+      include: { material: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async saveCreatorMaterials(userId: string, dto: SaveCreatorMaterialsDto) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    // Validate that all referenced materials exist in the platform catalogue
+    const materialIds = dto.materials.map((m) => m.materialId);
+    const catalogueMaterials = await this.prisma.material.findMany({
+      where: { id: { in: materialIds }, status: 'ACTIVE' },
+    });
+
+    const foundIds = new Set(catalogueMaterials.map((m) => m.id));
+    const missing = materialIds.filter((id) => !foundIds.has(id));
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Materials not found in catalogue: ${missing.join(', ')}`,
+      );
+    }
+
+    // Use a transaction: upsert each submitted material, deactivate the rest
+    await this.prisma.$transaction(async (tx) => {
+      // Upsert each material the creator wants active
+      for (const item of dto.materials) {
+        await tx.creatorMaterial.upsert({
+          where: {
+            creatorId_materialId: {
+              creatorId: profile.id,
+              materialId: item.materialId,
+            },
+          },
+          create: {
+            creatorId: profile.id,
+            materialId: item.materialId,
+            price: item.price,
+            displayName: item.displayName || null,
+            status: 'ACTIVE',
+          },
+          update: {
+            price: item.price,
+            displayName: item.displayName || null,
+            status: 'ACTIVE',
+          },
+        });
+      }
+
+      // Deactivate any materials the creator did not include
+      if (materialIds.length > 0) {
+        await tx.creatorMaterial.updateMany({
+          where: {
+            creatorId: profile.id,
+            materialId: { notIn: materialIds },
+            status: 'ACTIVE',
+          },
+          data: { status: 'INACTIVE' },
+        });
+      }
+    });
+
+    // Return the updated menu
+    return this.prisma.creatorMaterial.findMany({
+      where: { creatorId: profile.id, status: 'ACTIVE' },
+      include: { material: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
   formatCreatorProfile(profile: any) {
     if (!profile) return profile;
 
-    const creatorName = profile.user?.name || profile.name || '';
-    const [firstName, ...lastNameParts] = creatorName.split(' ');
-    const lastName = lastNameParts.join(' ');
+    const creatorName =
+      profile.creatorName || profile.user?.name || profile.name || '';
+    const rawSlug = profile.slug || '';
+    const cleanSlug = rawSlug
+      .replace(/^https?:\/\/[^/]+\//i, '')
+      .replace(/^(buymeayard\/|\/|@)/i, '')
+      .replace(/\/+$/, '')
+      .toLowerCase()
+      .trim();
+
+    // Strip redundant and confusing duplicate name and link fields
+    const {
+      name: _name,
+      displayName: _displayName,
+      firstName: _firstName,
+      lastName: _lastName,
+      username: _username,
+      personalizedLink: _personalizedLink,
+      ...cleanProfile
+    } = profile;
 
     return {
-      ...profile,
-      name: creatorName,
+      ...cleanProfile,
       creatorName,
-      displayName: creatorName,
-      personalizedLink:
-        profile.personalizedLink ||
-        (profile.username ? `buymeayard/${profile.username}` : null),
-      firstName: firstName || null,
-      lastName: lastName || null,
+      slug: cleanSlug,
+    };
+  }
+
+  // -----------------------------------------------------------
+  // Share Link & QR Code (Engineer 1)
+  // -----------------------------------------------------------
+
+  async getShareLink(userId: string): Promise<CreatorShareLinkDataDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      include: {
+        materials: {
+          where: { status: 'ACTIVE' },
+          include: { material: true },
+        },
+      },
+    });
+
+    if (!creator) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    return this.buildShareLink(creator);
+  }
+
+  async getShareLinkBySlug(slug: string): Promise<CreatorShareLinkDataDto> {
+    const cleanSlug = slug.replace(/^@/, '').toLowerCase().trim();
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { slug: cleanSlug },
+      include: {
+        materials: {
+          where: { status: 'ACTIVE' },
+          include: { material: true },
+        },
+      },
+    });
+
+    if (!creator) {
+      throw new NotFoundException(`Creator with slug "${slug}" not found`);
+    }
+
+    return this.buildShareLink(creator);
+  }
+
+  private buildShareLink(creator: any): CreatorShareLinkDataDto {
+    const baseUrl = (
+      process.env.CREATOR_FRONTEND_URL ||
+      process.env.FRONTEND_URL ||
+      'https://buymeayard.com'
+    ).replace(/\/+$/, '');
+    const cleanSlug = (creator.slug || '')
+      .replace(/^@/, '')
+      .toLowerCase()
+      .trim();
+    const publicUrl = `${baseUrl}/${cleanSlug}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(publicUrl)}`;
+
+    const materialNames = (creator.materials || [])
+      .map((m: any) => m.displayName || m.material?.name)
+      .filter(Boolean);
+
+    let materialsDescription = 'Ankara, Lace, or Aso-oke';
+    if (materialNames.length === 1) {
+      materialsDescription = materialNames[0];
+    } else if (materialNames.length === 2) {
+      materialsDescription = `${materialNames[0]} or ${materialNames[1]}`;
+    } else if (materialNames.length > 2) {
+      materialsDescription = `${materialNames.slice(0, -1).join(', ')}, or ${materialNames[materialNames.length - 1]}`;
+    }
+
+    const shareText = `Support my creative work on Buy Me a Yard! Send me a yard of ${materialsDescription}: ${publicUrl}`;
+
+    return {
+      publicUrl,
+      slug: cleanSlug,
+      qrCodeUrl,
+      shareText,
+      socialLinks: {
+        twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`,
+        whatsapp: `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`,
+        facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}`,
+        linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(publicUrl)}`,
+        telegram: `https://t.me/share/url?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(shareText)}`,
+      },
     };
   }
 }

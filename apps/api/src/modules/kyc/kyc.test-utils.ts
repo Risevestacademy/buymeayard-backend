@@ -76,7 +76,7 @@ export class FakePrisma {
     const creator = {
       id: id('creator'),
       userId: user.id,
-      username: 'mariam',
+      slug: 'mariam',
       status: 'PROFILE_CREATED',
       kycStatus: 'NOT_SUBMITTED',
       kycVerifiedAt: null,

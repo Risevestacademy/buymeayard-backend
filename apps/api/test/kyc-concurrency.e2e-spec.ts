@@ -128,7 +128,7 @@ describeDb('KYC concurrency (real Postgres)', () => {
     return prisma.creatorProfile.create({
       data: {
         userId: user.id,
-        username: `t${randomUUID().slice(0, 12)}`,
+        slug: `t${randomUUID().slice(0, 12)}`,
         status: 'PROFILE_CREATED',
       },
     });
