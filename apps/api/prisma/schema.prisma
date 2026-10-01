@@ -119,7 +119,10 @@ model CreatorProfile {
   bio              String?
   avatarUrl        String?
   status           String   @default("REGISTERED") // REGISTERED, PROFILE_CREATED, KYC_PENDING, VERIFIED, ACTIVE, SUSPENDED, BANNED, DEACTIVATED
-  kycStatus        String   @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW
+  kycStatus        String   @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW, EXPIRED
+  kycVerifiedAt    DateTime?
+  kycBlockedAt     DateTime? // Set when an admin revokes verification; blocks re-verification until lifted
+  kycBlockedReason String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -482,9 +485,20 @@ model Notification {
 model KycSubmission {
   id                String    @id @default(uuid())
   creatorId         String
-  provider          String    @default("DEFAULT")
-  providerReference String?
-  status            String    @default("PENDING") // PENDING, VERIFIED, REJECTED, NEEDS_REVIEW
+  provider          String    @default("DIDIT")
+  providerReference String?   // Provider session ID (Didit session_id)
+  providerStatus    String?   // Raw provider status label, e.g. "In Review"
+  status            String    @default("CREATED") // CREATED, IN_PROGRESS, NEEDS_REVIEW, VERIFIED, REJECTED, RESUBMISSION_REQUIRED, ABANDONED, EXPIRED, KYC_EXPIRED, CANCELLED
+  workflowId        String?
+  environment       String?   // live, sandbox
+  claimedDetails    Json?     // Details entered by the creator before capture
+  decisionSummary   Json?     // Minimized provider decision (no images or URLs)
+  rejectionReason   String?   // User-safe explanation
+  providerUpdatedAt DateTime? // Provider timestamp of the last applied event (out-of-order guard)
+  lastSyncedAt      DateTime?
+  completedAt       DateTime?
+  reviewedById      String?
+  reviewNote        String?
   submittedAt       DateTime  @default(now())
   reviewedAt        DateTime?
   metadata          Json?
@@ -492,8 +506,29 @@ model KycSubmission {
   updatedAt         DateTime  @updatedAt
 
   creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  events  KycEvent[]
 
+  @@unique([provider, providerReference])
+  @@index([creatorId, createdAt])
+  @@index([status])
   @@map("kyc_submissions")
+}
+
+model KycEvent {
+  id              String   @id @default(uuid())
+  submissionId    String?
+  provider        String   @default("DIDIT")
+  providerEventId String
+  eventType       String
+  providerStatus  String?
+  payload         Json     // Redacted envelope (no decision media or PII)
+  createdAt       DateTime @default(now())
+
+  submission KycSubmission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerEventId])
+  @@index([submissionId])
+  @@map("kyc_events")
 }
 
 model ContentReport {

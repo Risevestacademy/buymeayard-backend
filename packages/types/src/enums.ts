@@ -26,12 +26,46 @@ export enum CreatorStatus {
   DEACTIVATED = 'DEACTIVATED',
 }
 
+/** Creator-level KYC status (creator_profiles.kycStatus). */
 export enum KycStatus {
   NOT_SUBMITTED = 'NOT_SUBMITTED',
   PENDING = 'PENDING',
   VERIFIED = 'VERIFIED',
   REJECTED = 'REJECTED',
   NEEDS_REVIEW = 'NEEDS_REVIEW',
+  EXPIRED = 'EXPIRED', // Previously verified, expired by the provider's policy
+}
+
+/** Status of a single verification attempt (kyc_submissions.status). */
+export enum KycSubmissionStatus {
+  CREATED = 'CREATED', // Session created, user has not started
+  IN_PROGRESS = 'IN_PROGRESS',
+  NEEDS_REVIEW = 'NEEDS_REVIEW',
+  VERIFIED = 'VERIFIED',
+  REJECTED = 'REJECTED',
+  RESUBMISSION_REQUIRED = 'RESUBMISSION_REQUIRED',
+  ABANDONED = 'ABANDONED', // User did not finish in time
+  EXPIRED = 'EXPIRED', // Session expired before the user opened it
+  KYC_EXPIRED = 'KYC_EXPIRED', // Approved verification later expired
+  CANCELLED = 'CANCELLED', // Superseded by the platform (e.g. details changed)
+}
+
+export enum KycProviderName {
+  DIDIT = 'DIDIT',
+}
+
+export enum KycDocumentType {
+  NATIONAL_ID = 'NATIONAL_ID', // NIN card / NIN slip
+  PASSPORT = 'PASSPORT',
+  DRIVERS_LICENCE = 'DRIVERS_LICENCE',
+  VOTERS_CARD = 'VOTERS_CARD',
+}
+
+export enum KycReviewSource {
+  WEBHOOK = 'WEBHOOK',
+  ADMIN = 'ADMIN',
+  RECONCILE = 'RECONCILE',
+  SYSTEM = 'SYSTEM',
 }
 
 export enum SupportStatus {

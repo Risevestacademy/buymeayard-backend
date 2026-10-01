@@ -1,9 +1,11 @@
 import {
   Injectable,
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CreatorStatus } from '@buymeayard/types';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { MoneyUtil } from '../../common/utils/money.util';
 import { ErrorCodes } from '../../common/errors/error-codes';
@@ -26,6 +28,14 @@ export class SupportsService {
       throw new NotFoundException({
         code: ErrorCodes.CREATOR_NOT_FOUND,
         message: 'Creator not found',
+      });
+    }
+
+    // Only verified, published creators may receive contributions.
+    if (creator.status !== CreatorStatus.ACTIVE) {
+      throw new ForbiddenException({
+        code: ErrorCodes.CREATOR_NOT_ACTIVE,
+        message: 'This creator is not accepting contributions yet',
       });
     }
 

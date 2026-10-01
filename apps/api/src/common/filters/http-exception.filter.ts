@@ -9,6 +9,37 @@ import {
 import { Response } from 'express';
 import { ErrorCodes } from '../errors/error-codes';
 
+// Bodies on these routes carry identity data or signed provider payloads.
+const OMIT_BODY_PATHS = [/^\/webhooks\//, /\/kyc(\/|$|\?)/];
+
+const SENSITIVE_KEYS = new Set([
+  'password',
+  'newpassword',
+  'currentpassword',
+  'token',
+  'secret',
+  'dateofbirth',
+]);
+
+function maskSensitive(value: unknown, depth = 0): unknown {
+  if (depth > 5 || !value || typeof value !== 'object') return value;
+  if (Array.isArray(value))
+    return value.map((v) => maskSensitive(v, depth + 1));
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, v]) => [
+      key,
+      SENSITIVE_KEYS.has(key.toLowerCase())
+        ? '[REDACTED]'
+        : maskSensitive(v, depth + 1),
+    ]),
+  );
+}
+
+export function redactBody(url: string | undefined, body: unknown): unknown {
+  if (url && OMIT_BODY_PATHS.some((re) => re.test(url))) return '[OMITTED]';
+  return maskSensitive(body);
+}
+
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
@@ -45,7 +76,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const logContext = {
       path: request.url,
       method: request.method,
-      body: request.body,
+      body: redactBody(request.url, request.body),
       query: request.query,
       params: request.params,
       ip: request.ip,

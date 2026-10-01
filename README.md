@@ -354,6 +354,7 @@ docker run -p 3000:3000 \
 | Document | Location |
 | :--- | :--- |
 | **Database Schema** | [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) — Full ER diagram, table dictionaries, and financial invariants |
+| **End-to-End Testing (Postman)** | [`docs/TESTING_GUIDE.md`](docs/TESTING_GUIDE.md) — Step-by-step workflow test with the collection in [`docs/postman/`](docs/postman/) |
 | **API Reference (Swagger)** | [http://localhost:3000/api/docs](http://localhost:3000/api/docs) — Interactive API documentation (run `pnpm dev` first) |
 | **CI Pipeline** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — Lint → Test → Build |
 | **Production Dockerfile** | [`Dockerfile`](Dockerfile) — Multi-stage Docker build |

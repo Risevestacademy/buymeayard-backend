@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
@@ -10,7 +11,7 @@ import { PAYMENT_PROVIDER } from '../../infrastructure/payments/payment-provider
 import type { PaymentProvider } from '../../infrastructure/payments/payment-provider.interface';
 import { LedgerService } from '../ledger/ledger.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
-import { PaymentStatus, SupportStatus } from '@buymeayard/types';
+import { CreatorStatus, PaymentStatus, SupportStatus } from '@buymeayard/types';
 
 @Injectable()
 export class PaymentsService {
@@ -26,13 +27,22 @@ export class PaymentsService {
   async initializePayment(supportId: string, email: string) {
     const support = await this.prisma.support.findUnique({
       where: { id: supportId },
-      include: { supporter: true },
+      include: { supporter: true, creator: { select: { status: true } } },
     });
 
     if (!support) {
       throw new NotFoundException({
         code: ErrorCodes.NOT_FOUND,
         message: 'Support transaction not found',
+      });
+    }
+
+    // Re-check at checkout: the creator may have lost verification since the
+    // support was created. Already-captured payments are never blocked.
+    if (support.creator.status !== CreatorStatus.ACTIVE) {
+      throw new ForbiddenException({
+        code: ErrorCodes.CREATOR_NOT_ACTIVE,
+        message: 'This creator is not accepting contributions yet',
       });
     }
 

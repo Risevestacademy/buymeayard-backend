@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
@@ -8,6 +9,8 @@ import { LedgerService } from '../ledger/ledger.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import {
   AccountType,
+  CreatorStatus,
+  KycStatus,
   LedgerDirection,
   LedgerEntryType,
   PayoutStatus,
@@ -21,7 +24,7 @@ export class PayoutsService {
   ) {}
 
   async requestPayout(creatorUserId: string, amount: number, currency = 'NGN') {
-    if (amount <= 0) {
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
       throw new BadRequestException({
         code: ErrorCodes.INVALID_AMOUNT,
         message: 'Payout amount must be greater than 0',
@@ -40,12 +43,7 @@ export class PayoutsService {
       });
     }
 
-    if (creator.kycStatus !== 'VERIFIED') {
-      throw new BadRequestException({
-        code: ErrorCodes.KYC_REQUIRED,
-        message: 'KYC verification is required before payouts can be requested',
-      });
-    }
+    this.assertCanWithdraw(creator);
 
     const defaultPayoutMethod =
       creator.payoutMethods.find((m) => m.isDefault) ||
@@ -72,6 +70,34 @@ export class PayoutsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // Serialize payouts per creator and re-check under the lock: the
+      // creator may have been revoked/suspended, or a concurrent payout may
+      // have reserved funds, since the checks above.
+      await tx.$queryRaw`SELECT id FROM "creator_profiles" WHERE id = ${creator.id} FOR UPDATE`;
+      const locked = await tx.creatorProfile.findUniqueOrThrow({
+        where: { id: creator.id },
+        select: { status: true, kycStatus: true },
+      });
+      this.assertCanWithdraw(locked);
+
+      const entries = await tx.ledgerEntry.findMany({
+        where: { accountId: account.id },
+        select: { direction: true, amount: true },
+      });
+      const lockedBalance = entries.reduce(
+        (sum, e) =>
+          e.direction === LedgerDirection.CREDIT
+            ? sum + e.amount
+            : sum - e.amount,
+        0,
+      );
+      if (lockedBalance < amount) {
+        throw new BadRequestException({
+          code: ErrorCodes.INSUFFICIENT_FUNDS,
+          message: `Requested payout (${amount}) exceeds available balance (${lockedBalance})`,
+        });
+      }
+
       // 1. Create payout record
       const payout = await tx.payout.create({
         data: {
@@ -99,6 +125,22 @@ export class PayoutsService {
 
       return payout;
     });
+  }
+
+  /** Withdrawals need a verified identity and a creator in good standing. */
+  private assertCanWithdraw(creator: { status: string; kycStatus: string }) {
+    if (creator.kycStatus !== KycStatus.VERIFIED) {
+      throw new BadRequestException({
+        code: ErrorCodes.KYC_REQUIRED,
+        message: 'KYC verification is required before payouts can be requested',
+      });
+    }
+    if (creator.status !== CreatorStatus.ACTIVE) {
+      throw new ForbiddenException({
+        code: ErrorCodes.CREATOR_NOT_ACTIVE,
+        message: 'Payouts are not available for this account',
+      });
+    }
   }
 
   async getCreatorBalance(creatorUserId: string) {
