@@ -12,6 +12,14 @@ export interface BetterAuthOptions {
   baseURL?: string;
 }
 
+function isEventEmitter(val: unknown): val is EventEmitter2 {
+  return (
+    val !== null &&
+    typeof val === 'object' &&
+    typeof (val as Record<string, unknown>).emit === 'function'
+  );
+}
+
 export function createBetterAuth(
   prisma: PrismaClient,
   eventEmitterOrOptions?: EventEmitter2 | BetterAuthOptions,
@@ -20,13 +28,16 @@ export function createBetterAuth(
   let eventEmitter: EventEmitter2 | undefined;
   let options: BetterAuthOptions | undefined;
 
-  if (
+  if (isEventEmitter(eventEmitterOrOptions)) {
+    eventEmitter = eventEmitterOrOptions;
+    options = maybeOptions;
+  } else if (
     eventEmitterOrOptions &&
-    ('secret' in eventEmitterOrOptions || 'baseURL' in eventEmitterOrOptions)
+    typeof eventEmitterOrOptions === 'object'
   ) {
     options = eventEmitterOrOptions;
+    eventEmitter = undefined;
   } else {
-    eventEmitter = eventEmitterOrOptions as EventEmitter2 | undefined;
     options = maybeOptions;
   }
   const emailFrom =
@@ -291,6 +302,15 @@ export function createBetterAuth(
           },
         },
       },
+      /**
+       * Session Creation Lifecycle Hook:
+       * In Better Auth, `session.create` is invoked exclusively when a new user authentication
+       * session is established (email/password sign-in, social OAuth callback, or new device login).
+       * Token refreshes do NOT trigger `session.create` — Better Auth updates the existing session's
+       * `expiresAt` via `session.update`.
+       * Emitting `USER_EVENTS.LOGIN` here provides complete coverage across all sign-in vectors without
+       * false positives from session refreshes.
+       */
       session: {
         create: {
           after: async (session: any) => {

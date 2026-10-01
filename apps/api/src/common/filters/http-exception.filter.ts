@@ -50,7 +50,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
       method: request.method,
       body: this.sanitizeForLogging(request.body),
       query: this.sanitizeForLogging(request.query),
-      params: request.params,
+      params: this.sanitizeForLogging(request.params),
       ip: request.ip,
       errorDetails: details,
       stack: exception instanceof Error ? exception.stack : undefined,

@@ -20,7 +20,6 @@ export class UserAuditListener {
       action: USER_EVENTS.CREATED,
       resourceType: 'User',
       resourceId: payload.userId,
-      metadata: { email: payload.email, name: payload.name },
     });
   }
 

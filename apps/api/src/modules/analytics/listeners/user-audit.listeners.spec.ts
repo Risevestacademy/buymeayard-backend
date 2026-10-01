@@ -40,7 +40,6 @@ describe('UserAuditListener', () => {
       action: USER_EVENTS.CREATED,
       resourceType: 'User',
       resourceId: 'user-001',
-      metadata: { email: 'creator@example.com', name: 'Adeola Johnson' },
     });
   });
 
