@@ -3,6 +3,7 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
+import * as crypto from 'crypto';
 import { isMobileRequest } from '../../common/utils/client-detection.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { USER_EVENTS } from '../analytics/events/user.events';
@@ -10,6 +11,66 @@ import { USER_EVENTS } from '../analytics/events/user.events';
 export interface BetterAuthOptions {
   secret?: string;
   baseURL?: string;
+}
+
+export function generateAppleClientSecret(params: {
+  clientId: string;
+  teamId: string;
+  keyId: string;
+  privateKey: string;
+}): string {
+  const { clientId, teamId, keyId, privateKey } = params;
+  const normalizedKey = privateKey.replace(/\\n/g, '\n').trim();
+
+  const header = Buffer.from(
+    JSON.stringify({ alg: 'ES256', kid: keyId, typ: 'JWT' }),
+  ).toString('base64url');
+
+  const now = Math.floor(Date.now() / 1000);
+  const payload = Buffer.from(
+    JSON.stringify({
+      iss: teamId,
+      iat: now,
+      exp: now + 180 * 24 * 60 * 60, // 180 days (Apple maximum allowed)
+      aud: 'https://appleid.apple.com',
+      sub: clientId,
+    }),
+  ).toString('base64url');
+
+  const data = `${header}.${payload}`;
+  const sig = crypto
+    .sign('sha256', Buffer.from(data), {
+      key: normalizedKey,
+      dsaEncoding: 'ieee-p1363',
+    })
+    .toString('base64url');
+
+  return `${data}.${sig}`;
+}
+
+export function resolveAppleClientSecret(): string {
+  if (process.env.APPLE_CLIENT_SECRET) {
+    return process.env.APPLE_CLIENT_SECRET;
+  }
+  const clientId = process.env.APPLE_CLIENT_ID;
+  const teamId = process.env.APPLE_TEAM_ID;
+  const keyId = process.env.APPLE_KEY_ID;
+  const privateKey = process.env.APPLE_PRIVATE_KEY;
+
+  if (clientId && teamId && keyId && privateKey) {
+    try {
+      return generateAppleClientSecret({
+        clientId,
+        teamId,
+        keyId,
+        privateKey,
+      });
+    } catch (err) {
+      console.warn('[BetterAuth] Failed to generate Apple client secret:', err);
+      return '';
+    }
+  }
+  return '';
 }
 
 function isEventEmitter(val: unknown): val is EventEmitter2 {
@@ -131,6 +192,8 @@ export function createBetterAuth(
       'https://buymeayard-main-dev.up.railway.app',
       'https://buymeayard-creator-dev.up.railway.app',
       'https://buymeayard-admin-dev.up.railway.app',
+      'https://buymeayardbackend.onrender.com',
+      'https://appleid.apple.com',
       'buymeayard://',
       'buymeayard://*',
       'exp://',
@@ -161,7 +224,7 @@ export function createBetterAuth(
       },
       apple: {
         clientId: process.env.APPLE_CLIENT_ID || '',
-        clientSecret: process.env.APPLE_CLIENT_SECRET || '',
+        clientSecret: resolveAppleClientSecret(),
       },
       twitter: {
         clientId: process.env.TWITTER_CLIENT_ID || '',
