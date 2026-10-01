@@ -134,6 +134,51 @@ async function main() {
     }
   }
 
+  // 3. Seed Platform Materials with Universal Base Price (₦1,000 / 100,000 kobo)
+  console.log('Seeding default platform materials...');
+  const DEFAULT_MATERIALS = [
+    {
+      name: 'Ankara',
+      slug: 'ankara',
+      description: 'Traditional African wax print fabric',
+      defaultPrice: 100000,
+      currency: 'NGN',
+    },
+    {
+      name: 'Lace',
+      slug: 'lace',
+      description: 'Intricate and elegant luxury lace fabric',
+      defaultPrice: 100000,
+      currency: 'NGN',
+    },
+    {
+      name: 'Aso-Oke',
+      slug: 'aso-oke',
+      description: 'Hand-woven prestige cloth from Nigeria',
+      defaultPrice: 100000,
+      currency: 'NGN',
+    },
+    {
+      name: 'Adire',
+      slug: 'adire',
+      description: 'Indigo-dyed patterned fabric from Nigeria',
+      defaultPrice: 100000,
+      currency: 'NGN',
+    },
+  ];
+
+  for (const mat of DEFAULT_MATERIALS) {
+    await prisma.material.upsert({
+      where: { slug: mat.slug },
+      update: {},
+      create: {
+        ...mat,
+        status: 'ACTIVE',
+      },
+    });
+  }
+  console.log('✅ Default platform materials seeded with universal base price (₦1,000).');
+
   console.log('🌱 Seeding finished.');
 }
 
