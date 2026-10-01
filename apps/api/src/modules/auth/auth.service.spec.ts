@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 const mockBetterAuthInstance = {
   api: {
@@ -28,6 +29,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let configService: { get: jest.Mock };
   let prismaService: Record<string, any>;
+  let eventEmitter: { emit: jest.Mock };
 
   beforeEach(async () => {
     configService = {
@@ -51,11 +53,14 @@ describe('AuthService', () => {
       },
     };
 
+    eventEmitter = { emit: jest.fn() };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: ConfigService, useValue: configService },
         { provide: PrismaService, useValue: prismaService },
+        { provide: EventEmitter2, useValue: eventEmitter },
       ],
     }).compile();
 
@@ -72,7 +77,7 @@ describe('AuthService', () => {
 
   it('should initialize betterAuth with config onModuleInit', () => {
     service.onModuleInit();
-    expect(createBetterAuth).toHaveBeenCalledWith(prismaService, {
+    expect(createBetterAuth).toHaveBeenCalledWith(prismaService, eventEmitter, {
       secret: 'test-secret',
       baseURL: 'http://localhost:3000',
     });

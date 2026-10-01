@@ -499,4 +499,91 @@ describe('CreatorsService', () => {
       expect(res).toHaveLength(1);
     });
   });
+
+  describe('getShareLink', () => {
+    it('should return share link metadata with QR code and customized social links', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'creator-1',
+        userId: 'user-1',
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
+        materials: [
+          {
+            displayName: 'Premium Ankara',
+            material: { name: 'Ankara' },
+          },
+          {
+            displayName: null,
+            material: { name: 'Lace' },
+          },
+        ],
+      });
+
+      const expectedBase = (
+        process.env.CREATOR_FRONTEND_URL ||
+        process.env.FRONTEND_URL ||
+        'https://buymeayard.com'
+      ).replace(/\/+$/, '');
+      const res = await service.getShareLink('user-1');
+
+      expect(res.slug).toBe('adeola');
+      expect(res.publicUrl).toBe(`${expectedBase}/adeola`);
+      expect(res.qrCodeUrl).toContain(
+        `${encodeURIComponent(expectedBase)}%2Fadeola`,
+      );
+      expect(res.shareText).toContain('Premium Ankara or Lace');
+      expect(res.socialLinks.twitter).toContain('twitter.com/intent/tweet');
+      expect(res.socialLinks.whatsapp).toContain('api.whatsapp.com/send');
+      expect(res.socialLinks.facebook).toContain('facebook.com/sharer');
+      expect(res.socialLinks.linkedin).toContain('linkedin.com/sharing');
+      expect(res.socialLinks.telegram).toContain('t.me/share');
+    });
+
+    it('should throw NotFoundException if creator is not found', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+
+      await expect(service.getShareLink('unknown-user')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
+
+  describe('getShareLinkBySlug', () => {
+    it('should strip leading @ and resolve share link by slug', async () => {
+      const expectedBase = (
+        process.env.CREATOR_FRONTEND_URL ||
+        process.env.FRONTEND_URL ||
+        'https://buymeayard.com'
+      ).replace(/\/+$/, '');
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'creator-1',
+        userId: 'user-1',
+        creatorName: 'Fisayo Rotibi',
+        slug: 'fisayo',
+        materials: [],
+      });
+
+      const res = await service.getShareLinkBySlug('@fisayo');
+
+      expect(prisma.creatorProfile.findUnique).toHaveBeenCalledWith({
+        where: { slug: 'fisayo' },
+        include: {
+          materials: {
+            where: { status: 'ACTIVE' },
+            include: { material: true },
+          },
+        },
+      });
+      expect(res.slug).toBe('fisayo');
+      expect(res.publicUrl).toBe(`${expectedBase}/fisayo`);
+    });
+
+    it('should throw NotFoundException if slug not found', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+
+      await expect(service.getShareLinkBySlug('nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
 });

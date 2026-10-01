@@ -36,9 +36,11 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AuthGuard } from './common/guards/auth.guard';
+import { AuditLogInterceptor } from './modules/admin/interceptors/audit-log.interceptor';
 
 @Module({
   imports: [
+    EventEmitterModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       validate: validateEnv,
@@ -88,6 +90,10 @@ import { AuthGuard } from './common/guards/auth.guard';
     {
       provide: APP_INTERCEPTOR,
       useClass: TransformInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditLogInterceptor,
     },
     {
       provide: APP_GUARD,

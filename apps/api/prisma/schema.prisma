@@ -24,7 +24,7 @@ model User {
   // Better Auth Relations
   sessions      Session[]
   accounts      AuthAccount[]
-
+  
   // Domain Relations
   roles          UserRole[]
   creatorProfile CreatorProfile?

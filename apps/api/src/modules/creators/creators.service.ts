@@ -13,6 +13,7 @@ import {
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
+import { CreatorShareLinkDataDto } from './dto/share-link.dto';
 
 @Injectable()
 export class CreatorsService {
@@ -710,6 +711,90 @@ export class CreatorsService {
       ...cleanProfile,
       creatorName,
       slug: cleanSlug,
+    };
+  }
+
+  // -----------------------------------------------------------
+  // Share Link & QR Code (Engineer 1)
+  // -----------------------------------------------------------
+
+  async getShareLink(userId: string): Promise<CreatorShareLinkDataDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      include: {
+        materials: {
+          where: { status: 'ACTIVE' },
+          include: { material: true },
+        },
+      },
+    });
+
+    if (!creator) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    return this.buildShareLink(creator);
+  }
+
+  async getShareLinkBySlug(slug: string): Promise<CreatorShareLinkDataDto> {
+    const cleanSlug = slug.replace(/^@/, '').toLowerCase().trim();
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { slug: cleanSlug },
+      include: {
+        materials: {
+          where: { status: 'ACTIVE' },
+          include: { material: true },
+        },
+      },
+    });
+
+    if (!creator) {
+      throw new NotFoundException(`Creator with slug "${slug}" not found`);
+    }
+
+    return this.buildShareLink(creator);
+  }
+
+  private buildShareLink(creator: any): CreatorShareLinkDataDto {
+    const baseUrl = (
+      process.env.CREATOR_FRONTEND_URL ||
+      process.env.FRONTEND_URL ||
+      'https://buymeayard.com'
+    ).replace(/\/+$/, '');
+    const cleanSlug = (creator.slug || '')
+      .replace(/^@/, '')
+      .toLowerCase()
+      .trim();
+    const publicUrl = `${baseUrl}/${cleanSlug}`;
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(publicUrl)}`;
+
+    const materialNames = (creator.materials || [])
+      .map((m: any) => m.displayName || m.material?.name)
+      .filter(Boolean);
+
+    let materialsDescription = 'Ankara, Lace, or Aso-oke';
+    if (materialNames.length === 1) {
+      materialsDescription = materialNames[0];
+    } else if (materialNames.length === 2) {
+      materialsDescription = `${materialNames[0]} or ${materialNames[1]}`;
+    } else if (materialNames.length > 2) {
+      materialsDescription = `${materialNames.slice(0, -1).join(', ')}, or ${materialNames[materialNames.length - 1]}`;
+    }
+
+    const shareText = `Support my creative work on Buy Me a Yard! Send me a yard of ${materialsDescription}: ${publicUrl}`;
+
+    return {
+      publicUrl,
+      slug: cleanSlug,
+      qrCodeUrl,
+      shareText,
+      socialLinks: {
+        twitter: `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}`,
+        whatsapp: `https://api.whatsapp.com/send?text=${encodeURIComponent(shareText)}`,
+        facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(publicUrl)}`,
+        linkedin: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(publicUrl)}`,
+        telegram: `https://t.me/share/url?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(shareText)}`,
+      },
     };
   }
 }

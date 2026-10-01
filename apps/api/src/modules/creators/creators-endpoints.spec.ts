@@ -36,6 +36,8 @@ describe('Creators Endpoints (HTTP Integration)', () => {
     uploadAvatar: jest.Mock;
     getCreatorMaterials: jest.Mock;
     saveCreatorMaterials: jest.Mock;
+    getShareLink: jest.Mock;
+    getShareLinkBySlug: jest.Mock;
     formatCreatorProfile: jest.Mock;
   };
 
@@ -112,6 +114,42 @@ describe('Creators Endpoints (HTTP Integration)', () => {
             status: 'ACTIVE',
           })),
         );
+      }),
+      getShareLink: jest.fn(async (userId: string) => {
+        if (userId !== mockUser.id) throw new NotFoundException();
+        return {
+          publicUrl: 'https://buymeayard.com/adeola',
+          slug: 'adeola',
+          qrCodeUrl:
+            'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https%3A%2F%2Fbuymeayard.com%2Fadeola',
+          shareText:
+            'Support my creative work on Buy Me a Yard! Send me a yard of Ankara: https://buymeayard.com/adeola',
+          socialLinks: {
+            twitter: 'https://twitter.com/intent/tweet?text=...',
+            whatsapp: 'https://api.whatsapp.com/send?text=...',
+            facebook: 'https://www.facebook.com/sharer/sharer.php?u=...',
+            linkedin: 'https://www.linkedin.com/sharing/share-offsite/?url=...',
+            telegram: 'https://t.me/share/url?url=...',
+          },
+        };
+      }),
+      getShareLinkBySlug: jest.fn(async (slug: string) => {
+        if (slug !== 'adeola') throw new NotFoundException();
+        return {
+          publicUrl: 'https://buymeayard.com/adeola',
+          slug: 'adeola',
+          qrCodeUrl:
+            'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https%3A%2F%2Fbuymeayard.com%2Fadeola',
+          shareText:
+            'Support my creative work on Buy Me a Yard! Send me a yard of Ankara: https://buymeayard.com/adeola',
+          socialLinks: {
+            twitter: 'https://twitter.com/intent/tweet?text=...',
+            whatsapp: 'https://api.whatsapp.com/send?text=...',
+            facebook: 'https://www.facebook.com/sharer/sharer.php?u=...',
+            linkedin: 'https://www.linkedin.com/sharing/share-offsite/?url=...',
+            telegram: 'https://t.me/share/url?url=...',
+          },
+        };
       }),
       formatCreatorProfile: jest.fn((p) => {
         if (!p) return p;
@@ -331,6 +369,50 @@ describe('Creators Endpoints (HTTP Integration)', () => {
     it('should return 404 when creator slug does not exist', async () => {
       await request(app.getHttpServer())
         .get('/creators/nonexistent')
+        .expect(404);
+    });
+  });
+
+  describe('GET /creators/me/share-link', () => {
+    it('should return 200 with creator share link metadata and QR code', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/creators/me/share-link')
+        .expect(200);
+
+      expect(creatorsService.getShareLink).toHaveBeenCalledWith(mockUser.id);
+      expect(response.body).toHaveProperty(
+        'publicUrl',
+        'https://buymeayard.com/adeola',
+      );
+      expect(response.body).toHaveProperty('slug', 'adeola');
+      expect(response.body).toHaveProperty('qrCodeUrl');
+      expect(response.body).toHaveProperty('shareText');
+      expect(response.body).toHaveProperty('socialLinks');
+      expect(response.body.socialLinks).toHaveProperty('twitter');
+      expect(response.body.socialLinks).toHaveProperty('whatsapp');
+    });
+  });
+
+  describe('GET /creators/:slug/share-link', () => {
+    it('should return 200 with public share link metadata by slug', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/creators/adeola/share-link')
+        .expect(200);
+
+      expect(creatorsService.getShareLinkBySlug).toHaveBeenCalledWith('adeola');
+      expect(response.body).toHaveProperty(
+        'publicUrl',
+        'https://buymeayard.com/adeola',
+      );
+      expect(response.body).toHaveProperty('slug', 'adeola');
+      expect(response.body).toHaveProperty('qrCodeUrl');
+      expect(response.body).toHaveProperty('shareText');
+      expect(response.body).toHaveProperty('socialLinks');
+    });
+
+    it('should return 404 when creator slug does not exist', async () => {
+      await request(app.getHttpServer())
+        .get('/creators/nonexistent/share-link')
         .expect(404);
     });
   });
