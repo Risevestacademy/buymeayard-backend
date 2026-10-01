@@ -1,36 +1,55 @@
-import { IsOptional, IsString, IsUrl } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsArray, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class SocialLinkDto {
+  @ApiProperty({
+    example: 'twitter',
+    description:
+      'Social platform name (e.g., twitter, instagram, tiktok, youtube)',
+  })
+  @IsString()
+  platform: string;
+
+  @ApiProperty({
+    example: 'https://x.com/adeola',
+    description: 'URL to creator social profile',
+  })
+  @IsString()
+  url: string;
+}
 
 export class OnboardCreatorDto {
-  @ApiPropertyOptional({
-    example: 'Fashion designer based in Lagos',
-    description: 'Creator bio',
+  @ApiProperty({
+    example: 'Adeola Johnson',
+    description: 'Creator name entered during onboarding',
+    required: true,
   })
   @IsOptional()
   @IsString()
-  bio?: string;
+  creatorName?: string;
 
-  @ApiPropertyOptional({
-    example: 'uuid-category-id',
-    description: 'ID of the creator category (e.g., Fashion, Tech)',
+  @ApiProperty({
+    example: 'adeola',
+    description:
+      'Unique creator URL slug / handle (e.g. "adeola"). Only the slug is needed as the domain can change.',
+    required: true,
   })
   @IsOptional()
   @IsString()
-  categoryId?: string;
+  slug?: string;
 
   @ApiPropertyOptional({
-    example: 'https://example.com/avatar.jpg',
-    description: 'URL to the creator avatar image',
+    type: [SocialLinkDto],
+    description: 'List of connected social media accounts',
+    example: [
+      { platform: 'twitter', url: 'https://x.com/adeola' },
+      { platform: 'instagram', url: 'https://instagram.com/adeola' },
+    ],
   })
   @IsOptional()
-  @IsUrl()
-  avatarUrl?: string;
-
-  @ApiPropertyOptional({
-    example: 'https://example.com/cover.jpg',
-    description: 'URL to the creator cover image',
-  })
-  @IsOptional()
-  @IsUrl()
-  coverUrl?: string;
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SocialLinkDto)
+  socialLinks?: SocialLinkDto[];
 }
