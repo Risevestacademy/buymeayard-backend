@@ -6,7 +6,6 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { createBetterAuth, AuthInstance } from './better-auth';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 
-
 @Injectable()
 export class AuthService implements OnModuleInit {
   private auth!: AuthInstance;

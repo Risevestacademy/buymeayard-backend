@@ -7,17 +7,22 @@ import { PostHog } from 'posthog-node';
 @Injectable()
 export class PostHogService implements OnModuleDestroy {
   private readonly logger = new Logger(PostHogService.name);
-  private readonly client: PostHog;
+  private readonly client: PostHog | null = null;
 
   constructor(private readonly configService: ConfigService) {
-    this.client = new PostHog(
-      this.configService.get<string>('POSTHOG_API_KEY')!,
-      {
+    const apiKey = this.configService.get<string>('POSTHOG_API_KEY');
+    if (apiKey && apiKey.trim()) {
+      this.client = new PostHog(apiKey, {
         host:
           this.configService.get<string>('POSTHOG_HOST') ??
           'https://us.i.posthog.com',
-      },
-    );
+      });
+      this.logger.log('PostHog analytics initialized');
+    } else {
+      this.logger.warn(
+        'POSTHOG_API_KEY not configured. PostHog analytics is disabled.',
+      );
+    }
   }
 
   capture(params: {
@@ -25,6 +30,8 @@ export class PostHogService implements OnModuleDestroy {
     event: string;
     properties?: Record<string, unknown>;
   }): void {
+    if (!this.client) return;
+
     try {
       this.client.capture(params);
     } catch (error) {
@@ -41,6 +48,8 @@ export class PostHogService implements OnModuleDestroy {
     distinctId: string,
     properties?: Record<string, unknown>,
   ): void {
+    if (!this.client) return;
+
     try {
       this.client.captureException(error, distinctId, properties);
     } catch (err) {
@@ -52,6 +61,8 @@ export class PostHogService implements OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.client.shutdown();
+    if (this.client) {
+      await this.client.shutdown();
+    }
   }
 }

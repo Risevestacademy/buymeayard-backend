@@ -87,7 +87,7 @@
       "^.+\\.[tj]s$": "ts-jest"
     },
     "transformIgnorePatterns": [
-      "/node_modules/(?!(@nestjs/terminus|@nestjs/axios|axios)/)"
+      "/node_modules/(?!(@nestjs/terminus|@nestjs/axios|@nestjs/event-emitter|axios)/)"
     ],
     "collectCoverageFrom": [
       "**/*.(t|j)s"

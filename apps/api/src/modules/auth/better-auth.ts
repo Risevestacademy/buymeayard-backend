@@ -5,6 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
 import { isMobileRequest } from '../../common/utils/client-detection.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { USER_EVENTS } from '../analytics/events/user.events';
 
 export interface BetterAuthOptions {
   secret?: string;
@@ -23,7 +24,7 @@ export function createBetterAuth(
     eventEmitterOrOptions &&
     ('secret' in eventEmitterOrOptions || 'baseURL' in eventEmitterOrOptions)
   ) {
-    options = eventEmitterOrOptions as BetterAuthOptions;
+    options = eventEmitterOrOptions;
   } else {
     eventEmitter = eventEmitterOrOptions as EventEmitter2 | undefined;
     options = maybeOptions;
@@ -277,6 +278,40 @@ export function createBetterAuth(
       },
     },
     databaseHooks: {
+      user: {
+        create: {
+          after: async (user: any) => {
+            if (eventEmitter) {
+              eventEmitter.emit(USER_EVENTS.CREATED, {
+                userId: user.id,
+                email: user.email,
+                name: user.name ?? undefined,
+              });
+            }
+          },
+        },
+      },
+      session: {
+        create: {
+          after: async (session: any) => {
+            if (eventEmitter) {
+              try {
+                const user = await prisma.user.findUnique({
+                  where: { id: session.userId },
+                  select: { email: true },
+                });
+                eventEmitter.emit(USER_EVENTS.LOGIN, {
+                  userId: session.userId,
+                  email: user?.email ?? '',
+                  ipAddress: session.ipAddress ?? undefined,
+                });
+              } catch {
+                // Non-blocking for session creation
+              }
+            }
+          },
+        },
+      },
       account: {
         create: {
           after: async (account) => {
@@ -332,15 +367,6 @@ export function createBetterAuth(
             } catch (err) {
               console.error(`[Auth] Failed to sync social link:`, err);
             }
-          },
-        },
-      },
-      user: {
-        create: {
-          after: async (user) => {
-            // No roles or profiles are assigned at registration.
-            // Users complete onboarding explicitly via PUT /api/v1/creators/me/onboarding.
-            console.log(`[Auth] New user registered: ${user.id}`);
           },
         },
       },

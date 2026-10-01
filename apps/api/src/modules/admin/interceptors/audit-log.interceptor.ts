@@ -36,12 +36,24 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap(() => {
-        // Fires only after the handler resolves successfully — errors skip this.
-        this.auditLogService.record({
+        const resolvedId = metadata.resolveResourceId
+          ? metadata.resolveResourceId(request)
+          : undefined;
+
+        const resourceId =
+          resolvedId ??
+          request.params?.id ??
+          request.params?.userId ??
+          request.params?.slug ??
+          request.body?.id ??
+          request.user?.id ??
+          'SYSTEM';
+
+        void this.auditLogService.record({
           actorId: request.user?.id,
           action: metadata.action,
           resourceType: metadata.resourceType,
-          resourceId: request.params?.id, // assumes :id route param — adjust if a route differs
+          resourceId,
           ipAddress: request.ip,
         });
       }),

@@ -8,7 +8,7 @@ export interface RecordAuditLogParams {
   actorId?: string;
   action: string; // e.g. 'user.login', 'admin.user.deleted'
   resourceType: string;
-  resourceId: string;
+  resourceId?: string;
   previousState?: Prisma.InputJsonValue;
   newState?: Prisma.InputJsonValue;
   metadata?: Prisma.InputJsonValue;
@@ -22,13 +22,15 @@ export class AuditLogService {
   constructor(private readonly prisma: PrismaService) {}
 
   async record(params: RecordAuditLogParams): Promise<void> {
+    const resourceId = params.resourceId || 'SYSTEM';
+
     try {
       await this.prisma.auditLog.create({
         data: {
           actorId: params.actorId,
           action: params.action,
           resourceType: params.resourceType,
-          resourceId: params.resourceId,
+          resourceId,
           previousState: params.previousState,
           newState: params.newState,
           metadata: params.metadata,
@@ -37,9 +39,9 @@ export class AuditLogService {
       });
     } catch (error) {
       // Audit logging should never break the primary request/flow.
-      // Log the failure loudly instead of throwing.
+      // Log the failure loudly with resource context instead of throwing.
       this.logger.error(
-        `Failed to write audit log for action "${params.action}"`,
+        `Failed to write audit log for action "${params.action}" on resource "${params.resourceType}:${resourceId}"`,
         error instanceof Error ? error.stack : String(error),
       );
     }
