@@ -4,16 +4,42 @@ import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
 import { isMobileRequest } from '../../common/utils/client-detection.util';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { USER_EVENTS } from '../analytics/events/user.events';
 
 export interface BetterAuthOptions {
   secret?: string;
   baseURL?: string;
 }
 
+function isEventEmitter(val: unknown): val is EventEmitter2 {
+  return (
+    val !== null &&
+    typeof val === 'object' &&
+    typeof (val as Record<string, unknown>).emit === 'function'
+  );
+}
+
 export function createBetterAuth(
   prisma: PrismaClient,
-  options?: BetterAuthOptions,
+  eventEmitterOrOptions?: EventEmitter2 | BetterAuthOptions,
+  maybeOptions?: BetterAuthOptions,
 ) {
+  let eventEmitter: EventEmitter2 | undefined;
+  let options: BetterAuthOptions | undefined;
+
+  if (isEventEmitter(eventEmitterOrOptions)) {
+    eventEmitter = eventEmitterOrOptions;
+    options = maybeOptions;
+  } else if (
+    eventEmitterOrOptions &&
+    typeof eventEmitterOrOptions === 'object'
+  ) {
+    options = eventEmitterOrOptions;
+    eventEmitter = undefined;
+  } else {
+    options = maybeOptions;
+  }
   const emailFrom =
     process.env.EMAIL_FROM || 'BuyMeAYard <buymeayard@gmail.com>';
   const smtpPort = parseInt(process.env.SMTP_PORT || '587');
@@ -263,6 +289,49 @@ export function createBetterAuth(
       },
     },
     databaseHooks: {
+      user: {
+        create: {
+          after: async (user: any) => {
+            if (eventEmitter) {
+              eventEmitter.emit(USER_EVENTS.CREATED, {
+                userId: user.id,
+                email: user.email,
+                name: user.name ?? undefined,
+              });
+            }
+          },
+        },
+      },
+      /**
+       * Session Creation Lifecycle Hook:
+       * In Better Auth, `session.create` is invoked exclusively when a new user authentication
+       * session is established (email/password sign-in, social OAuth callback, or new device login).
+       * Token refreshes do NOT trigger `session.create` — Better Auth updates the existing session's
+       * `expiresAt` via `session.update`.
+       * Emitting `USER_EVENTS.LOGIN` here provides complete coverage across all sign-in vectors without
+       * false positives from session refreshes.
+       */
+      session: {
+        create: {
+          after: async (session: any) => {
+            if (eventEmitter) {
+              try {
+                const user = await prisma.user.findUnique({
+                  where: { id: session.userId },
+                  select: { email: true },
+                });
+                eventEmitter.emit(USER_EVENTS.LOGIN, {
+                  userId: session.userId,
+                  email: user?.email ?? '',
+                  ipAddress: session.ipAddress ?? undefined,
+                });
+              } catch {
+                // Non-blocking for session creation
+              }
+            }
+          },
+        },
+      },
       account: {
         create: {
           after: async (account) => {
@@ -318,15 +387,6 @@ export function createBetterAuth(
             } catch (err) {
               console.error(`[Auth] Failed to sync social link:`, err);
             }
-          },
-        },
-      },
-      user: {
-        create: {
-          after: async (user) => {
-            // No roles or profiles are assigned at registration.
-            // Users complete onboarding explicitly via PUT /api/v1/creators/me/onboarding.
-            console.log(`[Auth] New user registered: ${user.id}`);
           },
         },
       },

@@ -33,6 +33,9 @@ export const envSchema = z.object({
   CLOUDINARY_API_KEY: z.string().optional(),
   CLOUDINARY_API_SECRET: z.string().optional(),
 
+  POSTHOG_API_KEY: z.string().optional(),
+  POSTHOG_HOST: z.string().optional(),
+
   PLATFORM_FEE_PERCENTAGE: z.coerce.number().min(0).max(100).default(10),
   DEFAULT_CURRENCY: z.string().default('NGN'),
 });

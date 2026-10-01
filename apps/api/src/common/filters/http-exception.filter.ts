@@ -8,10 +8,13 @@ import {
 } from '@nestjs/common';
 import { Response } from 'express';
 import { ErrorCodes } from '../errors/error-codes';
+import { PostHogService } from '../../modules/analytics/posthog.service';
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
+
+  constructor(private readonly postHogService: PostHogService) {}
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -45,9 +48,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const logContext = {
       path: request.url,
       method: request.method,
-      body: request.body,
-      query: request.query,
-      params: request.params,
+      body: this.sanitizeForLogging(request.body),
+      query: this.sanitizeForLogging(request.query),
+      params: this.sanitizeForLogging(request.params),
       ip: request.ip,
       errorDetails: details,
       stack: exception instanceof Error ? exception.stack : undefined,
@@ -57,6 +60,17 @@ export class HttpExceptionFilter implements ExceptionFilter {
       this.logger.error(`[${request.method} ${request.url}] ${message}`, {
         ...logContext,
       });
+      if (exception instanceof Error) {
+        this.postHogService.captureException(
+          exception,
+          request.user?.id ?? 'anonymous',
+          {
+            path: request.url,
+            method: request.method,
+            status_code: status,
+          },
+        );
+      }
     } else {
       this.logger.warn(`[${request.method} ${request.url}] ${message}`, {
         ...logContext,
@@ -87,5 +101,38 @@ export class HttpExceptionFilter implements ExceptionFilter {
       default:
         return ErrorCodes.INTERNAL_SERVER_ERROR;
     }
+  }
+
+  private sanitizeForLogging(obj: any): any {
+    if (!obj || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) {
+      return obj.map((item) => this.sanitizeForLogging(item));
+    }
+
+    const sensitiveFields = new Set([
+      'password',
+      'currentpassword',
+      'newpassword',
+      'confirmpassword',
+      'token',
+      'refreshtoken',
+      'accesstoken',
+      'secret',
+      'cardnumber',
+      'cvv',
+      'authorization',
+    ]);
+
+    const sanitized: Record<string, any> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (sensitiveFields.has(key.toLowerCase())) {
+        sanitized[key] = '[REDACTED]';
+      } else if (typeof value === 'object' && value !== null) {
+        sanitized[key] = this.sanitizeForLogging(value);
+      } else {
+        sanitized[key] = value;
+      }
+    }
+    return sanitized;
   }
 }
