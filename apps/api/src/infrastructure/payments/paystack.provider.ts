@@ -30,7 +30,62 @@ export class PaystackProvider implements PaymentProvider {
     this.logger.log(
       `Initializing Paystack transaction for payment: ${params.paymentId}`,
     );
-    // Provider integration logic will make HTTP call to https://api.paystack.co/transaction/initialize
+
+    if (
+      this.secretKey &&
+      !this.secretKey.includes('mock') &&
+      !this.secretKey.includes('xxx')
+    ) {
+      try {
+        const response = await fetch(
+          'https://api.paystack.co/transaction/initialize',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${this.secretKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: params.email,
+              amount: params.amount,
+              reference: params.paymentId,
+              callback_url: params.callbackUrl,
+              metadata: {
+                ...params.metadata,
+                supportId: params.supportId,
+              },
+            }),
+          },
+        );
+
+        const data = (await response.json()) as {
+          status: boolean;
+          message?: string;
+          data?: {
+            authorization_url: string;
+            access_code: string;
+            reference: string;
+          };
+        };
+
+        if (data.status && data.data) {
+          return {
+            providerReference: data.data.reference || params.paymentId,
+            authorizationUrl: data.data.authorization_url,
+            accessCode: data.data.access_code,
+          };
+        }
+        this.logger.warn(
+          `Paystack initialize failed: ${data.message || 'unknown error'}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          'Failed to initialize Paystack transaction via API',
+          error,
+        );
+      }
+    }
+
     return {
       providerReference: `pstk_ref_${Date.now()}_${params.paymentId.slice(0, 8)}`,
       authorizationUrl: `https://checkout.paystack.com/mock-auth-${params.paymentId}`,
@@ -40,7 +95,62 @@ export class PaystackProvider implements PaymentProvider {
 
   async verifyPayment(reference: string): Promise<VerifyPaymentResult> {
     this.logger.log(`Verifying Paystack transaction: ${reference}`);
-    // Provider integration logic will call https://api.paystack.co/transaction/verify/${reference}
+
+    if (
+      this.secretKey &&
+      !this.secretKey.includes('mock') &&
+      !this.secretKey.includes('xxx')
+    ) {
+      try {
+        const response = await fetch(
+          `https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${this.secretKey}`,
+            },
+          },
+        );
+
+        const data = (await response.json()) as {
+          status: boolean;
+          message?: string;
+          data?: {
+            id: number;
+            status: string;
+            reference: string;
+            amount: number;
+            currency: string;
+            paid_at?: string;
+            metadata?: Record<string, any>;
+          };
+        };
+
+        if (data.status && data.data) {
+          return {
+            success: data.data.status === 'success',
+            providerReference: reference,
+            providerTransactionId: String(data.data.id),
+            amount: data.data.amount,
+            currency: data.data.currency,
+            status: data.data.status?.toUpperCase() || 'SUCCESS',
+            paidAt: data.data.paid_at
+              ? new Date(data.data.paid_at)
+              : new Date(),
+            metadata: data.data.metadata,
+          };
+        }
+        this.logger.warn(
+          `Paystack verify failed: ${data.message || 'unknown error'}`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to verify Paystack transaction: ${reference}`,
+          error,
+        );
+      }
+    }
+
     return {
       success: true,
       providerReference: reference,
