@@ -29,8 +29,8 @@ describe('UsersService', () => {
         roles: [{ role: { name: 'CREATOR' } }],
         creatorProfile: {
           id: 'creator-1',
-          username: 'adeola',
-          displayName: 'Adeola',
+          slug: 'adeola',
+          creatorName: 'Ade',
           status: 'ACTIVE',
           kycStatus: 'VERIFIED',
         },
@@ -43,7 +43,12 @@ describe('UsersService', () => {
       const result = await usersService.findByIdWithRoles('user-1');
       expect(result.id).toBe('user-1');
       expect(result.roles).toEqual(['CREATOR']);
-      expect(result.creatorProfile?.username).toBe('adeola');
+      expect(result.isOnboardingCompleted).toBe(true);
+      expect(result.isProfileSetupCompleted).toBe(true);
+      expect(result.creatorProfile?.slug).toBe('adeola');
+      expect(result.creatorProfile?.creatorName).toBe('Ade');
+      expect((result.creatorProfile as any)?.username).toBeUndefined();
+      expect((result.creatorProfile as any)?.personalizedLink).toBeUndefined();
     });
 
     it('should throw NotFoundException if user does not exist', async () => {
@@ -63,8 +68,8 @@ describe('UsersService', () => {
         image: 'https://example.com/avatar.jpg',
         creatorProfile: {
           id: 'creator-1',
-          username: 'adeola',
-          displayName: 'Adeola',
+          slug: 'adeola',
+          creatorName: 'Ade',
           status: 'ACTIVE',
         },
         createdAt: new Date(),
@@ -75,7 +80,9 @@ describe('UsersService', () => {
       const result = await usersService.getPublicProfile('user-1');
       expect(result.id).toBe('user-1');
       expect(result.name).toBe('Ade');
-      expect(result.creatorProfile?.username).toBe('adeola');
+      expect(result.creatorProfile?.slug).toBe('adeola');
+      expect((result.creatorProfile as any)?.username).toBeUndefined();
+      expect((result.creatorProfile as any)?.personalizedLink).toBeUndefined();
       // Assert sensitive fields are undefined in public profile
       expect((result as any).email).toBeUndefined();
       expect((result as any).roles).toBeUndefined();

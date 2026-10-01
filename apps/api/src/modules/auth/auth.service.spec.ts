@@ -13,6 +13,7 @@ const mockBetterAuthInstance = {
     changePassword: jest.fn(),
     verifyEmail: jest.fn(),
     sendVerificationEmail: jest.fn(),
+    signInSocial: jest.fn(),
   },
 };
 
@@ -44,6 +45,9 @@ describe('AuthService', () => {
       userRole: {
         upsert: jest.fn(),
         findFirst: jest.fn(),
+      },
+      creatorProfile: {
+        findUnique: jest.fn(),
       },
     };
 
@@ -130,65 +134,29 @@ describe('AuthService', () => {
     });
   });
 
-  describe('signUpEmailWithRole', () => {
-    it('should assign SUPPORTER role after successful registration', async () => {
+  describe('signUpEmail', () => {
+    it('should call signUpEmail on betterAuth api with asResponse: true', async () => {
       const mockWebResponse = new Response(
         JSON.stringify({ user: { id: 'u-new' } }),
-        {
-          status: 201,
-          headers: { 'content-type': 'application/json' },
-        },
+        { status: 201, headers: { 'content-type': 'application/json' } },
       );
       mockBetterAuthInstance.api.signUpEmail.mockResolvedValue(mockWebResponse);
-      prismaService.role.findUnique.mockResolvedValue({
-        id: 'role-supporter',
-        name: 'SUPPORTER',
-      });
-      prismaService.userRole.upsert.mockResolvedValue({});
 
-      const result = await service.signUpEmailWithRole({
+      const result = await service.signUpEmail({
         email: 'new@example.com',
         password: 'Password123!',
         name: 'New User',
       });
 
+      expect(mockBetterAuthInstance.api.signUpEmail).toHaveBeenCalledWith({
+        body: {
+          email: 'new@example.com',
+          password: 'Password123!',
+          name: 'New User',
+        },
+        asResponse: true,
+      });
       expect(result.ok).toBe(true);
-      expect(prismaService.role.findUnique).toHaveBeenCalledWith({
-        where: { name: 'SUPPORTER' },
-      });
-      expect(prismaService.userRole.upsert).toHaveBeenCalledWith({
-        where: {
-          userId_roleId: {
-            userId: 'u-new',
-            roleId: 'role-supporter',
-          },
-        },
-        update: {},
-        create: {
-          userId: 'u-new',
-          roleId: 'role-supporter',
-        },
-      });
-    });
-
-    it('should not assign role if registration fails', async () => {
-      const mockWebResponse = new Response(
-        JSON.stringify({ message: 'User already exists' }),
-        {
-          status: 400,
-          headers: { 'content-type': 'application/json' },
-        },
-      );
-      mockBetterAuthInstance.api.signUpEmail.mockResolvedValue(mockWebResponse);
-
-      const result = await service.signUpEmailWithRole({
-        email: 'existing@example.com',
-        password: 'Password123!',
-      });
-
-      expect(result.ok).toBe(false);
-      expect(prismaService.role.findUnique).not.toHaveBeenCalled();
-      expect(prismaService.userRole.upsert).not.toHaveBeenCalled();
     });
   });
 
@@ -258,6 +226,32 @@ describe('AuthService', () => {
         body: {
           email: 'user@example.com',
           redirectTo: '/reset-password',
+        },
+        asResponse: true,
+      });
+    });
+
+    it('should append from query to redirectTo when from is provided', async () => {
+      const mockWebResponse = new Response(JSON.stringify({ status: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+      mockBetterAuthInstance.api.requestPasswordReset.mockResolvedValue(
+        mockWebResponse,
+      );
+
+      const result = await service.forgotPassword({
+        email: 'user@example.com',
+        from: 'mobile',
+      });
+
+      expect(result).toEqual(mockWebResponse);
+      expect(
+        mockBetterAuthInstance.api.requestPasswordReset,
+      ).toHaveBeenCalledWith({
+        body: {
+          email: 'user@example.com',
+          redirectTo: '/reset-password?from=mobile',
         },
         asResponse: true,
       });
@@ -394,6 +388,102 @@ describe('AuthService', () => {
 
       const result = await service.userHasRole('u1', 'CREATOR');
       expect(result).toBe(false);
+    });
+  });
+
+  describe('getIsOnboarded', () => {
+    it('should return false if creator profile does not exist', async () => {
+      prismaService.creatorProfile.findUnique.mockResolvedValue(null);
+
+      const result = await service.getIsOnboarded('u-none');
+      expect(result).toBe(false);
+      expect(prismaService.creatorProfile.findUnique).toHaveBeenCalledWith({
+        where: { userId: 'u-none' },
+        select: { id: true, status: true },
+      });
+    });
+
+    it('should return false if creator profile status is REGISTERED', async () => {
+      prismaService.creatorProfile.findUnique.mockResolvedValue({
+        id: 'cp-1',
+        status: 'REGISTERED',
+      });
+
+      const result = await service.getIsOnboarded('u-registered');
+      expect(result).toBe(false);
+    });
+
+    it('should return true if creator profile status is PROFILE_CREATED', async () => {
+      prismaService.creatorProfile.findUnique.mockResolvedValue({
+        id: 'cp-2',
+        status: 'PROFILE_CREATED',
+      });
+
+      const result = await service.getIsOnboarded('u-onboarded');
+      expect(result).toBe(true);
+    });
+
+    it('should return true if creator profile status is ACTIVE', async () => {
+      prismaService.creatorProfile.findUnique.mockResolvedValue({
+        id: 'cp-3',
+        status: 'ACTIVE',
+      });
+
+      const result = await service.getIsOnboarded('u-active');
+      expect(result).toBe(true);
+    });
+  });
+
+  describe('getUserAuthFlags', () => {
+    it('should return isOnboardingCompleted and isProfileSetupCompleted matching completion status', async () => {
+      prismaService.creatorProfile.findUnique.mockResolvedValue({
+        id: 'cp-onboarded',
+        status: 'PROFILE_CREATED',
+      });
+
+      const result = await service.getUserAuthFlags('u-creator');
+      expect(result).toEqual({
+        isOnboardingCompleted: true,
+        isProfileSetupCompleted: true,
+      });
+      // Verify no obsolete keys
+      expect((result as any).isOnboarded).toBeUndefined();
+      expect((result as any).isProfileCompleted).toBeUndefined();
+    });
+
+    it('should return false flags for user with no creator profile or status REGISTERED', async () => {
+      prismaService.creatorProfile.findUnique.mockResolvedValue(null);
+
+      const result = await service.getUserAuthFlags('u-new');
+      expect(result).toEqual({
+        isOnboardingCompleted: false,
+        isProfileSetupCompleted: false,
+      });
+    });
+  });
+
+  describe('signInSocial', () => {
+    it('should call signInSocial on betterAuth api and return authorization url', async () => {
+      mockBetterAuthInstance.api.signInSocial.mockResolvedValue({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=test',
+        redirect: true,
+      });
+
+      const res = await service.signInSocial({
+        provider: 'google',
+        callbackURL: 'buymeayard://oauth-callback',
+      });
+
+      expect(mockBetterAuthInstance.api.signInSocial).toHaveBeenCalledWith({
+        body: {
+          provider: 'google',
+          callbackURL: 'buymeayard://oauth-callback',
+          errorCallbackURL: undefined,
+          newUserCallbackURL: undefined,
+        },
+      });
+      expect(res.url).toContain('accounts.google.com');
+      expect(res.redirect).toBe(true);
     });
   });
 });

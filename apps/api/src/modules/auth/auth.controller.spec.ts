@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { HttpException, HttpStatus, ForbiddenException } from '@nestjs/common';
+import { HttpException, HttpStatus } from '@nestjs/common';
 
 jest.mock('better-auth/node', () => ({
   toNodeHandler: jest.fn(() => jest.fn()),
@@ -16,7 +16,6 @@ describe('AuthController', () => {
   let controller: AuthController;
   let authService: {
     signUpEmail: jest.Mock;
-    signUpEmailWithRole: jest.Mock;
     signInEmail: jest.Mock;
     signOut: jest.Mock;
     getSessionFromNodeHeaders: jest.Mock;
@@ -26,7 +25,10 @@ describe('AuthController', () => {
     changePassword: jest.Mock;
     verifyEmail: jest.Mock;
     sendVerificationEmail: jest.Mock;
+    signInSocial: jest.Mock;
     userHasRole: jest.Mock;
+    getIsOnboarded: jest.Mock;
+    getUserAuthFlags: jest.Mock;
   };
 
   const createMockReqRes = (headers: Record<string, string> = {}) => {
@@ -57,7 +59,6 @@ describe('AuthController', () => {
   beforeEach(async () => {
     authService = {
       signUpEmail: jest.fn(),
-      signUpEmailWithRole: jest.fn(),
       signInEmail: jest.fn(),
       signOut: jest.fn(),
       getSessionFromNodeHeaders: jest.fn(),
@@ -67,7 +68,13 @@ describe('AuthController', () => {
       changePassword: jest.fn(),
       verifyEmail: jest.fn(),
       sendVerificationEmail: jest.fn(),
+      signInSocial: jest.fn(),
       userHasRole: jest.fn(),
+      getIsOnboarded: jest.fn().mockResolvedValue(false),
+      getUserAuthFlags: jest.fn().mockResolvedValue({
+        isOnboardingCompleted: false,
+        isProfileSetupCompleted: false,
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -104,29 +111,22 @@ describe('AuthController', () => {
         { user: { id: 'u1', email: 'alice@example.com' } },
         201,
       );
-      authService.signUpEmailWithRole.mockResolvedValue(mockWebResponse);
+      authService.signUpEmail.mockResolvedValue(mockWebResponse);
 
       const result = await controller.register(dto, req, res);
 
-      expect(authService.signUpEmailWithRole).toHaveBeenCalled();
+      expect(authService.signUpEmail).toHaveBeenCalled();
       expect(res.status).toHaveBeenCalledWith(HttpStatus.CREATED);
       expect(result).toEqual({
-        user: { id: 'u1', email: 'alice@example.com' },
+        user: {
+          id: 'u1',
+          email: 'alice@example.com',
+          isOnboardingCompleted: false,
+          isProfileSetupCompleted: false,
+        },
+        isOnboardingCompleted: false,
+        isProfileSetupCompleted: false,
       });
-    });
-
-    it('should reject registration on mobile', async () => {
-      const dto = {
-        email: 'alice@example.com',
-        password: 'Password123!',
-        name: 'Alice',
-      };
-      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
-
-      await expect(controller.register(dto, req, res)).rejects.toThrow(
-        ForbiddenException,
-      );
-      expect(authService.signUpEmailWithRole).not.toHaveBeenCalled();
     });
 
     it('should forward set-cookie headers for web browser requests', async () => {
@@ -141,7 +141,7 @@ describe('AuthController', () => {
         { user: { id: 'u1', email: 'alice@example.com' } },
         201,
       );
-      authService.signUpEmailWithRole.mockResolvedValue(mockWebResponse);
+      authService.signUpEmail.mockResolvedValue(mockWebResponse);
 
       await controller.register(dto, req, res);
 
@@ -165,7 +165,7 @@ describe('AuthController', () => {
         }),
         { status: 400, headers: { 'content-type': 'application/json' } },
       );
-      authService.signUpEmailWithRole.mockResolvedValue(mockWebResponse);
+      authService.signUpEmail.mockResolvedValue(mockWebResponse);
 
       await expect(controller.register(dto, req, res)).rejects.toThrow(
         HttpException,
@@ -195,53 +195,16 @@ describe('AuthController', () => {
         'better-auth.session_token=token123; Path=/; HttpOnly',
       ]);
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
-      expect(result).toEqual({ user: { id: 'u1' }, token: 'token456' });
-    });
-
-    it('should allow mobile login for CREATOR users', async () => {
-      const dto = { email: 'creator@example.com', password: 'Password123!' };
-      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
-
-      const mockWebResponse = createSuccessResponse({
-        user: { id: 'u-creator' },
-        token: 'token-creator',
-      });
-      authService.signInEmail.mockResolvedValue(mockWebResponse);
-      authService.userHasRole.mockResolvedValue(true);
-
-      const result = await controller.login(dto, req, res);
-
-      expect(authService.userHasRole).toHaveBeenCalledWith(
-        'u-creator',
-        'CREATOR',
-      );
       expect(result).toEqual({
-        token: 'token-creator',
-        user: { id: 'u-creator' },
+        user: {
+          id: 'u1',
+          isOnboardingCompleted: false,
+          isProfileSetupCompleted: false,
+        },
+        token: 'token456',
+        isOnboardingCompleted: false,
+        isProfileSetupCompleted: false,
       });
-    });
-
-    it('should reject mobile login for non-CREATOR users', async () => {
-      const dto = { email: 'supporter@example.com', password: 'Password123!' };
-      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
-
-      const mockWebResponse = createSuccessResponse({
-        user: { id: 'u-supporter' },
-        token: 'token-supporter',
-      });
-      authService.signInEmail.mockResolvedValue(mockWebResponse);
-      authService.userHasRole.mockResolvedValue(false);
-      authService.signOut.mockResolvedValue(
-        new Response(JSON.stringify({ success: true }), { status: 200 }),
-      );
-
-      await expect(controller.login(dto, req, res)).rejects.toThrow(
-        ForbiddenException,
-      );
-      expect(authService.userHasRole).toHaveBeenCalledWith(
-        'u-supporter',
-        'CREATOR',
-      );
     });
 
     it('should return token in JSON and omit cookies for mobile requests (x-platform: ios)', async () => {
@@ -361,6 +324,38 @@ describe('AuthController', () => {
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
       expect(result).toEqual({ status: true });
     });
+
+    it('should pass from param when explicitly provided in dto', async () => {
+      const dto = { email: 'user@example.com', from: 'mobile' };
+      const { req, res } = createMockReqRes();
+
+      const mockWebResponse = createSuccessResponse({ status: true });
+      authService.forgotPassword.mockResolvedValue(mockWebResponse);
+
+      await controller.forgotPassword(dto, req, res);
+
+      expect(authService.forgotPassword).toHaveBeenCalledWith({
+        email: 'user@example.com',
+        from: 'mobile',
+        headers: expect.any(Headers),
+      });
+    });
+
+    it('should automatically set from to mobile if x-client-type is mobile', async () => {
+      const dto = { email: 'user@example.com' };
+      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
+
+      const mockWebResponse = createSuccessResponse({ status: true });
+      authService.forgotPassword.mockResolvedValue(mockWebResponse);
+
+      await controller.forgotPassword(dto, req, res);
+
+      expect(authService.forgotPassword).toHaveBeenCalledWith({
+        email: 'user@example.com',
+        from: 'mobile',
+        headers: expect.any(Headers),
+      });
+    });
   });
 
   // --------------------------------------------------------
@@ -458,6 +453,105 @@ describe('AuthController', () => {
       });
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
       expect(result).toEqual({ status: true });
+    });
+  });
+
+  // --------------------------------------------------------
+  // SOCIAL SIGN IN (REST & MOBILE)
+  // --------------------------------------------------------
+
+  describe('socialSignIn (POST /auth/social/sign-in)', () => {
+    it('should call authService.signInSocial and return url and redirect flag', async () => {
+      const { req } = createMockReqRes();
+      authService.signInSocial.mockResolvedValue({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+      });
+
+      const result = await controller.socialSignIn(
+        {
+          provider: 'google',
+          callbackURL: 'buymeayard://oauth-callback',
+        },
+        req,
+      );
+
+      expect(authService.signInSocial).toHaveBeenCalledWith({
+        provider: 'google',
+        callbackURL: 'buymeayard://oauth-callback',
+        errorCallbackURL: undefined,
+        newUserCallbackURL: undefined,
+        headers: expect.any(Headers),
+      });
+      expect(result).toEqual({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+      });
+    });
+
+    it('should default callbackURL to mobile custom scheme if x-client-type is mobile', async () => {
+      const { req } = createMockReqRes({ 'x-client-type': 'mobile' });
+      authService.signInSocial.mockResolvedValue({
+        url: 'https://appleid.apple.com/auth/authorize?...',
+        redirect: true,
+      });
+
+      const result = await controller.socialSignIn({ provider: 'apple' }, req);
+
+      expect(authService.signInSocial).toHaveBeenCalledWith({
+        provider: 'apple',
+        callbackURL: 'buymeayard://oauth-callback',
+        errorCallbackURL: undefined,
+        newUserCallbackURL: undefined,
+        headers: expect.any(Headers),
+      });
+      expect(result.url).toContain('appleid.apple.com');
+    });
+  });
+
+  describe('directSocialRedirect (GET /auth/social/:provider)', () => {
+    it('should redirect browser to provider OAuth URL', async () => {
+      const { req, res } = createMockReqRes();
+      res.redirect = jest.fn();
+      authService.signInSocial.mockResolvedValue({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+      });
+
+      await controller.directSocialRedirect(
+        'google',
+        'http://localhost:3000/dashboard',
+        undefined,
+        req,
+        res,
+      );
+
+      expect(res.redirect).toHaveBeenCalledWith(
+        'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+      );
+    });
+
+    it('should return JSON when redirect=false is passed', async () => {
+      const { req, res } = createMockReqRes();
+      res.json = jest.fn();
+      authService.signInSocial.mockResolvedValue({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+      });
+
+      await controller.directSocialRedirect(
+        'google',
+        'buymeayard://oauth-callback',
+        'false',
+        req,
+        res,
+      );
+
+      expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
+      expect(res.json).toHaveBeenCalledWith({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+      });
     });
   });
 });

@@ -30,8 +30,8 @@ export class UsersService {
         creatorProfile: {
           select: {
             id: true,
-            username: true,
-            displayName: true,
+            slug: true,
+            creatorName: true,
             status: true,
             kycStatus: true,
           },
@@ -46,6 +46,10 @@ export class UsersService {
       });
     }
 
+    const isCompleted =
+      user.creatorProfile !== null &&
+      user.creatorProfile.status !== 'REGISTERED';
+
     return {
       id: user.id,
       email: user.email,
@@ -54,7 +58,17 @@ export class UsersService {
       emailVerified: user.emailVerified,
       status: user.status,
       roles: user.roles.map((r) => r.role.name),
-      creatorProfile: user.creatorProfile,
+      isOnboardingCompleted: isCompleted,
+      isProfileSetupCompleted: isCompleted,
+      creatorProfile: user.creatorProfile
+        ? {
+            id: user.creatorProfile.id,
+            slug: user.creatorProfile.slug,
+            creatorName: user.creatorProfile.creatorName || user.name || '',
+            status: user.creatorProfile.status,
+            kycStatus: user.creatorProfile.kycStatus,
+          }
+        : null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
     };
@@ -67,8 +81,8 @@ export class UsersService {
         creatorProfile: {
           select: {
             id: true,
-            username: true,
-            displayName: true,
+            slug: true,
+            creatorName: true,
             status: true,
           },
         },
@@ -86,7 +100,14 @@ export class UsersService {
       id: user.id,
       name: user.name,
       image: user.image,
-      creatorProfile: user.creatorProfile,
+      creatorProfile: user.creatorProfile
+        ? {
+            id: user.creatorProfile.id,
+            slug: user.creatorProfile.slug,
+            creatorName: user.creatorProfile.creatorName || user.name || '',
+            status: user.creatorProfile.status,
+          }
+        : null,
       createdAt: user.createdAt,
     };
   }
