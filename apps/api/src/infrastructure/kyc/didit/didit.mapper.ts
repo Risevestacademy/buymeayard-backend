@@ -1,5 +1,9 @@
 import { KycDocumentType, KycSubmissionStatus } from '@buymeayard/types';
-import type { KycDecisionSummary, KycWarning } from '../kyc-provider.interface';
+import type {
+  KycAdminDecisionView,
+  KycDecisionSummary,
+  KycWarning,
+} from '../kyc-provider.interface';
 
 type Json = Record<string, unknown>;
 
@@ -179,4 +183,67 @@ export function redactDiditWebhook(payload: Json): Json {
   }
 
   return redacted;
+}
+
+export function emptyAdminDecisionView(): KycAdminDecisionView {
+  return {
+    status: null,
+    idVerification: null,
+    liveness: null,
+    faceMatch: null,
+    warnings: [],
+  };
+}
+
+/**
+ * Admin detail view of a Didit decision: an explicit allowlist of fields.
+ * Only these fields are copied; everything else in the payload is dropped.
+ */
+export function toAdminDecisionView(
+  decisionInput: unknown,
+): KycAdminDecisionView {
+  const decision = asObject(decisionInput) ?? {};
+  const id = first(decision, 'id_verifications');
+  const liveness = first(decision, 'liveness_checks');
+  const face = first(decision, 'face_matches');
+
+  return {
+    status: str(decision.status),
+    idVerification: id
+      ? {
+          status: str(id.status),
+          documentType: str(id.document_type),
+          documentNumberLast4:
+            last4(id.document_number) ?? last4(id.personal_number),
+          firstName: str(id.first_name),
+          lastName: str(id.last_name),
+          dateOfBirth: str(id.date_of_birth),
+          expirationDate: str(id.expiration_date),
+          issuingState: str(id.issuing_state),
+          nationality: str(id.nationality),
+          images: {
+            front: str(id.front_image),
+            back: str(id.back_image),
+            portrait: str(id.portrait_image),
+          },
+        }
+      : null,
+    liveness: liveness
+      ? {
+          status: str(liveness.status),
+          method: str(liveness.method),
+          score: num(liveness.score),
+          referenceImage: str(liveness.reference_image),
+        }
+      : null,
+    faceMatch: face
+      ? {
+          status: str(face.status),
+          score: num(face.score),
+          sourceImage: str(face.source_image),
+          targetImage: str(face.target_image),
+        }
+      : null,
+    warnings: collectWarnings(decision),
+  };
 }

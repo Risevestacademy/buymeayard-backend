@@ -11,7 +11,7 @@ The collection has **168 requests and about 280 assertions**. A clean run passes
 | File | Purpose |
 | :--- | :--- |
 | `BuyMeAYard.postman_collection.json` | The collection. Import this. |
-| `BuyMeAYard.local.postman_environment.json` | Local environment: URLs, admin login, webhook secrets. Import this too. |
+| `BuyMeAYard.local.postman_environment.json` | Local environment: URLs, admin login, webhook secrets. Import this too. **Local development only:** these are the seed's development defaults and public test secrets. |
 | `sql/01-seed-catalogue.sql` | Seeds the platform materials catalogue (Ankara, Lace, Aso-oke, Adire). Run once per database. |
 | `sql/02-seed-creator-fixtures.sql` | Gives one creator a yard menu, a payout method and three posts. Run once per test run, after onboarding. |
 | `sql/99-force-verify-creator.sql` | Fallback that marks a creator verified without KYC. Use it only if you can't configure the Didit webhook secret. |
@@ -90,7 +90,7 @@ Wait for `🚀 Buy Me a Yard API running at http://localhost:3000/api/v1`. Resta
 | :--- | :--- |
 | `creatorToken` | The creator registered in this run |
 | `supporterToken` | The supporter registered in this run |
-| `adminToken` | The seeded super admin (`admin@buymeayard.com` / `AdminPassword123!`) |
+| `adminToken` | The seeded super admin (`admin@buymeayard.com` / `AdminPassword123!`, the **development-only** default; `prisma/seed.ts` refuses it when `NODE_ENV=production`, where `ADMIN_PASSWORD` must be set) |
 
 **Chaining.** Test scripts save IDs as collection variables for later requests to use: `creatorId`, `creatorMaterialId`, `supportId`, `paymentReference`, `kycSubmissionId`, `payoutId` and others. **Run folders in order.** A request run on its own fails if an earlier request hasn't set what it needs.
 
@@ -135,6 +135,17 @@ Start again from **00 · Setup → Start new test run**. You don't need to reset
 
 ---
 
+### Option C — Newman (command line, one pass)
+
+[`run-newman.js`](postman/run-newman.js) runs the whole collection and applies the fixtures SQL automatically at the pause point after folder 02:
+
+```bash
+npm i -g newman@6
+NODE_PATH=$(npm root -g) node docs/postman/run-newman.js
+```
+
+Override `BASE_URL`, `HOST_URL`, `PG_CONTAINER` or `PG_DB` to point it at another API instance or database. It exits non-zero if any assertion fails.
+
 ## 5. Folder-by-folder walkthrough
 
 Each subsection lists what the folder does and what to look for. Negative tests are marked **(→ status)**.
@@ -147,7 +158,7 @@ Each subsection lists what the folder does and what to look for. Negative tests 
 
 ### 01 · Auth — Creator account
 
-1. **Register creator** — `POST /auth/register` with `{ email, password }` only. Returns 201 with `data.token`, `data.user` and `isOnboarded: false`. Saves `creatorToken` and `creatorUserId`.
+1. **Register creator** — `POST /auth/register` with `{ email, password }` only. Returns 201 with `data.token`, `data.user` and `isOnboardingCompleted: false`. Saves `creatorToken` and `creatorUserId`.
 2. Negative cases:
    - **duplicate email (→ 4xx)**
    - **extra field `role` (→ 400)**: shows that privilege fields can't be smuggled in
@@ -166,11 +177,11 @@ Each subsection lists what the folder does and what to look for. Negative tests 
 
 ### 02 · Creator onboarding & profile
 
-1. **Before onboarding:** `GET /users/me` shows `isOnboarded: false` and `roles: []`. `GET /creators/me` **(→ 404)**. `GET /creators/me/kyc` **(→ 403)**, because KYC routes need the CREATOR role, which onboarding grants.
+1. **Before onboarding:** `GET /users/me` shows `isOnboardingCompleted: false` and `roles: []`. `GET /creators/me` **(→ 404)**. `GET /creators/me/kyc` **(→ 403)**, because KYC routes need the CREATOR role, which onboarding grants.
 2. **Onboarding validation:** a link with invalid characters **(→ 400)** and a missing name **(→ 400)**.
 3. **Complete onboarding** — `PUT /creators/me/onboarding`. Expect `status: PROFILE_CREATED`, `kycStatus: NOT_SUBMITTED` and two social links. Saves `creatorId` (the **profile** id, used by supports, follows and admin routes) and `creatorUsername`. It also **prints the fixtures SQL command** to the console.
 4. **Re-run onboarding** — the same link updates the same profile id instead of returning a conflict.
-5. `GET /creators/me` and `GET /users/me`: the user now has `isOnboarded: true` and the `CREATOR` role.
+5. `GET /creators/me` and `GET /users/me`: the user now has `isOnboardingCompleted: true` and the `CREATOR` role.
 6. `PATCH /users/me` with a valid image URL, then an **invalid URL (→ 400)**.
 7. **Public profile via personalized link** — `GET /creators/buymeayard%2F<username>` resolves to the same creator.
 8. **Discover creators** — `GET /creators?search=<username>` returns **nothing**. Discovery lists only ACTIVE (verified) creators.

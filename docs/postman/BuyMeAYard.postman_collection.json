@@ -25,7 +25,7 @@
                   "const runId = Date.now().toString(36);",
                   "pm.collectionVariables.set('runId', runId);",
                   "pm.collectionVariables.set('creatorEmail', `creator+${runId}@example.com`);",
-                  "pm.collectionVariables.set('creatorUsername', `creator_${runId}`);",
+                  "pm.collectionVariables.set('creatorSlug', `creator_${runId}`);",
                   "pm.collectionVariables.set('supporterEmail', `supporter+${runId}@example.com`);",
                   "console.log('New run', runId);"
                 ]
@@ -171,7 +171,7 @@
                   "pm.test('Session token returned (mobile mode)', () => pm.expect(token).to.be.a('string').and.not.empty);",
                   "pm.collectionVariables.set('creatorToken', token);",
                   "pm.collectionVariables.set('creatorUserId', json.data.user.id);",
-                  "pm.test('Not onboarded yet', () => pm.expect(json.data.isOnboarded).to.eql(false));"
+                  "pm.test('Not onboarded yet', () => pm.expect(json.data.isOnboardingCompleted).to.eql(false));"
                 ]
               }
             }
@@ -789,7 +789,7 @@
                 "exec": [
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
                   "const d = pm.response.json().data;",
-                  "pm.test('Not onboarded', () => pm.expect(d.isOnboarded).to.eql(false));",
+                  "pm.test('Not onboarded', () => pm.expect(d.isOnboardingCompleted).to.eql(false));",
                   "pm.test('No roles yet', () => pm.expect(d.roles).to.eql([]));"
                 ]
               }
@@ -891,7 +891,7 @@
           }
         },
         {
-          "name": "Onboarding with invalid link (→ 400)",
+          "name": "Onboarding with invalid slug (→ 400)",
           "event": [
             {
               "listen": "test",
@@ -930,7 +930,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"creatorName\": \"Test Creator\",\n  \"personalizedLink\": \"bad link!\"\n}",
+              "raw": "{\n  \"creatorName\": \"Test Creator\",\n  \"slug\": \"bad link!\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -979,7 +979,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"personalizedLink\": \"{{creatorUsername}}\"\n}",
+              "raw": "{\n  \"slug\": \"{{creatorSlug}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1002,9 +1002,9 @@
                   "pm.test('kycStatus NOT_SUBMITTED', () => pm.expect(d.kycStatus).to.eql('NOT_SUBMITTED'));",
                   "pm.test('Two social links', () => pm.expect(d.socialLinks.length).to.eql(2));",
                   "pm.collectionVariables.set('creatorId', d.id);",
-                  "pm.collectionVariables.set('creatorUsername', d.username);",
+                  "pm.collectionVariables.set('creatorSlug', d.slug);",
                   "console.log('\\n>>> NOW RUN (from the repo root):\\n' +",
-                  "  'docker exec -i buymeayard-postgres psql -U postgres -d buymeayard -v creator=' + d.username +",
+                  "  'docker exec -i buymeayard-postgres psql -U postgres -d buymeayard -v creator=' + d.slug +",
                   "  ' < docs/postman/sql/02-seed-creator-fixtures.sql\\n');"
                 ]
               }
@@ -1024,7 +1024,7 @@
               }
             ],
             "url": "{{baseUrl}}/creators/me/onboarding",
-            "description": "Accepts `creatorName` (or `displayName`) and `personalizedLink` (or `username`).\nThe link may be `buymeayard/slug`, `@slug`, a full URL or a bare slug.",
+            "description": "Accepts `creatorName` and `slug` (3–30 characters: lowercase letters, digits,\n`_` or `-`; reserved words are refused). The public page is `/creators/<slug>`.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1037,7 +1037,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"creatorName\": \"Test Creator\",\n  \"personalizedLink\": \"buymeayard/{{creatorUsername}}\",\n  \"socialLinks\": [\n    {\n      \"platform\": \"twitter\",\n      \"url\": \"https://x.com/{{creatorUsername}}\"\n    },\n    {\n      \"platform\": \"instagram\",\n      \"url\": \"https://instagram.com/{{creatorUsername}}\"\n    }\n  ]\n}",
+              "raw": "{\n  \"creatorName\": \"Test Creator\",\n  \"slug\": \"{{creatorSlug}}\",\n  \"socialLinks\": [\n    {\n      \"platform\": \"twitter\",\n      \"url\": \"https://x.com/{{creatorSlug}}\"\n    },\n    {\n      \"platform\": \"instagram\",\n      \"url\": \"https://instagram.com/{{creatorSlug}}\"\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1074,7 +1074,7 @@
               }
             ],
             "url": "{{baseUrl}}/creators/me/onboarding",
-            "description": "Re-onboarding with the same link updates the profile instead of failing.",
+            "description": "Re-onboarding with the same slug updates the profile instead of failing.",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1087,7 +1087,7 @@
             },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"creatorName\": \"Test Creator\",\n  \"username\": \"{{creatorUsername}}\"\n}",
+              "raw": "{\n  \"creatorName\": \"Test Creator\",\n  \"slug\": \"{{creatorSlug}}\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -1143,7 +1143,7 @@
                 "exec": [
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
                   "const d = pm.response.json().data;",
-                  "pm.test('Onboarded', () => pm.expect(d.isOnboarded).to.eql(true));",
+                  "pm.test('Onboarded', () => pm.expect(d.isOnboardingCompleted).to.eql(true));",
                   "pm.test('Has CREATOR role', () => pm.expect(d.roles).to.include('CREATOR'));"
                 ]
               }
@@ -1272,7 +1272,7 @@
           }
         },
         {
-          "name": "Public creator profile via personalized link",
+          "name": "Public creator profile via buymeayard/ prefix",
           "event": [
             {
               "listen": "test",
@@ -1294,8 +1294,8 @@
                 "description": "Mobile mode: session token is returned in JSON instead of a cookie"
               }
             ],
-            "url": "{{baseUrl}}/creators/buymeayard%2F{{creatorUsername}}",
-            "description": "The `buymeayard/` prefix (URL-encoded) resolves to the same creator.",
+            "url": "{{baseUrl}}/creators/buymeayard%2F{{creatorSlug}}",
+            "description": "A pasted `buymeayard/<slug>` link (URL-encoded) is cleaned to the slug and resolves to the same creator.",
             "auth": {
               "type": "noauth"
             }
@@ -1324,7 +1324,7 @@
                 "description": "Mobile mode: session token is returned in JSON instead of a cookie"
               }
             ],
-            "url": "{{baseUrl}}/creators?search={{creatorUsername}}",
+            "url": "{{baseUrl}}/creators?search={{creatorSlug}}",
             "description": "Discovery only lists ACTIVE creators. An unverified creator must not appear.",
             "auth": {
               "type": "noauth"
@@ -1398,10 +1398,50 @@
                 "description": "Mobile mode: session token is returned in JSON instead of a cookie"
               }
             ],
-            "url": "{{baseUrl}}/creators/{{creatorUsername}}",
+            "url": "{{baseUrl}}/creators/{{creatorSlug}}",
             "description": "Public. Run `02-seed-creator-fixtures.sql` before this request. Saves the cheapest\nACTIVE material as `{{creatorMaterialId}}` and the INACTIVE one as\n`{{inactiveCreatorMaterialId}}`.",
             "auth": {
               "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "My yard menu (creator)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const items = pm.response.json().data;",
+                  "pm.test('Returns the seeded menu', () => pm.expect(items.length).to.be.greaterThan(0));",
+                  "pm.test('Only ACTIVE items', () => pm.expect(items.every((m) => m.status === 'ACTIVE')).to.eql(true));",
+                  "pm.test('Includes the catalogue material', () => pm.expect(items[0].material).to.have.property('slug'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-client-type",
+                "value": "mobile",
+                "description": "Mobile mode: session token is returned in JSON instead of a cookie"
+              }
+            ],
+            "url": "{{baseUrl}}/creators/me/materials",
+            "description": "The creator's own menu: ACTIVE items only, with custom prices and the catalogue material.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{creatorToken}}",
+                  "type": "string"
+                }
+              ]
             }
           }
         },
@@ -3238,7 +3278,7 @@
                 "description": "Mobile mode: session token is returned in JSON instead of a cookie"
               }
             ],
-            "url": "{{baseUrl}}/creators?search={{creatorUsername}}",
+            "url": "{{baseUrl}}/creators?search={{creatorSlug}}",
             "description": "",
             "auth": {
               "type": "noauth"
@@ -4631,7 +4671,7 @@
                 "description": "Mobile mode: session token is returned in JSON instead of a cookie"
               }
             ],
-            "url": "{{baseUrl}}/creators/{{creatorUsername}}/posts",
+            "url": "{{baseUrl}}/creators/{{creatorSlug}}/posts",
             "description": "",
             "auth": {
               "type": "noauth"
@@ -4664,7 +4704,7 @@
                 "description": "Mobile mode: session token is returned in JSON instead of a cookie"
               }
             ],
-            "url": "{{baseUrl}}/creators/{{creatorUsername}}/posts",
+            "url": "{{baseUrl}}/creators/{{creatorSlug}}/posts",
             "description": "**Known gap.** The route is `@Public()`, and the AuthGuard skips session resolution\nfor public routes, so `viewerUserId` is always undefined. The owner (and entitled\nsupporters) therefore see exclusive posts as locked. This test documents current\nbehaviour and will fail once that is fixed.",
             "auth": {
               "type": "bearer",
@@ -6028,42 +6068,6 @@
           "description": "Replaces the creator_materials part of 02-seed-creator-fixtures.sql.",
           "item": [
             {
-              "name": "[PLANNED] List my yard menu",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "type": "text/javascript",
-                    "exec": [
-                      "pm.test('Not implemented yet (404). Update this test when the endpoint ships.', () => pm.response.to.have.status(404));"
-                    ]
-                  }
-                }
-              ],
-              "request": {
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "x-client-type",
-                    "value": "mobile",
-                    "description": "Mobile mode: session token is returned in JSON instead of a cookie"
-                  }
-                ],
-                "url": "{{baseUrl}}/creators/me/materials",
-                "description": "**Not implemented yet — returns 404 today.** Proposed contract.",
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{creatorToken}}",
-                      "type": "string"
-                    }
-                  ]
-                }
-              }
-            },
-            {
               "name": "[PLANNED] Add material to my menu",
               "event": [
                 {
@@ -6955,7 +6959,7 @@
                   }
                 ],
                 "url": "{{baseUrl}}/creators/me/posts",
-                "description": "**Not implemented yet — returns 404 today.** Proposed contract.\n\nToday this matches GET /creators/:username/posts with username \"me\" and 404s as CREATOR_NOT_FOUND. The real route must be declared before :username.",
+                "description": "**Not implemented yet — returns 404 today.** Proposed contract.\n\nToday this matches GET /creators/:slug/posts with slug \"me\" and 404s as CREATOR_NOT_FOUND. The real route must be declared before :slug.",
                 "auth": {
                   "type": "bearer",
                   "bearer": [

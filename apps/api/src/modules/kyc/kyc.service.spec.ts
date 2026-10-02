@@ -10,8 +10,12 @@ import { KycService } from './kyc.service';
 import { KycAdminService } from './kyc-admin.service';
 import { KycTransitionService } from './kyc-transition.service';
 import { FakePrisma } from './kyc.test-utils';
-import { mapDiditStatus } from '../../infrastructure/kyc/didit/didit.mapper';
+import {
+  emptyAdminDecisionView,
+  mapDiditStatus,
+} from '../../infrastructure/kyc/didit/didit.mapper';
 import type {
+  KycDecision,
   KycDecisionSummary,
   KycProvider,
   KycWebhookEvent,
@@ -43,11 +47,11 @@ function makeProvider() {
       };
     }),
     deleteSession: jest.fn(async () => undefined),
-    getDecision: jest.fn(async () => ({
+    getDecision: jest.fn(async (): Promise<KycDecision> => ({
       providerStatus: 'Not Started',
       status: S.CREATED,
       summary: emptySummary(),
-      raw: {},
+      adminView: emptyAdminDecisionView(),
     })),
     updateStatus: jest.fn(async () => undefined),
     verifyWebhook: jest.fn(),
@@ -131,7 +135,12 @@ describe('KycService', () => {
       transitions,
       provider,
     );
-    admin = new KycAdminService(prisma as never, transitions, provider);
+    admin = new KycAdminService(
+      prisma as never,
+      transitions,
+      provider,
+      service,
+    );
   });
 
   const start = (userId: string, dto = details, headers = {}) =>
@@ -215,7 +224,7 @@ describe('KycService', () => {
         providerStatus: 'In Progress',
         status: S.IN_PROGRESS,
         summary: emptySummary(),
-        raw: {},
+        adminView: emptyAdminDecisionView(),
       });
 
       await expect(
@@ -233,7 +242,7 @@ describe('KycService', () => {
         providerStatus: 'Approved',
         status: S.VERIFIED,
         summary: approvedSummary(),
-        raw: {},
+        adminView: emptyAdminDecisionView(),
       });
 
       await expect(
@@ -460,7 +469,7 @@ describe('KycService', () => {
         providerStatus: 'Approved',
         status: S.VERIFIED,
         summary: approvedSummary(),
-        raw: {},
+        adminView: emptyAdminDecisionView(),
       });
 
       const res = await service.getMyKyc(creator.userId);
@@ -673,7 +682,7 @@ describe('KycService', () => {
         providerStatus: 'Approved',
         status: S.VERIFIED,
         summary: approvedSummary(),
-        raw: {},
+        adminView: emptyAdminDecisionView(),
       });
 
       await expect(start(creator.userId)).rejects.toMatchObject({
@@ -693,13 +702,13 @@ describe('KycService', () => {
           providerStatus: 'In Progress',
           status: S.IN_PROGRESS,
           summary: emptySummary(),
-          raw: {},
+          adminView: emptyAdminDecisionView(),
         })
         .mockResolvedValueOnce({
           providerStatus: 'Approved',
           status: S.VERIFIED,
           summary: approvedSummary(),
-          raw: {},
+          adminView: emptyAdminDecisionView(),
         });
 
       await expect(start(creator.userId)).rejects.toMatchObject({
@@ -762,7 +771,7 @@ describe('KycService', () => {
         providerStatus: 'In Progress',
         status: S.IN_PROGRESS,
         summary: emptySummary(),
-        raw: {},
+        adminView: emptyAdminDecisionView(),
       });
       await service.getMyKyc(creator.userId);
       expect(prisma.submissions[0].status).toBe(S.IN_PROGRESS);
@@ -860,7 +869,7 @@ describe('KycService', () => {
         providerStatus: 'Approved',
         status: S.VERIFIED,
         summary: approvedSummary(),
-        raw: {},
+        adminView: emptyAdminDecisionView(),
       });
       await service.getMyKyc(creator.userId);
       expect(prisma.submissions[0].status).toBe(S.VERIFIED);
@@ -875,7 +884,7 @@ describe('KycService', () => {
         providerStatus: 'Approved',
         status: S.VERIFIED,
         summary: noFaceMatch(),
-        raw: {},
+        adminView: emptyAdminDecisionView(),
       });
 
       await admin.approve(
@@ -903,6 +912,118 @@ describe('KycService', () => {
       await start(creator.userId);
       await webhook('sess-1', 'Declined', { summary: null });
       expect(prisma.submissions[0].status).toBe(S.REJECTED);
+    });
+  });
+
+  describe('PR #38 review fixes', () => {
+    it('re-checks the attempt limit under the lock and discards the new session', async () => {
+      config.KYC_MAX_SESSIONS_PER_DAY = 1;
+      const creator = prisma.addCreator();
+      await start(creator.userId);
+      await webhook('sess-1', 'Declined');
+      // Simulate a concurrent request that passed the pre-check: the
+      // fast-path count sees nothing, the in-lock count sees the real row.
+      prisma.kycSubmission.count.mockResolvedValueOnce(0);
+
+      const err = await start(creator.userId).catch((e: HttpException) => e);
+      expect((err as HttpException).getStatus()).toBe(429);
+      expect(prisma.submissions).toHaveLength(1);
+      expect(provider.deleteSession).toHaveBeenCalledWith('sess-2');
+    });
+
+    it('recovers when the provider delete succeeds but the local cancel fails', async () => {
+      const creator = prisma.addCreator();
+      await start(creator.userId);
+      // 1st transaction = the pre-branch reconcile (succeeds);
+      // 2nd = the local cancel after the provider delete (fails).
+      prisma.$transaction
+        .mockImplementationOnce(async (fn) => fn(prisma))
+        .mockRejectedValueOnce(new Error('db down'));
+
+      // First attempt: Didit session deleted, local write fails
+      await expect(
+        start(creator.userId, { ...details, lastName: 'Changed' }),
+      ).rejects.toThrow('db down');
+      expect(prisma.submissions[0].status).toBe(S.CREATED);
+      expect(provider.deleteSession).toHaveBeenCalledWith('sess-1');
+
+      // Retry: the session is gone at Didit (404 -> no status), delete is
+      // tolerated again, and the cancel completes.
+      provider.getDecision.mockResolvedValueOnce({
+        providerStatus: 'Not Found',
+        status: null,
+        summary: emptySummary(),
+        adminView: emptyAdminDecisionView(),
+      });
+      await start(creator.userId, { ...details, lastName: 'Changed' });
+      expect(prisma.submissions.map((r) => r.status)).toEqual([
+        S.CANCELLED,
+        S.CREATED,
+      ]);
+    });
+
+    it.each([['SUSPENDED'], ['BANNED'], ['DEACTIVATED']])(
+      'does not adopt a session for a %s creator',
+      async (status) => {
+        const creator = prisma.addCreator({ status });
+        await expect(
+          webhook('orphan-x', 'Approved', { vendorData: creator.id }),
+        ).resolves.toEqual({ received: true, ignored: 'creator_ineligible' });
+        expect(prisma.submissions).toHaveLength(0);
+        expect(prisma.events).toHaveLength(1); // still recorded (idempotency)
+        expect(prisma.audits.map((a) => a.action)).toContain(
+          'KYC_EVENT_IGNORED_INELIGIBLE_CREATOR',
+        );
+        expect(creator.status).toBe(status);
+      },
+    );
+
+    it('does not adopt a session for a blocked creator', async () => {
+      const creator = prisma.addCreator({
+        kycStatus: 'REJECTED',
+        kycBlockedAt: new Date(),
+      });
+      await expect(
+        webhook('orphan-y', 'Approved', { vendorData: creator.id }),
+      ).resolves.toEqual({ received: true, ignored: 'creator_ineligible' });
+      expect(prisma.submissions).toHaveLength(0);
+      expect(creator.kycStatus).toBe('REJECTED');
+    });
+
+    it('admin detail returns the allowlisted view, never the raw payload', async () => {
+      const creator = prisma.addCreator();
+      await start(creator.userId);
+      const view = {
+        ...emptyAdminDecisionView(),
+        status: 'Not Started',
+      };
+      provider.getDecision.mockResolvedValueOnce({
+        providerStatus: 'Not Started',
+        status: S.CREATED,
+        summary: emptySummary(),
+        adminView: view,
+      });
+      const detail = await admin.getDetail(prisma.submissions[0].id, 'admin-1');
+      expect(detail.providerDecision).toEqual(view);
+      expect(detail).not.toHaveProperty('raw');
+    });
+
+    it('admin detail self-heals a lost webhook', async () => {
+      const creator = prisma.addCreator();
+      await start(creator.userId);
+      await webhook('sess-1', 'In Review');
+      // Didit already moved on (e.g. our write failed after an admin action)
+      provider.getDecision.mockResolvedValueOnce({
+        providerStatus: 'Approved',
+        status: S.VERIFIED,
+        summary: approvedSummary(),
+        adminView: emptyAdminDecisionView(),
+      });
+
+      const detail = await admin.getDetail(prisma.submissions[0].id, 'admin-1');
+      expect(detail.status).toBe(S.VERIFIED);
+      expect(creator.status).toBe('ACTIVE');
+      expect(provider.getDecision).toHaveBeenCalledTimes(1); // no second fetch
     });
   });
 });

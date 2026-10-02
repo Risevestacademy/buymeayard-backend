@@ -20,6 +20,7 @@ import {
   mapDiditStatus,
   redactDiditWebhook,
   summarizeDiditDecision,
+  toAdminDecisionView,
   toDiditDocumentTypes,
 } from './didit.mapper';
 import { verifyDiditSignature } from './didit-signature';
@@ -131,7 +132,7 @@ export class DiditProvider implements KycProvider {
       providerStatus,
       status: mapDiditStatus(providerStatus),
       summary: summarizeDiditDecision(body),
-      raw: body,
+      adminView: toAdminDecisionView(body),
     };
   }
 

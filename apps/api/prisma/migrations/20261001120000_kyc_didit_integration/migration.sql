@@ -29,13 +29,6 @@ UPDATE "creator_profiles"
 SET "kycStatus" = 'NOT_SUBMITTED'
 WHERE "kycStatus" = 'PENDING';
 
--- Enforce the invariant ACTIVE => VERIFIED. Contributions are now gated on
--- ACTIVE, so any creator set ACTIVE by hand without verification must not
--- keep receiving money.
-UPDATE "creator_profiles"
-SET "status" = 'PROFILE_CREATED'
-WHERE "status" = 'ACTIVE' AND "kycStatus" <> 'VERIFIED';
-
 -- CreateTable
 CREATE TABLE "kyc_events" (
     "id" TEXT NOT NULL,

@@ -72,7 +72,7 @@ The old `POST /creators/me/kyc` (which stored arbitrary JSON) is removed. Creato
 
 ## 4. Data model
 
-Migration `20261001120000_kyc_didit_integration`:
+Migrations `20261001120000_kyc_didit_integration` and `20261002120000_kyc_constraints`:
 
 - **`kyc_submissions`**: one row per verification attempt.
   - `providerReference` holds the Didit session ID, with `@@unique([provider, providerReference])`.
@@ -83,8 +83,13 @@ Migration `20261001120000_kyc_didit_integration`:
 - **Data cleanup**:
   - Placeholder rows written by the old stub (`provider = 'DEFAULT_KYC'`, `PENDING`) become `CANCELLED`.
   - Creators the stub marked `PENDING` return to `NOT_SUBMITTED`.
-  - Any creator that is `ACTIVE` without `VERIFIED` (only possible by hand-editing data) is moved to `PROFILE_CREATED`, because contributions are now gated on `ACTIVE`.
   - `VERIFIED` rows are never touched.
+- **Audited demotion** (`kyc_constraints`): any creator that is `ACTIVE` without `VERIFIED` (only possible by hand-editing data) is moved to `PROFILE_CREATED`, because contributions are now gated on `ACTIVE`. Each demoted row gets an `audit_logs` entry (`CREATOR_DEMOTED_BY_MIGRATION`, with its previous state), and the migration prints the count, so nothing changes silently.
+- **Database constraints** (`kyc_constraints`). Postgres rejects invalid values from *any* code path or manual update:
+  - `kyc_submissions_status_check`, `creator_profiles_kyc_status_check` and `creator_profiles_status_check` limit the columns to the known enum values;
+  - `creator_profiles_active_requires_verified` enforces the money invariant `status <> 'ACTIVE' OR "kycStatus" = 'VERIFIED'` in the database itself.
+
+  Unknown existing values make the deploy fail loudly rather than being rewritten. Prisma doesn't model CHECK constraints, so `migrate diff` shows no drift; the constraints live only in the migration SQL.
 
 Status columns stay plain strings with TypeScript enums in `@buymeayard/types`, matching the existing convention. `KycStatus` (creator level) gains `EXPIRED`. `KycSubmissionStatus` (attempt level) has `CREATED`, `IN_PROGRESS`, `NEEDS_REVIEW`, `VERIFIED`, `REJECTED`, `RESUBMISSION_REQUIRED`, `ABANDONED`, `EXPIRED`, `KYC_EXPIRED` and `CANCELLED`. The package also adds `KycDocumentType`, `KycProviderName` and `KycReviewSource`, plus request/response types in `kyc.ts`.
 
@@ -136,7 +141,9 @@ Every change writes, in one transaction: the submission, the creator, `audit_log
 2. If an attempt is open, the service first **asks Didit for its real status**. A lost webhook could mean it's already in progress, approved or declined.
 3. Same details: Didit's create call returns the same session (it's idempotent per creator), so the creator resumes without using an attempt. If Didit instead returns a *new* session, the old one finished in the meantime. We sync it, and if that verified the creator, we delete the new session and return 409.
 4. Changed details: a session the user hasn't started is deleted and marked `CANCELLED`. Mid-capture returns `409 KYC_SESSION_IN_PROGRESS`.
-5. Limits and callback: `KYC_MAX_SESSIONS_PER_DAY` (default 5) protects the free tier. The callback URL is chosen by the server (app deep link for `x-client-type: mobile`, otherwise the creator portal), so there's no open redirect.
+
+   The order is deliberately **Didit delete first, then the local cancel**. Didit returns the same unfinished session for the same creator, so a local-first cancel followed by a failed Didit delete would hand the *old* session (with stale details) back on the next start. With this order, a failure is recoverable: if the delete succeeds but the local write fails, the row stays `CREATED`. The retry then sees the session as gone (decision 404 → no status), deletes again (404 tolerated), and cancels. A unit test covers this.
+5. Limits and callback: `KYC_MAX_SESSIONS_PER_DAY` (default 5) protects the free tier. It's checked once as a fast path, then **re-checked under the creator lock** right before the insert, so concurrent starts can't exceed it. If the in-lock check fails, the just-opened Didit session is deleted and the request gets 429. The callback URL is chosen by the server (app deep link for `x-client-type: mobile`, otherwise the creator portal), so there's no open redirect.
 6. The submission is upserted by Didit session ID, under the creator lock.
 
 **Webhook** (`handleWebhook`):
@@ -146,6 +153,7 @@ Every change writes, in one transaction: the submission, the creator, `audit_log
 3. In one transaction:
    - Duplicate check.
    - Find the submission, or *adopt* an unknown session. Adoption only happens if `vendor_data` is one of our creators **and** the workflow ID is ours; it re-checks after locking, in case `startSession` created the row meanwhile.
+   - **Ineligible creators are never adopted** (suspended, banned, deactivated, or blocked after a revocation). The event is still recorded (for idempotency) and audited as `KYC_EVENT_IGNORED_INELIGIBLE_CREATOR`, and the response is `ignored: creator_ineligible`. For sessions we already know, the submission keeps mirroring Didit, but such creators' status never changes.
    - A `vendor_data` mismatch is ignored.
    - Lock creator → submission, then re-check for duplicates.
    - Insert the `KycEvent`, then run the transition.
@@ -164,7 +172,14 @@ Every change writes, in one transaction: the submission, the creator, `audit_log
 - If Didit's echo webhook arrives before our write, the reviewer attribution is still recorded.
 - **Revoke** is **local-first**: in one transaction it blocks the creator (`kycBlockedAt`), rejects the verified submission and delists the creator. Didit is told afterwards, best-effort. Cutting a creator off must not depend on Didit being reachable, and while blocked the creator can never be re-verified, even if Didit still says Approved.
 - **Unblock** lifts the block. The creator stays `REJECTED` and can verify again.
-- **Detail** fetches the live Didit decision (short-lived image URLs, never stored). Every view is audit-logged.
+- **Detail** fetches the live Didit decision and returns it as an **explicit allowlisted view** (`toAdminDecisionView`). The raw Didit payload never leaves the provider layer. The view contains:
+  - ID check: status, document type, last 4 of the document number, names, date of birth, expiry, issuing state, nationality, and front/back/portrait images;
+  - liveness: status, method, score and reference image;
+  - face match: status, score and both images;
+  - warning codes.
+
+  Addresses, MRZ, barcodes, full ID numbers and cross-session matches are dropped. Image URLs are short-lived and never stored. Every view is audit-logged.
+- **Self-heal.** If the detail view finds that Didit's status differs from ours (a lost webhook, or our write failing after an admin decision reached Didit), it applies Didit's state using the decision it already fetched. So provider/local divergence is repaired by any of: Didit's webhook, the creator's status check, or an admin opening the case.
 
 ## 7. Security & privacy
 
@@ -189,6 +204,9 @@ Two webhooks for one session can arrive together, and users double-tap buttons.
 - **No network calls inside database transactions**, ever.
 - **Duplicate events** either see the committed event after waiting for the lock, or hit the unique index. Both return `already_processed`.
 - **Payouts lock the creator row too.** They re-check KYC, status and balance under the lock (§9).
+- **The attempt limit is re-checked under the creator lock** (§6).
+- **The database enforces the invariant** (§4), so even a future code path that bypasses the transition engine can't make an unverified creator `ACTIVE`.
+- **CI runs the real-Postgres suite** (`.github/workflows/ci.yml`): `prisma migrate deploy` on the CI database, then `test/kyc-concurrency.e2e-spec.ts`. That covers row locks, deadlocks, unique and CHECK constraints, and proves the migrations apply to a clean database on every PR.
 
 ## 9. Money gating (outside the KYC module)
 
@@ -234,9 +252,11 @@ Locally, the app runs with `NODE_ENV=development` and a **live** application's k
 
 | Check | Result |
 |---|---|
-| Unit tests (Jest) | **259 passing** (72 before). See the breakdown below |
+| Unit tests (Jest) | **361 passing** across the whole API (72 before this work). See the breakdown below |
 | Mutation checks | Deliberately broke each of these in turn; tests failed every time: the `ACTIVE ⇒ VERIFIED` invariant, the revocation block, the `expectedFrom` guard, stale-before-same-status ordering, and the required-checks policy |
-| Real-Postgres concurrency test (`test/kyc-concurrency.e2e-spec.ts`) | 5/5 passing. Removing the lock-order fix makes it fail with a real deadlock (`40P01`), so it guards the regression |
+| Real-Postgres suite (`test/kyc-concurrency.e2e-spec.ts`, **runs in CI**) | 6/6 passing, including the database rejecting `ACTIVE` without `VERIFIED` and unknown statuses. Removing the lock-order fix makes it fail with a real deadlock (`40P01`), so it guards the regression |
+| DB constraints on seeded data | The audited demotion wrote one audit entry and printed the count. Five invalid direct `UPDATE`s were each rejected by the right constraint, and the app's single-statement revoke update was allowed |
+| Postman suite from a clean database | Fresh DB → migrations → seed → catalogue → collection run (newman), with the fixtures SQL after folder 02. **282/282 assertions passed**, 0 request errors. Didit was deliberately not configured, so no live sessions were created; decisions were simulated with signed webhooks |
 | Migration on real Postgres 16 (throwaway DB) | `prisma migrate deploy` applies cleanly; `prisma migrate diff` shows **no drift**; the data cleanup was verified on seeded stub rows |
 | App boot (real `AppModule`, DB stubbed) | DI resolves; all 9 KYC routes are mapped; `/webhooks/didit` sits outside `api/v1` |
 | HTTP webhook checks | Valid V2 (Unicode body) → 200; valid raw signature → 200; forged → 401; stale → 401; anonymous creator/admin calls → 401 |
@@ -272,6 +292,17 @@ The unit tests cover:
    - The test fake now returns copies (it had been hiding a wrong `previousState` in audit logs).
    - A time-dependent test fake clock.
 
+**PR #38 automated review (second round):**
+- The attempt limit is now atomic (in-lock re-count).
+- Adoption is refused for ineligible creators.
+- The admin detail returns an allowlisted view, and admin detail self-heals divergence.
+- Database CHECK constraints are in, plus the audited demotion.
+- The concurrency suite runs in CI.
+- The seed refuses default admin credentials in production.
+- The Postman suite is updated for slug-based onboarding.
+
+The cancel ordering was kept by design (see §6, with a test proving recovery).
+
 **A review finding confirmed not to be a bug**: the reviewer worried that the signed-body timestamp check would reject Didit retries. Didit's webhook docs state `timestamp` is "Refreshed on each retry", so retries pass.
 
 ## 12. Known limitations & follow-ups
@@ -279,9 +310,8 @@ The unit tests cover:
 - **Not yet run against the live Didit sandbox.** Next step: run approved, declined and in-review sessions end to end, and capture one real signed webhook as a known-good test vector.
 - **Paper NIN slip support is unconfirmed.** Didit's docs list Nigerian ID cards; confirm the slip is accepted.
 - **`GET /creators/me/kyc` can take up to 10s if Didit is down** (the reconcile timeout).
-- **No scheduled reconciliation job** (QueuesModule is empty). Reconcile runs when the creator checks their status.
+- **No scheduled reconciliation job or durable outbox** (QueuesModule is empty). Provider/local divergence after an admin decision is repaired by Didit's webhook, the creator's status check, or the admin detail view's self-heal. Follow-up: a durable outbox and retry worker for provider calls, so recovery doesn't depend on those triggers.
 - **Emails aren't sent**; notifications are in-app only.
-- **The real-Postgres test is opt-in.** It isn't wired into CI yet; CI has Postgres but doesn't run migrations or e2e tests.
 - **Out of scope**: NIN/BVN registry lookup, bank-account name matching, admin "request resubmission", and NDPR erasure via Didit's delete endpoint.
 - **Existing issues noticed but not fixed here**:
   - The Paystack provider is mocked, and its signature comparison isn't constant-time.
@@ -293,12 +323,13 @@ The unit tests cover:
 
 ```
 packages/types/src/enums.ts, kyc.ts          shared enums + request/response types
-apps/api/prisma/schema.prisma, migrations/20261001120000_kyc_didit_integration/
+apps/api/prisma/schema.prisma, migrations/20261001120000_kyc_didit_integration/, migrations/20261002120000_kyc_constraints/
 apps/api/src/config/env.validation.ts        Didit env vars (required in production)
 apps/api/src/infrastructure/kyc/             provider interface, Didit client, signature, mapper
 apps/api/src/modules/kyc/                    state rules, transition engine, services, controllers, DTOs
 apps/api/src/modules/supports|payments|payouts/  contribution + payout gating
 apps/api/src/common/filters/http-exception.filter.ts  log redaction
-apps/api/test/kyc-concurrency.e2e-spec.ts    opt-in real-Postgres concurrency test
+apps/api/test/kyc-concurrency.e2e-spec.ts    real-Postgres concurrency + constraint suite (runs in CI)
+apps/api/prisma/seed.ts                      refuses default admin credentials in production
 docs/KYC_INTEGRATION.md                      client integration guide
 ```

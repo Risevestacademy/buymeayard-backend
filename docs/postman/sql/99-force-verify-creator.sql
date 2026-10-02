@@ -15,5 +15,5 @@ SET "kycStatus" = 'VERIFIED',
     "kycBlockedAt" = NULL,
     "kycBlockedReason" = NULL,
     "updatedAt" = now()
-WHERE username = :'creator'
-RETURNING id, username, status, "kycStatus";
+WHERE slug = :'creator'
+RETURNING id, slug, status, "kycStatus";

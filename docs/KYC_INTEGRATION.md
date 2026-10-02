@@ -118,11 +118,30 @@ Requires the `ADMIN` or `SUPER_ADMIN` role.
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/v1/admin/kyc?status=NEEDS_REVIEW&page=1&limit=20` | Review queue (oldest first, paginated `meta`) |
-| `GET /api/v1/admin/kyc/:id` | Details, including `claimedDetails`, `decisionSummary`, and the live Didit decision in `providerDecision`. Its image URLs expire quickly: display them, never store them. Each view is audit-logged |
+| `GET /api/v1/admin/kyc/:id` | Details, including `claimedDetails`, `decisionSummary`, and the live Didit decision in `providerDecision` (shape below). Its image URLs expire quickly: display them, never store them. Each view is audit-logged |
 | `POST /api/v1/admin/kyc/:id/approve` `{ note? }` | Approve an in-review case (or override a rejection) |
 | `POST /api/v1/admin/kyc/:id/reject` `{ reason, note? }` | `reason` is shown to the creator; `note` is internal |
 | `POST /api/v1/admin/kyc/creators/:creatorId/revoke` `{ reason, note? }` | Revoke a verified creator. It unpublishes them **and blocks re-verification** until unblocked |
 | `POST /api/v1/admin/kyc/creators/:creatorId/unblock` `{ note? }` | Lift the block so the creator can verify again |
+
+`providerDecision` is an allowlisted view (`KycAdminDecisionView`); any section can be `null`:
+
+```json
+{
+  "status": "In Review",
+  "idVerification": {
+    "status": "Approved", "documentType": "Identity Card", "documentNumberLast4": "5678",
+    "firstName": "Mariam", "lastName": "Omiteru", "dateOfBirth": "1995-10-12",
+    "expirationDate": null, "issuingState": "NGA", "nationality": "NGA",
+    "images": { "front": "https://…", "back": "https://…", "portrait": "https://…" }
+  },
+  "liveness": { "status": "Approved", "method": "PASSIVE", "score": 97.5, "referenceImage": "https://…" },
+  "faceMatch": { "status": "In Review", "score": 62, "sourceImage": "https://…", "targetImage": "https://…" },
+  "warnings": [{ "risk": "LOW_FACE_MATCH_SIMILARITY", "feature": "FACE_MATCH", "shortDescription": "…" }]
+}
+```
+
+`decisionSummary.missingRequiredChecks` lists any check that held a Didit "Approved" back for review.
 
 - `409 KYC_INVALID_TRANSITION` means the case changed in the meantime: refresh and try again.
 - `409 KYC_BLOCKED` on approve means the creator is blocked: unblock them first.

@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { KycSubmission } from '@prisma/client';
+import { KycSubmission, Prisma } from '@prisma/client';
 import {
   KycReviewSource,
   KycStatus,
@@ -14,11 +14,14 @@ import {
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { KYC_PROVIDER } from '../../infrastructure/kyc/kyc-provider.interface';
 import type {
+  KycAdminDecisionView,
   KycManualDecision,
   KycProvider,
 } from '../../infrastructure/kyc/kyc-provider.interface';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { KycTransitionService } from './kyc-transition.service';
+import { KycService } from './kyc.service';
+import { RECONCILABLE_STATUSES } from './kyc-state';
 import { KycQueueQueryDto } from './dto/admin-kyc.dto';
 
 const CREATOR_SELECT = {
@@ -32,6 +35,19 @@ const CREATOR_SELECT = {
   user: { select: { id: true, name: true, email: true } },
 } as const;
 
+const DETAIL_INCLUDE = {
+  creator: { select: CREATOR_SELECT },
+  events: {
+    orderBy: { createdAt: 'asc' as const },
+    select: {
+      id: true,
+      eventType: true,
+      providerStatus: true,
+      createdAt: true,
+    },
+  },
+} satisfies Prisma.KycSubmissionInclude;
+
 @Injectable()
 export class KycAdminService {
   private readonly logger = new Logger(KycAdminService.name);
@@ -40,6 +56,7 @@ export class KycAdminService {
     private readonly prisma: PrismaService,
     private readonly transitions: KycTransitionService,
     @Inject(KYC_PROVIDER) private readonly provider: KycProvider,
+    private readonly kycService: KycService,
   ) {}
 
   async listQueue(query: KycQueueQueryDto) {
@@ -83,29 +100,36 @@ export class KycAdminService {
   async getDetail(submissionId: string, adminId: string) {
     const submission = await this.prisma.kycSubmission.findUnique({
       where: { id: submissionId },
-      include: {
-        creator: { select: CREATOR_SELECT },
-        events: {
-          orderBy: { createdAt: 'asc' },
-          select: {
-            id: true,
-            eventType: true,
-            providerStatus: true,
-            createdAt: true,
-          },
-        },
-      },
+      include: DETAIL_INCLUDE,
     });
     if (!submission) throw this.notFound();
 
-    // Live provider decision with short-lived media URLs. Never persisted.
-    let providerDecision: unknown = null;
+    // Live provider decision as an allowlisted view (short-lived image URLs).
+    // Never persisted.
+    let providerDecision: KycAdminDecisionView | null = null;
     let providerError: string | null = null;
+    let current = submission;
     if (submission.providerReference) {
       try {
-        providerDecision = (
-          await this.provider.getDecision(submission.providerReference)
-        ).raw;
+        const decision = await this.provider.getDecision(
+          submission.providerReference,
+        );
+        providerDecision = decision.adminView;
+
+        // Self-heal: if a webhook was lost (or our write failed after an
+        // admin decision reached the provider), apply the provider's state.
+        if (
+          RECONCILABLE_STATUSES.has(submission.status) &&
+          decision.status &&
+          decision.status !== submission.status
+        ) {
+          await this.kycService.reconcileSubmission(submission, decision);
+          current =
+            (await this.prisma.kycSubmission.findUnique({
+              where: { id: submissionId },
+              include: DETAIL_INCLUDE,
+            })) ?? submission;
+        }
       } catch {
         providerError = 'Could not load the live decision from the provider';
       }
@@ -120,7 +144,7 @@ export class KycAdminService {
       },
     });
 
-    return { ...submission, providerDecision, providerError };
+    return { ...current, providerDecision, providerError };
   }
 
   async approve(submissionId: string, adminId: string, note?: string) {

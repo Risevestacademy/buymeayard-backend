@@ -3,6 +3,7 @@ import {
   mapDiditStatus,
   redactDiditWebhook,
   summarizeDiditDecision,
+  toAdminDecisionView,
   toDiditDocumentTypes,
 } from './didit.mapper';
 
@@ -148,6 +149,94 @@ describe('Didit mapper', () => {
         liveness_checks: [{ node_id: 'l1', status: 'Approved' }],
         face_matches: [{ node_id: 'f1', status: 'Declined' }],
         warnings: ['DOCUMENT_EXPIRED', 'LOW_FACE_MATCH_SIMILARITY'],
+      });
+    });
+  });
+
+  describe('toAdminDecisionView', () => {
+    const full = {
+      status: 'In Review',
+      session_url: 'https://verify.didit.me/session/x',
+      contact_details: { email: 'secret@example.com' },
+      id_verifications: [
+        {
+          ...decision.id_verifications[0],
+          expiration_date: '2031-06-02',
+          nationality: 'NGA',
+          back_image: 'https://media/back.jpg',
+          address: '12 Secret Street, Lagos',
+          formatted_address: '12 Secret Street, Lagos 100001',
+          parsed_address: { street_1: '12 Secret Street' },
+          mrz: { mrz_string: 'IDNGA<<<SECRET' },
+          barcodes: [{ data: 'SECRET-BARCODE' }],
+          place_of_birth: 'Lagos',
+        },
+      ],
+      liveness_checks: [
+        {
+          status: 'Approved',
+          method: 'PASSIVE',
+          score: 97.5,
+          reference_image: 'https://media/ref.jpg',
+          video_url: 'https://media/video.webm',
+          matches: [{ vendor_data: 'other-creator' }],
+        },
+      ],
+      face_matches: [
+        {
+          status: 'Approved',
+          score: 91,
+          source_image: 'https://media/src.jpg',
+          target_image: 'https://media/tgt.jpg',
+        },
+      ],
+    };
+
+    it('copies only allowlisted fields', () => {
+      const view = toAdminDecisionView(full);
+      expect(view.status).toBe('In Review');
+      expect(view.idVerification).toMatchObject({
+        documentNumberLast4: '3456',
+        firstName: 'Mariam',
+        expirationDate: '2031-06-02',
+        images: {
+          front: 'https://media/front.jpg?sig=secret',
+          back: 'https://media/back.jpg',
+        },
+      });
+      expect(view.liveness).toEqual({
+        status: 'Approved',
+        method: 'PASSIVE',
+        score: 97.5,
+        referenceImage: 'https://media/ref.jpg',
+      });
+      expect(view.faceMatch?.targetImage).toBe('https://media/tgt.jpg');
+    });
+
+    it('drops addresses, MRZ, barcodes, full ID numbers and cross-session data', () => {
+      const text = JSON.stringify(toAdminDecisionView(full));
+      for (const secret of [
+        'Secret Street',
+        'IDNGA',
+        'SECRET-BARCODE',
+        'AB-12',
+        'secret@example.com',
+        'video.webm',
+        'other-creator',
+        'session_url',
+        'place_of_birth',
+      ]) {
+        expect(text).not.toContain(secret);
+      }
+    });
+
+    it('tolerates missing sections', () => {
+      expect(toAdminDecisionView({})).toEqual({
+        status: null,
+        idVerification: null,
+        liveness: null,
+        faceMatch: null,
+        warnings: [],
       });
     });
   });

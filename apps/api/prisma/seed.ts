@@ -27,7 +27,43 @@ const DEFAULT_ROLES = [
   'SUPPORT',
 ];
 
+// Development-only defaults. Never valid in production.
+const DEV_ADMIN_EMAIL = 'admin@buymeayard.com';
+const DEV_ADMIN_PASSWORD = 'AdminPassword123!';
+
+/**
+ * Admin credentials come from ADMIN_EMAIL / ADMIN_PASSWORD. In production the
+ * seed refuses to run without a strong, non-default password, so no
+ * environment can end up with a publicly known admin login.
+ */
+function resolveAdminCredentials() {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const adminEmail = process.env.ADMIN_EMAIL || DEV_ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD || '';
+
+  if (isProduction) {
+    if (
+      adminPassword.length < 12 ||
+      adminPassword === DEV_ADMIN_PASSWORD
+    ) {
+      throw new Error(
+        'Refusing to seed in production: set ADMIN_PASSWORD to a strong, non-default value (12+ characters).',
+      );
+    }
+    return { adminEmail, adminPassword };
+  }
+
+  if (!adminPassword) {
+    console.warn(
+      `⚠️  Using the DEVELOPMENT admin login (${DEV_ADMIN_EMAIL} / ${DEV_ADMIN_PASSWORD}). Set ADMIN_PASSWORD to override. Never use this outside local development.`,
+    );
+  }
+  return { adminEmail, adminPassword: adminPassword || DEV_ADMIN_PASSWORD };
+}
+
 async function main() {
+  // Validate credentials before touching the database.
+  const { adminEmail, adminPassword } = resolveAdminCredentials();
   console.log('🌱 Starting database seeding...');
 
   // 1. Seed Roles
@@ -42,8 +78,6 @@ async function main() {
   console.log('✅ Roles seeded.');
 
   // 2. Seed Super Admin User
-  const adminEmail = 'admin@buymeayard.com';
-  const adminPassword = 'AdminPassword123!';
 
   let adminUser = await prisma.user.findUnique({
     where: { email: adminEmail },

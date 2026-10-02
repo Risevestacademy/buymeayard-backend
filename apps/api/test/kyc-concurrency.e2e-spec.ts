@@ -16,7 +16,10 @@ import { PrismaClient } from '@prisma/client';
 import { KycDocumentType, KycSubmissionStatus as S } from '@buymeayard/types';
 import { KycService } from '../src/modules/kyc/kyc.service';
 import { KycTransitionService } from '../src/modules/kyc/kyc-transition.service';
-import { mapDiditStatus } from '../src/infrastructure/kyc/didit/didit.mapper';
+import {
+  emptyAdminDecisionView,
+  mapDiditStatus,
+} from '../src/infrastructure/kyc/didit/didit.mapper';
 import type {
   KycDecisionSummary,
   KycProvider,
@@ -75,7 +78,7 @@ describeDb('KYC concurrency (real Postgres)', () => {
         providerStatus: 'Not Started',
         status: S.CREATED,
         summary: null as never,
-        raw: {},
+        adminView: emptyAdminDecisionView(),
       };
     },
     verifyWebhook: () =>
@@ -247,6 +250,29 @@ describeDb('KYC concurrency (real Postgres)', () => {
     expect(
       await prisma.kycSubmission.count({ where: { creatorId: creator.id } }),
     ).toBe(2);
+  });
+
+  it('the database itself rejects ACTIVE without VERIFIED and unknown statuses', async () => {
+    const creator = await newCreator();
+    await expect(
+      prisma.creatorProfile.update({
+        where: { id: creator.id },
+        data: { status: 'ACTIVE' },
+      }),
+    ).rejects.toThrow(/creator_profiles_active_requires_verified/);
+    await expect(
+      prisma.creatorProfile.update({
+        where: { id: creator.id },
+        data: { kycStatus: 'BOGUS' },
+      }),
+    ).rejects.toThrow(/creator_profiles_kyc_status_check/);
+    // Verifying and activating together is allowed
+    await expect(
+      prisma.creatorProfile.update({
+        where: { id: creator.id },
+        data: { status: 'ACTIVE', kycStatus: 'VERIFIED' },
+      }),
+    ).resolves.toMatchObject({ status: 'ACTIVE' });
   });
 
   it('no ACTIVE creator exists without VERIFIED kyc', async () => {

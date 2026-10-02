@@ -228,7 +228,7 @@ pm.collectionVariables.toObject && Object.keys(pm.collectionVariables.toObject()
 const runId = Date.now().toString(36);
 ${set('runId', 'runId')}
 ${set('creatorEmail', '`creator+${runId}@example.com`')}
-${set('creatorUsername', '`creator_${runId}`')}
+${set('creatorSlug', '`creator_${runId}`')}
 ${set('supporterEmail', '`supporter+${runId}@example.com`')}
 console.log('New run', runId);`,
       test: `
@@ -274,7 +274,7 @@ Creates a user and signs them in. Only \`email\` and \`password\` are accepted
 is granted by onboarding.`,
       test: `
 ${saveToken('creator').replace('have.status(200)', 'have.status(201)').replace("Status is 200", "Status is 201")}
-pm.test('Not onboarded yet', () => pm.expect(json.data.isOnboarded).to.eql(false));`,
+pm.test('Not onboarded yet', () => pm.expect(json.data.isOnboardingCompleted).to.eql(false));`,
     }),
     req('Register creator again (duplicate → 4xx)', 'POST', '/auth/register', {
       body: { email: '{{creatorEmail}}', password: '{{testPassword}}' },
@@ -374,7 +374,7 @@ a payout method and posts, none of which have endpoints yet.`,
       test: `
 ${status(200).trim()}
 const d = pm.response.json().data;
-pm.test('Not onboarded', () => pm.expect(d.isOnboarded).to.eql(false));
+pm.test('Not onboarded', () => pm.expect(d.isOnboardingCompleted).to.eql(false));
 pm.test('No roles yet', () => pm.expect(d.roles).to.eql([]));`,
     }),
     req('Get my creator profile (before onboarding → 404)', 'GET', '/creators/me', {
@@ -385,29 +385,29 @@ pm.test('No roles yet', () => pm.expect(d.roles).to.eql([]));`,
       as: 'creator',
       test: status(403),
     }),
-    req('Onboarding with invalid link (→ 400)', 'PUT', '/creators/me/onboarding', {
+    req('Onboarding with invalid slug (→ 400)', 'PUT', '/creators/me/onboarding', {
       as: 'creator',
-      body: { creatorName: 'Test Creator', personalizedLink: 'bad link!' },
+      body: { creatorName: 'Test Creator', slug: 'bad link!' },
       test: status(400),
     }),
     req('Onboarding without name (→ 400)', 'PUT', '/creators/me/onboarding', {
       as: 'creator',
-      body: { personalizedLink: '{{creatorUsername}}' },
+      body: { slug: '{{creatorSlug}}' },
       test: status(400),
     }),
     req('Complete onboarding', 'PUT', '/creators/me/onboarding', {
       as: 'creator',
       body: {
         creatorName: 'Test Creator',
-        personalizedLink: 'buymeayard/{{creatorUsername}}',
+        slug: '{{creatorSlug}}',
         socialLinks: [
-          { platform: 'twitter', url: 'https://x.com/{{creatorUsername}}' },
-          { platform: 'instagram', url: 'https://instagram.com/{{creatorUsername}}' },
+          { platform: 'twitter', url: 'https://x.com/{{creatorSlug}}' },
+          { platform: 'instagram', url: 'https://instagram.com/{{creatorSlug}}' },
         ],
       },
       desc: `
-Accepts \`creatorName\` (or \`displayName\`) and \`personalizedLink\` (or \`username\`).
-The link may be \`buymeayard/slug\`, \`@slug\`, a full URL or a bare slug.`,
+Accepts \`creatorName\` and \`slug\` (3–30 characters: lowercase letters, digits,
+\`_\` or \`-\`; reserved words are refused). The public page is \`/creators/<slug>\`.`,
       test: `
 ${status(200).trim()}
 const d = pm.response.json().data;
@@ -415,15 +415,15 @@ pm.test('Status PROFILE_CREATED', () => pm.expect(d.status).to.eql('PROFILE_CREA
 pm.test('kycStatus NOT_SUBMITTED', () => pm.expect(d.kycStatus).to.eql('NOT_SUBMITTED'));
 pm.test('Two social links', () => pm.expect(d.socialLinks.length).to.eql(2));
 ${set('creatorId', 'd.id')}
-${set('creatorUsername', 'd.username')}
+${set('creatorSlug', 'd.slug')}
 console.log('\\n>>> NOW RUN (from the repo root):\\n' +
-  'docker exec -i buymeayard-postgres psql -U postgres -d buymeayard -v creator=' + d.username +
+  'docker exec -i buymeayard-postgres psql -U postgres -d buymeayard -v creator=' + d.slug +
   ' < docs/postman/sql/02-seed-creator-fixtures.sql\\n');`,
     }),
     req('Re-run onboarding (idempotent update)', 'PUT', '/creators/me/onboarding', {
       as: 'creator',
-      body: { creatorName: 'Test Creator', username: '{{creatorUsername}}' },
-      desc: 'Re-onboarding with the same link updates the profile instead of failing.',
+      body: { creatorName: 'Test Creator', slug: '{{creatorSlug}}' },
+      desc: 'Re-onboarding with the same slug updates the profile instead of failing.',
       test: `
 ${status(200).trim()}
 pm.test('Same profile id', () => pm.expect(pm.response.json().data.id).to.eql(pm.variables.get('creatorId')));`,
@@ -439,7 +439,7 @@ pm.test('Profile matches', () => pm.expect(pm.response.json().data.id).to.eql(pm
       test: `
 ${status(200).trim()}
 const d = pm.response.json().data;
-pm.test('Onboarded', () => pm.expect(d.isOnboarded).to.eql(true));
+pm.test('Onboarded', () => pm.expect(d.isOnboardingCompleted).to.eql(true));
 pm.test('Has CREATOR role', () => pm.expect(d.roles).to.include('CREATOR'));`,
     }),
     req('Update my user', 'PATCH', '/users/me', {
@@ -454,13 +454,13 @@ pm.test('Image updated', () => pm.expect(pm.response.json().data.image).to.inclu
       body: { image: 'not-a-url' },
       test: status(400),
     }),
-    req('Public creator profile via personalized link', 'GET', '/creators/buymeayard%2F{{creatorUsername}}', {
-      desc: 'The `buymeayard/` prefix (URL-encoded) resolves to the same creator.',
+    req('Public creator profile via buymeayard/ prefix', 'GET', '/creators/buymeayard%2F{{creatorSlug}}', {
+      desc: 'A pasted `buymeayard/<slug>` link (URL-encoded) is cleaned to the slug and resolves to the same creator.',
       test: `
 ${status(200).trim()}
 pm.test('Same creator', () => pm.expect(pm.response.json().data.id).to.eql(pm.variables.get('creatorId')));`,
     }),
-    req('Discover creators (not listed before KYC)', 'GET', '/creators?search={{creatorUsername}}', {
+    req('Discover creators (not listed before KYC)', 'GET', '/creators?search={{creatorSlug}}', {
       desc: 'Discovery only lists ACTIVE creators. An unverified creator must not appear.',
       test: `
 ${status(200).trim()}
@@ -480,7 +480,7 @@ has not been run.
 The supporter is any signed-in user who is not the creator. The admin is the
 seeded super admin (\`admin@buymeayard.com\`).`,
   [
-    req('Public creator profile (after SQL fixtures)', 'GET', '/creators/{{creatorUsername}}', {
+    req('Public creator profile (after SQL fixtures)', 'GET', '/creators/{{creatorSlug}}', {
       desc: `
 Public. Run \`02-seed-creator-fixtures.sql\` before this request. Saves the cheapest
 ACTIVE material as \`{{creatorMaterialId}}\` and the INACTIVE one as
@@ -497,6 +497,16 @@ if (active[0]) {
 }
 if (active[1]) ${set('creatorMaterialId2', 'active[1].id')}
 if (inactive) ${set('inactiveCreatorMaterialId', 'inactive.id')}`,
+    }),
+    req('My yard menu (creator)', 'GET', '/creators/me/materials', {
+      as: 'creator',
+      desc: 'The creator\'s own menu: ACTIVE items only, with custom prices and the catalogue material.',
+      test: `
+${status(200).trim()}
+const items = pm.response.json().data;
+pm.test('Returns the seeded menu', () => pm.expect(items.length).to.be.greaterThan(0));
+pm.test('Only ACTIVE items', () => pm.expect(items.every((m) => m.status === 'ACTIVE')).to.eql(true));
+pm.test('Includes the catalogue material', () => pm.expect(items[0].material).to.have.property('slug'));`,
     }),
     req('Register supporter', 'POST', '/auth/register', {
       body: { email: '{{supporterEmail}}', password: '{{testPassword}}' },
@@ -769,7 +779,7 @@ pm.test('Cannot start another session', () => pm.expect(d.canStartSession).to.eq
       body: {},
       test: status(409) + errorCode('KYC_INVALID_TRANSITION'),
     }),
-    req('Discover creators (now listed)', 'GET', '/creators?search={{creatorUsername}}', {
+    req('Discover creators (now listed)', 'GET', '/creators?search={{creatorSlug}}', {
       test: `
 ${status(200).trim()}
 pm.test('Verified creator is listed', () => pm.expect(pm.response.json().data.length).to.eql(1));`,
@@ -1006,7 +1016,7 @@ pm.test('Following exactly this creator once', () => {
 ${status(200).trim()}
 pm.test('One row deleted', () => pm.expect(pm.response.json().data.count).to.eql(1));`,
     }),
-    req('Creator posts (anonymous)', 'GET', '/creators/{{creatorUsername}}/posts', {
+    req('Creator posts (anonymous)', 'GET', '/creators/{{creatorSlug}}/posts', {
       test: `
 ${status(200).trim()}
 const posts = pm.response.json().data;
@@ -1019,7 +1029,7 @@ pm.test('Exclusive post is locked', () => {
 const pub = posts.find((p) => p.visibility === 'PUBLIC');
 if (pub) ${set('postId', 'pub.id')}`,
     }),
-    req('Creator posts as the creator (known gap: still locked)', 'GET', '/creators/{{creatorUsername}}/posts', {
+    req('Creator posts as the creator (known gap: still locked)', 'GET', '/creators/{{creatorSlug}}/posts', {
       as: 'creator',
       desc: `
 **Known gap.** The route is \`@Public()\`, and the AuthGuard skips session resolution
@@ -1229,7 +1239,6 @@ request and test then. Until then, the SQL fixtures cover what these would do.
 Bodies and paths are **proposals** based on the Prisma schema, not a settled contract.`,
   [
     folder('Creator yard menu', 'Replaces the creator_materials part of 02-seed-creator-fixtures.sql.', [
-      planned('List my yard menu', 'GET', '/creators/me/materials', { as: 'creator' }),
       planned('Add material to my menu', 'POST', '/creators/me/materials', {
         as: 'creator',
         body: { materialId: '<catalogue material id>', price: 500000, displayName: 'Ankara (1 yard)', description: 'Support with a yard of Ankara' },
@@ -1303,7 +1312,7 @@ pm.test('Acknowledged (201) but not acted on yet', () => pm.response.to.have.sta
         as: 'creator',
         body: { title: 'New drop', body: 'Sketches for my supporters', visibility: 'EXCLUSIVE', mediaIds: [] },
       }),
-      planned('List my posts (incl. drafts)', 'GET', '/creators/me/posts', { as: 'creator', desc: 'Today this matches GET /creators/:username/posts with username "me" and 404s as CREATOR_NOT_FOUND. The real route must be declared before :username.' }),
+      planned('List my posts (incl. drafts)', 'GET', '/creators/me/posts', { as: 'creator', desc: 'Today this matches GET /creators/:slug/posts with slug "me" and 404s as CREATOR_NOT_FOUND. The real route must be declared before :slug.' }),
       planned('Update post', 'PATCH', '/posts/{{postId}}', { as: 'creator', body: { title: 'Updated title' } }),
       planned('Publish post', 'POST', '/posts/{{postId}}/publish', { as: 'creator' }),
       planned('Delete post', 'DELETE', '/posts/{{postId}}', { as: 'creator' }),
@@ -1369,7 +1378,7 @@ Import \`BuyMeAYard.local.postman_environment.json\` too, and make sure its secr
 };
 
 const environment = {
-  name: 'Buy Me a Yard — Local',
+  name: 'Buy Me a Yard — Local (development only, never use these credentials elsewhere)',
   values: [
     ['baseUrl', 'http://localhost:3000/api/v1', 'default'],
     ['hostUrl', 'http://localhost:3000', 'default'],

@@ -25,6 +25,7 @@ import {
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { KYC_PROVIDER } from '../../infrastructure/kyc/kyc-provider.interface';
 import type {
+  KycDecision,
   KycDecisionSummary,
   KycExpectedDetails,
   KycProvider,
@@ -267,6 +268,21 @@ export class KycService {
             },
           })) ?? (await this.adoptSession(tx, event));
 
+        if (submission === 'ineligible') {
+          // Record the event (idempotency) but open nothing for this creator.
+          await tx.kycEvent.create({
+            data: {
+              provider: this.provider.providerName,
+              providerEventId: event.eventId,
+              submissionId: null,
+              eventType: event.eventType,
+              providerStatus: event.providerStatus,
+              payload: event.redactedPayload as Prisma.InputJsonValue,
+            },
+          });
+          return { received: true, ignored: 'creator_ineligible' } as const;
+        }
+
         if (
           submission &&
           event.vendorData &&
@@ -351,12 +367,15 @@ export class KycService {
    * stale-event guard compares provider timestamps only, and the transition
    * table still blocks regressions.
    */
-  async reconcileSubmission(submission: KycSubmission): Promise<KycSubmission> {
+  async reconcileSubmission(
+    submission: KycSubmission,
+    fetched?: KycDecision,
+  ): Promise<KycSubmission> {
     if (!submission.providerReference) return submission;
 
-    const decision = await this.provider.getDecision(
-      submission.providerReference,
-    );
+    const decision =
+      fetched ??
+      (await this.provider.getDecision(submission.providerReference));
     if (!decision.status) {
       this.logger.warn(
         `Provider returned unrecognised status "${decision.providerStatus}" for submission ${submission.id}`,
@@ -467,8 +486,13 @@ export class KycService {
       }
     }
 
-    const { submission, resumed } = await this.prisma.$transaction(
-      async (tx) => {
+    const result = await this.prisma.$transaction(
+      async (
+        tx,
+      ): Promise<
+        | { limitReached: true }
+        | { limitReached: false; submission: KycSubmission; resumed: boolean }
+      > => {
         await this.transitions.lockCreator(tx, creator.id);
 
         const existing = await tx.kycSubmission.findUnique({
@@ -500,9 +524,17 @@ export class KycService {
                 claimedDetails: claimed as unknown as Prisma.InputJsonValue,
               },
             });
-            return { submission: filled, resumed: true };
+            return { limitReached: false, submission: filled, resumed: true };
           }
-          return { submission: existing, resumed: true };
+          return { limitReached: false, submission: existing, resumed: true };
+        }
+
+        // Re-check the daily limit under the creator lock, so concurrent
+        // starts cannot all pass the earlier pre-check and exceed it.
+        if (
+          (await this.countRecentAttempts(tx, creator.id)) >= this.maxAttempts()
+        ) {
+          return { limitReached: true };
         }
 
         const created = await tx.kycSubmission.create({
@@ -544,12 +576,27 @@ export class KycService {
             providerStatus: session.providerStatus,
             summary: policy.summary,
           });
-          return { submission: outcome.submission, resumed: false };
+          return {
+            limitReached: false,
+            submission: outcome.submission,
+            resumed: false,
+          };
         }
 
-        return { submission: created, resumed: false };
+        return { limitReached: false, submission: created, resumed: false };
       },
     );
+
+    if (result.limitReached) {
+      // Nothing was recorded; discard the provider session we just opened.
+      await this.provider.deleteSession(session.sessionId).catch(() => {
+        this.logger.error(
+          `Failed to delete session ${session.sessionId} after hitting the attempt limit`,
+        );
+      });
+      throw this.attemptLimitError();
+    }
+    const { submission, resumed } = result;
 
     return {
       submissionId: submission.id,
@@ -560,6 +607,16 @@ export class KycService {
     };
   }
 
+  /**
+   * Provider first, deliberately. Didit is idempotent per vendor_data: while
+   * an unfinished session exists, createSession returns that same session.
+   * If we cancelled locally first and the provider delete then failed, the
+   * next start would get the OLD session back (with stale expected_details)
+   * mapped to a CANCELLED row. With this order a failure is recoverable: if
+   * the delete succeeds but our write fails, the row stays CREATED, and the
+   * retry sees the session as gone (decision 404 -> no status) and deletes
+   * again (404 tolerated) before cancelling.
+   */
   private async cancelSubmission(submission: KycSubmission) {
     if (submission.providerReference) {
       await this.provider.deleteSession(submission.providerReference);
@@ -580,16 +637,42 @@ export class KycService {
   private async adoptSession(
     tx: Prisma.TransactionClient,
     event: KycWebhookEvent,
-  ): Promise<KycSubmission | null> {
+  ): Promise<KycSubmission | 'ineligible' | null> {
     const workflowId = this.configService.get<string>('DIDIT_WORKFLOW_ID');
     if (!event.vendorData || !workflowId || event.workflowId !== workflowId) {
       return null;
     }
     const creator = await tx.creatorProfile.findUnique({
       where: { id: event.vendorData },
-      select: { id: true },
+      select: { id: true, status: true, kycBlockedAt: true },
     });
     if (!creator) return null;
+
+    // Never open a verification record for a creator who may not verify
+    // (suspended/banned/deactivated, or blocked after a revocation).
+    if (
+      PROTECTED_CREATOR_STATUSES.has(creator.status) ||
+      creator.kycBlockedAt
+    ) {
+      this.logger.warn(
+        `Not adopting KYC session ${event.sessionId}: creator ${creator.id} is not eligible`,
+      );
+      await tx.auditLog.create({
+        data: {
+          action: 'KYC_EVENT_IGNORED_INELIGIBLE_CREATOR',
+          resourceType: 'CREATOR_PROFILE',
+          resourceId: creator.id,
+          metadata: {
+            eventId: event.eventId,
+            sessionId: event.sessionId,
+            providerStatus: event.providerStatus,
+            creatorStatus: creator.status,
+            blocked: !!creator.kycBlockedAt,
+          },
+        },
+      });
+      return 'ineligible';
+    }
 
     await this.transitions.lockCreator(tx, creator.id);
 
@@ -621,21 +704,38 @@ export class KycService {
     });
   }
 
-  private async assertAttemptLimit(creatorId: string) {
-    const max = this.configService.get<number>('KYC_MAX_SESSIONS_PER_DAY') || 5;
+  private maxAttempts(): number {
+    return this.configService.get<number>('KYC_MAX_SESSIONS_PER_DAY') || 5;
+  }
+
+  private countRecentAttempts(
+    client: Pick<Prisma.TransactionClient, 'kycSubmission'>,
+    creatorId: string,
+  ): Promise<number> {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const count = await this.prisma.kycSubmission.count({
+    return client.kycSubmission.count({
       where: { creatorId, createdAt: { gte: since } },
     });
-    if (count >= max) {
-      throw new HttpException(
-        {
-          code: ErrorCodes.KYC_ATTEMPT_LIMIT_REACHED,
-          message:
-            'You have reached the maximum number of verification attempts for today. Please try again tomorrow.',
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+  }
+
+  private attemptLimitError() {
+    return new HttpException(
+      {
+        code: ErrorCodes.KYC_ATTEMPT_LIMIT_REACHED,
+        message:
+          'You have reached the maximum number of verification attempts for today. Please try again tomorrow.',
+      },
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
+  }
+
+  /** Fast-path check before calling the provider; re-checked under lock. */
+  private async assertAttemptLimit(creatorId: string) {
+    if (
+      (await this.countRecentAttempts(this.prisma, creatorId)) >=
+      this.maxAttempts()
+    ) {
+      throw this.attemptLimitError();
     }
   }
 

@@ -1,8 +1,8 @@
 -- Test fixtures for one onboarded creator. Fills the gaps that have no API
 -- endpoint yet: the creator's yard menu, a payout method and posts.
 --
--- Pass the creator's username (the Postman collection variable
--- `creatorUsername`, printed in the Postman console after onboarding):
+-- Pass the creator's slug (the Postman collection variable
+-- `creatorSlug`, printed in the Postman console after onboarding):
 --
 -- docker exec -i buymeayard-postgres psql -U postgres -d buymeayard \
 --   -v creator=creator_abc123 < docs/postman/sql/02-seed-creator-fixtures.sql
@@ -11,8 +11,8 @@
 
 \set ON_ERROR_STOP on
 
--- Fail loudly if the username is wrong, instead of inserting nothing.
-SELECT 1 / (SELECT count(*) FROM creator_profiles WHERE username = :'creator')::int AS creator_exists;
+-- Fail loudly if the slug is wrong, instead of inserting nothing.
+SELECT 1 / (SELECT count(*) FROM creator_profiles WHERE slug = :'creator')::int AS creator_exists;
 
 -- 1. Yard menu. Prices are in kobo (500000 = NGN 5,000).
 --    Adire is INACTIVE on purpose: supports that include it must be rejected.
@@ -26,7 +26,7 @@ CROSS JOIN (VALUES
   ('adire',   300000,  'Adire (1 yard)',   'Currently unavailable',         'INACTIVE')
 ) AS v(slug, price, display_name, description, status)
 JOIN materials m ON m.slug = v.slug
-WHERE cp.username = :'creator'
+WHERE cp.slug = :'creator'
 ON CONFLICT ("creatorId", "materialId") DO UPDATE
   SET price = EXCLUDED.price, status = EXCLUDED.status, "updatedAt" = now();
 
@@ -34,7 +34,7 @@ ON CONFLICT ("creatorId", "materialId") DO UPDATE
 INSERT INTO payout_methods (id, "creatorId", type, provider, "accountIdentifier", "accountName", "bankName", status, "isDefault", "createdAt", "updatedAt")
 SELECT gen_random_uuid(), cp.id, 'BANK_ACCOUNT', 'PAYSTACK', '0123456789', 'Test Creator', 'Test Bank', 'ACTIVE', true, now(), now()
 FROM creator_profiles cp
-WHERE cp.username = :'creator'
+WHERE cp.slug = :'creator'
   AND NOT EXISTS (SELECT 1 FROM payout_methods pm WHERE pm."creatorId" = cp.id);
 
 -- 3. Posts: one public, one exclusive (masked for non-entitled viewers),
@@ -48,7 +48,7 @@ CROSS JOIN (VALUES
   ('Behind the seams',     'Exclusive sketches for my supporters.',   'EXCLUSIVE', 'PUBLISHED', interval '1 day'),
   ('Unfinished draft',     'This should not be visible to anyone.',   'PUBLIC',    'DRAFT',     interval '0')
 ) AS v(title, body, visibility, status, age)
-WHERE cp.username = :'creator'
+WHERE cp.slug = :'creator'
   AND NOT EXISTS (SELECT 1 FROM posts p WHERE p."creatorId" = cp.id AND p.title = v.title);
 
 -- Summary
@@ -56,5 +56,5 @@ SELECT cm.id AS creator_material_id, m.slug, cm.price, cm.status
 FROM creator_materials cm
 JOIN materials m ON m.id = cm."materialId"
 JOIN creator_profiles cp ON cp.id = cm."creatorId"
-WHERE cp.username = :'creator'
+WHERE cp.slug = :'creator'
 ORDER BY cm.price;
