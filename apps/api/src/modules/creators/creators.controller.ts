@@ -41,7 +41,7 @@ import {
 } from './dto/creator-response.dto';
 import { CheckSlugResponseDto } from './dto/check-slug.dto';
 import { CreatorShareLinkResponseDto } from './dto/share-link.dto';
-import { UpdateSupporterSettingsDto } from './dto/update-supporter-settings.dto';
+import { UpdateCreatorSettingsDto } from './dto/update-creator-settings.dto';
 import { UpdatePageStatusDto } from './dto/update-page-status.dto';
 
 @ApiTags('creators')
@@ -339,19 +339,47 @@ export class CreatorsController {
     return this.creatorsService.createCustomMaterial(userId, dto);
   }
 
-  @Patch('me/supporter-settings')
+  @Patch('me/settings')
   @ApiBearerAuth()
   @ApiCookieAuth('better-auth.session_token')
   @ApiOperation({
-    summary: 'Update supporter interactions settings',
+    summary: 'Update creator page settings',
     description:
-      'Updates supporter interaction settings such as the personalized thank-you message shown after payment and in receipt emails.',
+      'Unified endpoint to update Appearance settings (choose your theme material) and Supporter Interaction settings (personalized thank-you message + show supporter count toggle). All fields are optional — only provided fields are updated.',
   })
-  @ApiBody({ type: UpdateSupporterSettingsDto })
+  @ApiBody({
+    type: UpdateCreatorSettingsDto,
+    examples: {
+      themeOnly: {
+        summary: 'Set appearance theme only',
+        value: { themeMaterialId: 'c1a2b3d4-e5f6-7890-abcd-ef1234567890' },
+      },
+      supporterInteractions: {
+        summary: 'Set thank-you message and toggle',
+        value: {
+          thankYouMessage: 'Thank you for the yard! 🙏',
+          showSupportersOnPage: true,
+        },
+      },
+      combined: {
+        summary: 'All settings at once',
+        value: {
+          themeMaterialId: 'c1a2b3d4-e5f6-7890-abcd-ef1234567890',
+          thankYouMessage: 'Thank you for the yard! 🙏',
+          showSupportersOnPage: false,
+        },
+      },
+    },
+  })
   @ApiResponse({
     status: 200,
-    description: 'Supporter settings updated successfully.',
+    description: 'Creator settings updated successfully.',
     type: CreatorResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid themeMaterialId or validation error.',
+    type: ApiErrorResponseDto,
   })
   @ApiResponse({
     status: 401,
@@ -363,11 +391,11 @@ export class CreatorsController {
     description: 'Creator profile not found.',
     type: ApiErrorResponseDto,
   })
-  async updateSupporterSettings(
+  async updateCreatorSettings(
     @CurrentUser('id') userId: string,
-    @Body() dto: UpdateSupporterSettingsDto,
+    @Body() dto: UpdateCreatorSettingsDto,
   ) {
-    const profile = await this.creatorsService.updateSupporterSettings(
+    const profile = await this.creatorsService.updateCreatorSettings(
       userId,
       dto,
     );

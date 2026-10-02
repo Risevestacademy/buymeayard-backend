@@ -19,7 +19,7 @@ describe('CreatorsController', () => {
     createCustomMaterial: jest.Mock;
     getShareLink: jest.Mock;
     getShareLinkBySlug: jest.Mock;
-    updateSupporterSettings: jest.Mock;
+    updateCreatorSettings: jest.Mock;
     updatePageStatus: jest.Mock;
   };
 
@@ -49,7 +49,7 @@ describe('CreatorsController', () => {
       createCustomMaterial: jest.fn(),
       getShareLink: jest.fn(),
       getShareLinkBySlug: jest.fn(),
-      updateSupporterSettings: jest.fn(),
+      updateCreatorSettings: jest.fn(),
       updatePageStatus: jest.fn(),
       formatCreatorProfile: jest.fn((p) => {
         if (!p) return p;
@@ -326,20 +326,20 @@ describe('CreatorsController', () => {
     });
   });
 
-  describe('updateSupporterSettings (PATCH /creators/me/supporter-settings)', () => {
+  describe('updateCreatorSettings (PATCH /creators/me/settings)', () => {
     it('should update thank-you message and showSupportersOnPage flag', async () => {
-      creatorsService.updateSupporterSettings.mockResolvedValue({
+      creatorsService.updateCreatorSettings.mockResolvedValue({
         ...rawCreatorProfile,
         thankYouMessage: 'Thank you for your generous yards! 🙏',
         showSupportersOnPage: true,
       });
 
-      const result = await controller.updateSupporterSettings('user-1', {
+      const result = await controller.updateCreatorSettings('user-1', {
         thankYouMessage: 'Thank you for your generous yards! 🙏',
         showSupportersOnPage: true,
       });
 
-      expect(creatorsService.updateSupporterSettings).toHaveBeenCalledWith('user-1', {
+      expect(creatorsService.updateCreatorSettings).toHaveBeenCalledWith('user-1', {
         thankYouMessage: 'Thank you for your generous yards! 🙏',
         showSupportersOnPage: true,
       });

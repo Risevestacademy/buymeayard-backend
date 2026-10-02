@@ -116,17 +116,19 @@ model CreatorProfile {
   userId           String              @unique
   creatorName      String?
   slug             String              @unique
-  bio              String?
-  avatarUrl        String?
+  bio                   String?
+  avatarUrl             String?
+  themeMaterialId       String?             // Selected appearance fabric theme ID (Appearance: Choose your theme)
   thankYouMessage       String?             // Shown after payment and in receipt email
   showSupportersOnPage  Boolean             @default(true) // Display supporter count and public contributions
   isPublished           Boolean             @default(false) // Must pass completeness check to publish
-  status           String              @default("REGISTERED") // REGISTERED, PROFILE_CREATED, KYC_PENDING, VERIFIED, ACTIVE, SUSPENDED, BANNED, DEACTIVATED
-  kycStatus        String              @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW
-  createdAt        DateTime            @default(now())
-  updatedAt        DateTime            @updatedAt
+  status                String              @default("REGISTERED") // REGISTERED, PROFILE_CREATED, KYC_PENDING, VERIFIED, ACTIVE, SUSPENDED, BANNED, DEACTIVATED
+  kycStatus             String              @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
 
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  themeMaterial  Material?           @relation("CreatorThemeMaterial", fields: [themeMaterialId], references: [id], onDelete: SetNull)
   socialLinks    CreatorSocialLink[]
   materials      CreatorMaterial[]
   customMaterials Material[]          @relation("CustomMaterials")
@@ -175,6 +177,7 @@ model Material {
   updatedAt          DateTime @updatedAt
 
   creator          CreatorProfile?   @relation("CustomMaterials", fields: [creatorId], references: [id], onDelete: Cascade)
+  themeCreators    CreatorProfile[]  @relation("CreatorThemeMaterial")
   creatorMaterials CreatorMaterial[]
 
   @@index([creatorId])

@@ -15,7 +15,7 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
 import { CreateCustomMaterialDto } from './dto/create-custom-material.dto';
 import { CreatorShareLinkDataDto } from './dto/share-link.dto';
-import { UpdateSupporterSettingsDto } from './dto/update-supporter-settings.dto';
+import { UpdateCreatorSettingsDto } from './dto/update-creator-settings.dto';
 import { UpdatePageStatusDto } from './dto/update-page-status.dto';
 
 @Injectable()
@@ -843,9 +843,9 @@ export class CreatorsService {
   // Supporter Settings & Page Status
   // -----------------------------------------------------------
 
-  async updateSupporterSettings(
+  async updateCreatorSettings(
     userId: string,
-    dto: UpdateSupporterSettingsDto,
+    dto: UpdateCreatorSettingsDto,
   ) {
     const profile = await this.prisma.creatorProfile.findUnique({
       where: { userId },
@@ -856,6 +856,30 @@ export class CreatorsService {
     }
 
     const data: Record<string, any> = {};
+
+    // ── Appearance: theme material ──────────────────────────────────────────
+    if (dto.themeMaterialId !== undefined) {
+      if (dto.themeMaterialId === null) {
+        data.themeMaterialId = null;
+      } else {
+        // Validate it's an active platform material
+        const material = await this.prisma.material.findFirst({
+          where: {
+            id: dto.themeMaterialId,
+            status: 'ACTIVE',
+            creatorId: null, // platform materials only
+          },
+        });
+        if (!material) {
+          throw new BadRequestException(
+            `Material with id "${dto.themeMaterialId}" not found or is not a valid platform theme.`,
+          );
+        }
+        data.themeMaterialId = dto.themeMaterialId;
+      }
+    }
+
+    // ── Supporter Interactions ──────────────────────────────────────────────
     if (dto.thankYouMessage !== undefined) {
       data.thankYouMessage = dto.thankYouMessage.trim() || null;
     }
@@ -880,6 +904,7 @@ export class CreatorsService {
           where: { status: 'ACTIVE' },
           include: { material: true },
         },
+        themeMaterial: true,
       },
     });
 

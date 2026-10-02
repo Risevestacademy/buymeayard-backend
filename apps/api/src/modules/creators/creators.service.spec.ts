@@ -688,7 +688,7 @@ describe('CreatorsService', () => {
     });
   });
 
-  describe('updateSupporterSettings', () => {
+  describe('updateCreatorSettings', () => {
     it('should update thank-you message', async () => {
       prisma.creatorProfile.findUnique.mockResolvedValue({
         id: 'c-1',
@@ -700,7 +700,7 @@ describe('CreatorsService', () => {
         thankYouMessage: 'Thank you for your generosity! 🎉',
       });
 
-      const res = await service.updateSupporterSettings('u-1', {
+      const res = await service.updateCreatorSettings('u-1', {
         thankYouMessage: 'Thank you for your generosity! 🎉',
       });
 
@@ -726,7 +726,7 @@ describe('CreatorsService', () => {
         showSupportersOnPage: false,
       });
 
-      const res = await service.updateSupporterSettings('u-1', {
+      const res = await service.updateCreatorSettings('u-1', {
         showSupportersOnPage: false,
       });
 
@@ -739,6 +739,59 @@ describe('CreatorsService', () => {
         }),
       );
       expect(res.showSupportersOnPage).toBe(false);
+    });
+
+    it('should set theme material when a valid platform material id is given', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.material.findFirst.mockResolvedValue({
+        id: 'mat-ankara',
+        name: 'Ankara',
+        status: 'ACTIVE',
+        creatorId: null,
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        themeMaterialId: 'mat-ankara',
+      });
+
+      const res = await service.updateCreatorSettings('u-1', {
+        themeMaterialId: 'mat-ankara',
+      });
+
+      expect(prisma.material.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: 'mat-ankara',
+            status: 'ACTIVE',
+            creatorId: null,
+          }),
+        }),
+      );
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: { themeMaterialId: 'mat-ankara' },
+        }),
+      );
+      expect(res.themeMaterialId).toBe('mat-ankara');
+    });
+
+    it('should throw BadRequestException for an invalid or unknown themeMaterialId', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.material.findFirst.mockResolvedValue(null); // not found
+
+      await expect(
+        service.updateCreatorSettings('u-1', {
+          themeMaterialId: 'bad-id',
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
