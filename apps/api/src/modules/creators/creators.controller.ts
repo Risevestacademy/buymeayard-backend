@@ -33,8 +33,7 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
 import { CreateCustomMaterialDto } from './dto/create-custom-material.dto';
 import {
-  CreatorResponseDto,
-  CreatorListResponseDto,
+  CreatorProfileDataDto,
   CreatorMaterialResponseDto,
   AvatarUploadResponseDto,
   ApiErrorResponseDto,
@@ -65,8 +64,8 @@ export class CreatorsController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Creators returned successfully.',
-    type: CreatorListResponseDto,
+    description: 'List of active creator profiles returned successfully.',
+    type: [CreatorProfileDataDto],
   })
   async getCreators(@Query() query: any) {
     return this.creatorsService.findAll(query);
@@ -83,7 +82,7 @@ export class CreatorsController {
   @ApiResponse({
     status: 200,
     description: 'Creator profile returned successfully.',
-    type: CreatorResponseDto,
+    type: CreatorProfileDataDto,
   })
   @ApiResponse({
     status: 401,
@@ -128,7 +127,7 @@ export class CreatorsController {
   @ApiResponse({
     status: 200,
     description: 'Creator profile onboarded successfully.',
-    type: CreatorResponseDto,
+    type: CreatorProfileDataDto,
   })
   @ApiResponse({
     status: 400,
@@ -182,7 +181,7 @@ export class CreatorsController {
   @ApiResponse({
     status: 200,
     description: 'Profile updated successfully.',
-    type: CreatorResponseDto,
+    type: CreatorProfileDataDto,
   })
   @ApiResponse({
     status: 400,
@@ -374,7 +373,7 @@ export class CreatorsController {
   @ApiResponse({
     status: 200,
     description: 'Creator settings updated successfully.',
-    type: CreatorResponseDto,
+    type: CreatorProfileDataDto,
   })
   @ApiResponse({
     status: 400,
@@ -413,12 +412,13 @@ export class CreatorsController {
   @ApiBody({ type: UpdatePageStatusDto })
   @ApiResponse({
     status: 200,
-    description: 'Creator page status updated successfully.',
-    type: CreatorResponseDto,
+    description: 'Creator page publish status updated successfully.',
+    type: CreatorProfileDataDto,
   })
   @ApiResponse({
     status: 400,
-    description: 'Cannot publish profile — required setup fields are incomplete.',
+    description:
+      'Cannot publish profile — required setup fields are incomplete.',
     type: ApiErrorResponseDto,
   })
   @ApiResponse({
@@ -509,7 +509,7 @@ export class CreatorsController {
   @ApiResponse({
     status: 200,
     description: 'Public creator profile returned successfully.',
-    type: CreatorResponseDto,
+    type: CreatorProfileDataDto,
   })
   @ApiResponse({
     status: 404,

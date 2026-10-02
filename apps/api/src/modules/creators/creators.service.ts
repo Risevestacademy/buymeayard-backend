@@ -834,7 +834,10 @@ export class CreatorsService {
         });
       }
     } catch (err) {
-      console.warn('[CreatorsService] ensureCreatorMaterials non-critical error:', err);
+      console.warn(
+        '[CreatorsService] ensureCreatorMaterials non-critical error:',
+        err,
+      );
     }
     return [];
   }
@@ -843,10 +846,7 @@ export class CreatorsService {
   // Supporter Settings & Page Status
   // -----------------------------------------------------------
 
-  async updateCreatorSettings(
-    userId: string,
-    dto: UpdateCreatorSettingsDto,
-  ) {
+  async updateCreatorSettings(userId: string, dto: UpdateCreatorSettingsDto) {
     const profile = await this.prisma.creatorProfile.findUnique({
       where: { userId },
     });
@@ -933,7 +933,8 @@ export class CreatorsService {
       if (!profile.slug?.trim()) missingFields.push('slug');
       if (!profile.bio?.trim()) missingFields.push('bio');
       if (!profile.avatarUrl?.trim()) missingFields.push('avatarUrl');
-      if (!profile.thankYouMessage?.trim()) missingFields.push('thankYouMessage');
+      if (!profile.thankYouMessage?.trim())
+        missingFields.push('thankYouMessage');
 
       const activeMaterialsCount = profile.materials?.length || 0;
       if (activeMaterialsCount === 0) {

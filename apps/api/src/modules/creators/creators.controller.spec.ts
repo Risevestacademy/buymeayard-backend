@@ -266,12 +266,19 @@ describe('CreatorsController', () => {
   describe('createCustomMaterial (POST /creators/me/materials/custom)', () => {
     it('should create custom material for creator', async () => {
       const dto = { name: 'Silk Velvet', description: 'Custom' };
-      const mockResult = { id: 'cm-custom', displayName: 'Silk Velvet', isCustom: true };
+      const mockResult = {
+        id: 'cm-custom',
+        displayName: 'Silk Velvet',
+        isCustom: true,
+      };
       creatorsService.createCustomMaterial.mockResolvedValue(mockResult);
 
       const result = await controller.createCustomMaterial('user-1', dto);
 
-      expect(creatorsService.createCustomMaterial).toHaveBeenCalledWith('user-1', dto);
+      expect(creatorsService.createCustomMaterial).toHaveBeenCalledWith(
+        'user-1',
+        dto,
+      );
       expect(result).toEqual(mockResult);
     });
   });
@@ -339,12 +346,17 @@ describe('CreatorsController', () => {
         showSupportersOnPage: true,
       });
 
-      expect(creatorsService.updateCreatorSettings).toHaveBeenCalledWith('user-1', {
-        thankYouMessage: 'Thank you for your generous yards! 🙏',
-        showSupportersOnPage: true,
-      });
+      expect(creatorsService.updateCreatorSettings).toHaveBeenCalledWith(
+        'user-1',
+        {
+          thankYouMessage: 'Thank you for your generous yards! 🙏',
+          showSupportersOnPage: true,
+        },
+      );
       expect(creatorsService.formatCreatorProfile).toHaveBeenCalled();
-      expect(result.thankYouMessage).toBe('Thank you for your generous yards! 🙏');
+      expect(result.thankYouMessage).toBe(
+        'Thank you for your generous yards! 🙏',
+      );
     });
   });
 
