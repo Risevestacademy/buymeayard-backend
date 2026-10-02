@@ -324,12 +324,45 @@ export class CreatorsController {
   @ApiOperation({
     summary: 'Add a custom material / appearance for the creator',
     description:
-      'Creates a personal custom material belonging only to the authenticated creator and adds it to their active materials.',
+      'Creates a personal custom material belonging only to the authenticated creator and adds it to their active yard menu. Supports name, description, color swatch, and thumbnail images (small + large).',
+  })
+  @ApiBody({
+    type: CreateCustomMaterialDto,
+    examples: {
+      minimal: {
+        summary: 'Name only',
+        value: { name: 'Silk Georgette' },
+      },
+      full: {
+        summary: 'All fields',
+        value: {
+          name: 'Silk Georgette',
+          description: 'Exclusive custom silk fabric for my supporters',
+          color: '#C2185B',
+          thumbnailSmallUrl:
+            'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill/materials/silk-sm.jpg',
+          thumbnailLargeUrl:
+            'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill/materials/silk-lg.jpg',
+          imageUrl:
+            'https://res.cloudinary.com/demo/image/upload/custom-silk.jpg',
+        },
+      },
+    },
   })
   @ApiResponse({
     status: 201,
     description: 'Custom material created successfully.',
     type: CreatorMaterialResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error — invalid URL, color, or missing name.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator profile not found.',
+    type: ApiErrorResponseDto,
   })
   async createCustomMaterial(
     @CurrentUser('id') userId: string,
