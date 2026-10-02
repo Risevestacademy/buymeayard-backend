@@ -1,61 +1,61 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Social Links
+// ─────────────────────────────────────────────────────────────────────────────
+
 export class CreatorSocialLinkResponseDto {
   @ApiProperty({
     example: 'b5f08cb1-80a5-48fa-88f5-93df380e227a',
-    description: 'Social link ID',
+    description: 'Social link record ID',
   })
   id: string;
 
   @ApiProperty({
     example: 'c1d09ec2-67a4-4f9e-a89c-3e6f9a0d81b4',
-    description: 'Creator ID',
+    description: 'Creator profile ID this link belongs to',
   })
   creatorId: string;
 
   @ApiProperty({
     example: 'twitter',
-    description: 'Platform name (e.g. twitter, instagram, tiktok, youtube)',
+    description:
+      'Platform identifier (e.g. twitter, instagram, tiktok, youtube)',
   })
   platform: string;
 
   @ApiProperty({
     example: 'https://x.com/adeola',
-    description: 'Social profile URL',
+    description: 'Full social profile URL',
   })
   url: string;
 
-  @ApiProperty({
-    example: '2026-09-25T14:00:00.000Z',
-    description: 'Creation timestamp',
-  })
+  @ApiProperty({ example: '2026-09-25T14:00:00.000Z' })
   createdAt: Date;
 
-  @ApiProperty({
-    example: '2026-09-25T14:00:00.000Z',
-    description: 'Last update timestamp',
-  })
+  @ApiProperty({ example: '2026-09-25T14:00:00.000Z' })
   updatedAt: Date;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Platform Material (nested inside CreatorMaterialResponseDto.material)
+// ─────────────────────────────────────────────────────────────────────────────
 
 export class PlatformMaterialDto {
   @ApiProperty({
     example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-    description: 'Platform material ID',
+    description: 'Platform material catalogue ID',
   })
   id: string;
 
-  @ApiProperty({
-    example: 'ankara',
-    description: 'Material slug handle',
-  })
-  slug: string;
+  @ApiProperty({ example: 'Ankara', description: 'Material display name' })
+  name: string;
 
   @ApiProperty({
-    example: 'Ankara',
-    description: 'Material display name',
+    example: 'ankara',
+    description: 'URL-safe material slug identifier',
   })
-  name: string;
+  slug: string;
 
   @ApiPropertyOptional({
     example: 'African wax print fabric widely used in fashion and crafts',
@@ -66,38 +66,40 @@ export class PlatformMaterialDto {
 
   @ApiPropertyOptional({
     example: 'https://cdn.buymeayard.com/materials/ankara.png',
-    description: 'Material image or icon URL',
+    description: 'Legacy / fallback image URL',
     nullable: true,
   })
   iconUrl?: string | null;
 
-  @ApiProperty({
-    example: 500000,
-    description:
-      'Default baseline price per yard in kobo (minor currency unit). 500000 = ₦5,000',
-  })
-  basePrice: number;
-
   @ApiPropertyOptional({
-    example: 'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill/materials/ankara-sm',
-    description: 'Small thumbnail image URL for card/grid display (approx 80x80)',
+    example:
+      'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill/materials/ankara-sm',
+    description: 'Small thumbnail URL for card/grid selectors (≈ 80×80)',
     nullable: true,
   })
   thumbnailSmallUrl?: string | null;
 
   @ApiPropertyOptional({
-    example: 'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill/materials/ankara-lg',
-    description: 'Large preview thumbnail URL for material detail views (approx 400x400)',
+    example:
+      'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill/materials/ankara-lg',
+    description: 'Large preview thumbnail URL for material detail (≈ 400×400)',
     nullable: true,
   })
   thumbnailLargeUrl?: string | null;
 
   @ApiPropertyOptional({
     example: '#7F3516',
-    description: 'Hexadecimal color code for theme swatch (e.g. #7F3516)',
+    description: 'Hexadecimal theme swatch color code',
     nullable: true,
   })
   color?: string | null;
+
+  @ApiProperty({
+    example: 500000,
+    description:
+      'Default baseline price per yard in kobo (minor units). 500000 = ₦5,000',
+  })
+  basePrice: number;
 
   @ApiProperty({
     example: 'ACTIVE',
@@ -107,16 +109,20 @@ export class PlatformMaterialDto {
   status: string;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Creator Material  (items inside the creator's materials[] array)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export class CreatorMaterialResponseDto {
   @ApiProperty({
     example: 'cm-9a8b7c6d-5e4f-3210-fedc-ba9876543210',
-    description: 'Creator material configuration ID',
+    description: 'Creator-material join record ID',
   })
   id: string;
 
   @ApiProperty({
     example: 'c1d09ec2-67a4-4f9e-a89c-3e6f9a0d81b4',
-    description: 'Associated creator profile ID',
+    description: 'Creator profile ID',
   })
   creatorId: string;
 
@@ -129,90 +135,137 @@ export class CreatorMaterialResponseDto {
   @ApiProperty({
     example: 500000,
     description:
-      'Custom price per yard set by creator in kobo (minor units). 500000 = ₦5,000',
+      'Creator-set price per yard in kobo (minor units). 500000 = ₦5,000',
   })
   price: number;
 
+  @ApiProperty({
+    example: 'NGN',
+    description: 'ISO 4217 currency code',
+  })
+  currency: string;
+
   @ApiPropertyOptional({
     example: 'Premium Ankara',
-    description: 'Optional custom display title chosen by creator',
+    description: 'Optional custom display name set by creator',
     nullable: true,
   })
   displayName?: string | null;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: 'Ankara',
-    description: 'Material name',
+    description:
+      'Resolved material name (displayName falling back to catalogue name)',
   })
-  name?: string;
+  name: string;
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     example: 'ankara',
     description: 'Material slug handle',
   })
-  slug?: string;
+  slug: string;
+
+  @ApiPropertyOptional({
+    example: 'Classic African wax print, great for bold outfits.',
+    description: 'Material description (creator override or catalogue default)',
+    nullable: true,
+  })
+  description?: string | null;
 
   @ApiPropertyOptional({
     example: '#7F3516',
-    description: 'Hexadecimal color representation (e.g. #7F3516)',
+    description: 'Hexadecimal color swatch for this material',
     nullable: true,
   })
   color?: string | null;
 
   @ApiPropertyOptional({
-    example: 'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill/materials/ankara-sm',
-    description: 'Small thumbnail image URL for card/grid display (approx 80x80)',
+    example:
+      'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill/materials/ankara-sm',
+    description: 'Small thumbnail URL for card/grid display (≈ 80×80)',
     nullable: true,
   })
   thumbnailSmallUrl?: string | null;
 
   @ApiPropertyOptional({
-    example: 'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill/materials/ankara-lg',
-    description: 'Large preview thumbnail URL for material detail views (approx 400x400)',
+    example:
+      'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill/materials/ankara-lg',
+    description: 'Large preview thumbnail URL for detail views (≈ 400×400)',
     nullable: true,
   })
   thumbnailLargeUrl?: string | null;
 
   @ApiPropertyOptional({
-    example: false,
-    description: 'Whether this is a creator custom material',
+    example: 'https://cdn.buymeayard.com/materials/ankara.png',
+    description: 'Legacy / fallback image URL',
+    nullable: true,
   })
-  isCustom?: boolean;
+  imageUrl?: string | null;
+
+  @ApiProperty({
+    example: false,
+    description:
+      'true if this is a creator-created custom material; false if it is a platform material',
+  })
+  isCustom: boolean;
 
   @ApiProperty({
     example: 'ACTIVE',
-    description: 'Status of this material in creator menu',
+    description: 'Status of this material in the creator yard menu',
     enum: ['ACTIVE', 'INACTIVE'],
   })
   status: string;
 
   @ApiPropertyOptional({
     type: PlatformMaterialDto,
-    description: 'Underlying platform catalogue material details',
+    description:
+      'Full platform catalogue material details (only present when the material originates from the platform catalogue)',
+    nullable: true,
   })
-  material?: PlatformMaterialDto;
+  material?: PlatformMaterialDto | null;
 
-  @ApiProperty({
-    example: '2026-09-25T14:00:00.000Z',
-    description: 'Creation timestamp',
-  })
+  @ApiProperty({ example: '2026-09-25T14:00:00.000Z' })
   createdAt: Date;
 
-  @ApiProperty({
-    example: '2026-09-25T14:00:00.000Z',
-    description: 'Last update timestamp',
-  })
+  @ApiProperty({ example: '2026-09-25T14:00:00.000Z' })
   updatedAt: Date;
 }
 
-export class AvatarUploadResponseDto {
+// ─────────────────────────────────────────────────────────────────────────────
+// User object (embedded inside creator profile)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class EmbeddedUserDto {
   @ApiProperty({
-    example:
-      'https://res.cloudinary.com/buymeayard/image/upload/v1727627400/avatars/creator-123.jpg',
-    description: 'Direct CDN URL of uploaded creator avatar',
+    example: 'u1e08cb1-80a5-48fa-88f5-93df380e227a',
+    description: 'User account ID',
   })
-  avatarUrl: string;
+  id: string;
+
+  @ApiPropertyOptional({
+    example: 'Adeola Johnson',
+    description: 'User display name',
+    nullable: true,
+  })
+  name?: string | null;
+
+  @ApiProperty({
+    example: 'adeola@example.com',
+    description: 'User email address',
+  })
+  email: string;
+
+  @ApiPropertyOptional({
+    example: 'https://lh3.googleusercontent.com/photo.jpg',
+    description: 'OAuth profile image URL (from Google/social sign-in)',
+    nullable: true,
+  })
+  image?: string | null;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Creator Profile  (returned by every creator endpoint)
+// ─────────────────────────────────────────────────────────────────────────────
 
 export class CreatorProfileDataDto {
   @ApiProperty({
@@ -223,39 +276,49 @@ export class CreatorProfileDataDto {
 
   @ApiProperty({
     example: 'u1e08cb1-80a5-48fa-88f5-93df380e227a',
-    description: 'Associated user ID',
+    description: 'Owning user account ID',
   })
   userId: string;
 
   @ApiProperty({
     example: 'Adeola Johnson',
-    description: 'Creator name',
+    description: 'Creator display name',
   })
   creatorName: string;
 
   @ApiProperty({
     example: 'adeola',
-    description: 'Unique creator URL slug handle',
+    description: 'Unique creator page slug handle (e.g. buymeayard.com/adeola)',
   })
   slug: string;
 
   @ApiPropertyOptional({
-    example: 'Fashion designer in Lagos',
-    description: 'Creator bio',
+    example: 'Fashion designer in Lagos. I create bold, authentic pieces.',
+    description: 'Short creator bio (max 160 characters)',
     nullable: true,
   })
   bio?: string | null;
 
   @ApiPropertyOptional({
-    example: 'https://example.com/avatar.jpg',
-    description: 'Avatar image URL',
+    example:
+      'https://res.cloudinary.com/buymeayard/image/upload/v1727627400/avatars/creator-123.jpg',
+    description: 'Creator avatar image URL',
     nullable: true,
   })
   avatarUrl?: string | null;
 
   @ApiPropertyOptional({
-    example: 'Thank you so much for your support! 🙏 I appreciate every yard.',
-    description: 'Personalized thank-you message shown after payment and in receipt email.',
+    example: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    description:
+      'ID of the selected platform material used as the page appearance theme. Set via PATCH /me/settings.',
+    nullable: true,
+  })
+  themeMaterialId?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'Thank you so much for sending me a yard! 🙏 It means everything.',
+    description:
+      'Personalized thank-you message shown after payment and included in the receipt email. Set via PATCH /me/settings.',
     nullable: true,
   })
   thankYouMessage?: string | null;
@@ -263,19 +326,20 @@ export class CreatorProfileDataDto {
   @ApiProperty({
     example: true,
     description:
-      'Whether to display supporter count and public contributions on the creator page',
+      'Whether the supporter count and public contributions are displayed on the creator page. Toggled via PATCH /me/settings.',
   })
   showSupportersOnPage: boolean;
 
   @ApiProperty({
     example: false,
-    description: 'Whether the creator support page is publicly visible',
+    description:
+      'Whether the creator support page is publicly live. Set via PATCH /me/page-status. Requires creatorName, slug, bio, avatarUrl, thankYouMessage, and at least one active material.',
   })
   isPublished: boolean;
 
   @ApiProperty({
     example: 'PROFILE_CREATED',
-    description: 'Creator account status',
+    description: 'Creator account lifecycle status',
     enum: [
       'REGISTERED',
       'PROFILE_CREATED',
@@ -291,64 +355,72 @@ export class CreatorProfileDataDto {
 
   @ApiProperty({
     example: 'NOT_SUBMITTED',
-    description: 'KYC status',
+    description: 'KYC verification status',
     enum: ['NOT_SUBMITTED', 'PENDING', 'VERIFIED', 'REJECTED', 'NEEDS_REVIEW'],
   })
   kycStatus: string;
 
+  @ApiPropertyOptional({
+    type: EmbeddedUserDto,
+    description: 'Embedded user account details',
+    nullable: true,
+  })
+  user?: EmbeddedUserDto | null;
+
   @ApiProperty({
     type: [CreatorSocialLinkResponseDto],
-    description: 'List of connected social links',
+    description: 'Connected social media links',
   })
   socialLinks: CreatorSocialLinkResponseDto[];
 
-  @ApiPropertyOptional({
+  @ApiProperty({
     type: [CreatorMaterialResponseDto],
     description:
-      'List of active yard materials with custom pricing configured by creator',
+      'Active yard materials configured by the creator with custom pricing',
   })
-  materials?: CreatorMaterialResponseDto[];
+  materials: CreatorMaterialResponseDto[];
 
-  @ApiProperty({
-    example: '2026-09-25T14:00:00.000Z',
-    description: 'Created timestamp',
-  })
+  @ApiProperty({ example: '2026-09-25T14:00:00.000Z' })
   createdAt: Date;
 
-  @ApiProperty({
-    example: '2026-09-25T14:00:00.000Z',
-    description: 'Last update timestamp',
-  })
+  @ApiProperty({ example: '2026-09-25T14:00:00.000Z' })
   updatedAt: Date;
 }
 
-export class CreatorResponseDto {
-  @ApiProperty({
-    type: CreatorProfileDataDto,
-    description: 'Creator profile data',
-  })
-  data: CreatorProfileDataDto;
+// ─────────────────────────────────────────────────────────────────────────────
+// Response wrappers  (the actual HTTP response shapes)
+// NOTE: All creator endpoints return the profile object directly (no data/meta
+//       envelope). The @ApiResponse type decorators use CreatorProfileDataDto.
+// ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Single-creator response — used by all creator mutation and fetch endpoints.
+ * The API returns the CreatorProfileDataDto object directly (no wrapper).
+ */
+export class CreatorResponseDto extends CreatorProfileDataDto {}
+
+/**
+ * List response — used by GET /creators (discover page).
+ * The API returns an array of CreatorProfileDataDto directly.
+ */
+export class CreatorListResponseDto extends CreatorProfileDataDto {}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Avatar upload response
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class AvatarUploadResponseDto {
   @ApiProperty({
-    example: {},
-    description: 'Response metadata',
+    example:
+      'https://res.cloudinary.com/buymeayard/image/upload/v1727627400/avatars/creator-123.jpg',
+    description: 'CDN URL of the newly uploaded creator avatar',
   })
-  meta: Record<string, any>;
+  avatarUrl: string;
 }
 
-export class CreatorListResponseDto {
-  @ApiProperty({
-    type: [CreatorProfileDataDto],
-    description: 'Array of creator profiles',
-  })
-  data: CreatorProfileDataDto[];
-
-  @ApiProperty({
-    example: {},
-    description: 'Response metadata',
-  })
-  meta: Record<string, any>;
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Error response
+// ─────────────────────────────────────────────────────────────────────────────
 
 export class ApiErrorResponseDto {
   @ApiProperty({ example: 400, description: 'HTTP status code' })
@@ -356,10 +428,10 @@ export class ApiErrorResponseDto {
 
   @ApiProperty({
     example: 'Creator name is required',
-    description: 'Detailed error message',
+    description: 'Human-readable error message',
   })
   message: string;
 
-  @ApiProperty({ example: 'Bad Request', description: 'Error title' })
+  @ApiProperty({ example: 'Bad Request', description: 'HTTP error title' })
   error: string;
 }
