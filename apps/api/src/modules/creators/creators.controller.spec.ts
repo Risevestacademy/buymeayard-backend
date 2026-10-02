@@ -16,8 +16,11 @@ describe('CreatorsController', () => {
     uploadAvatar: jest.Mock;
     getCreatorMaterials: jest.Mock;
     saveCreatorMaterials: jest.Mock;
+    createCustomMaterial: jest.Mock;
     getShareLink: jest.Mock;
     getShareLinkBySlug: jest.Mock;
+    updateCreatorSettings: jest.Mock;
+    updatePageStatus: jest.Mock;
   };
 
   const rawCreatorProfile = {
@@ -43,8 +46,11 @@ describe('CreatorsController', () => {
       uploadAvatar: jest.fn(),
       getCreatorMaterials: jest.fn(),
       saveCreatorMaterials: jest.fn(),
+      createCustomMaterial: jest.fn(),
       getShareLink: jest.fn(),
       getShareLinkBySlug: jest.fn(),
+      updateCreatorSettings: jest.fn(),
+      updatePageStatus: jest.fn(),
       formatCreatorProfile: jest.fn((p) => {
         if (!p) return p;
         const {
@@ -257,6 +263,19 @@ describe('CreatorsController', () => {
     });
   });
 
+  describe('createCustomMaterial (POST /creators/me/materials/custom)', () => {
+    it('should create custom material for creator', async () => {
+      const dto = { name: 'Silk Velvet', description: 'Custom' };
+      const mockResult = { id: 'cm-custom', displayName: 'Silk Velvet', isCustom: true };
+      creatorsService.createCustomMaterial.mockResolvedValue(mockResult);
+
+      const result = await controller.createCustomMaterial('user-1', dto);
+
+      expect(creatorsService.createCustomMaterial).toHaveBeenCalledWith('user-1', dto);
+      expect(result).toEqual(mockResult);
+    });
+  });
+
   describe('getMyShareLink (GET /creators/me/share-link)', () => {
     it('should delegate share link generation to service for logged in creator', async () => {
       const mockShareData = {
@@ -304,6 +323,47 @@ describe('CreatorsController', () => {
 
       expect(creatorsService.getShareLinkBySlug).toHaveBeenCalledWith('adeola');
       expect(result).toEqual(mockShareData);
+    });
+  });
+
+  describe('updateCreatorSettings (PATCH /creators/me/settings)', () => {
+    it('should update thank-you message and showSupportersOnPage flag', async () => {
+      creatorsService.updateCreatorSettings.mockResolvedValue({
+        ...rawCreatorProfile,
+        thankYouMessage: 'Thank you for your generous yards! 🙏',
+        showSupportersOnPage: true,
+      });
+
+      const result = await controller.updateCreatorSettings('user-1', {
+        thankYouMessage: 'Thank you for your generous yards! 🙏',
+        showSupportersOnPage: true,
+      });
+
+      expect(creatorsService.updateCreatorSettings).toHaveBeenCalledWith('user-1', {
+        thankYouMessage: 'Thank you for your generous yards! 🙏',
+        showSupportersOnPage: true,
+      });
+      expect(creatorsService.formatCreatorProfile).toHaveBeenCalled();
+      expect(result.thankYouMessage).toBe('Thank you for your generous yards! 🙏');
+    });
+  });
+
+  describe('updatePageStatus (PATCH /creators/me/page-status)', () => {
+    it('should update page published status and format profile', async () => {
+      creatorsService.updatePageStatus.mockResolvedValue({
+        ...rawCreatorProfile,
+        isPublished: true,
+      });
+
+      const result = await controller.updatePageStatus('user-1', {
+        isPublished: true,
+      });
+
+      expect(creatorsService.updatePageStatus).toHaveBeenCalledWith('user-1', {
+        isPublished: true,
+      });
+      expect(creatorsService.formatCreatorProfile).toHaveBeenCalled();
+      expect(result.isPublished).toBe(true);
     });
   });
 });

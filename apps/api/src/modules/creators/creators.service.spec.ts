@@ -41,9 +41,13 @@ describe('CreatorsService', () => {
     };
     material: {
       findMany: jest.Mock;
+      findFirst: jest.Mock;
+      create: jest.Mock;
     };
     creatorMaterial: {
       findMany: jest.Mock;
+      findFirst: jest.Mock;
+      create: jest.Mock;
       upsert: jest.Mock;
       updateMany: jest.Mock;
     };
@@ -97,9 +101,13 @@ describe('CreatorsService', () => {
       },
       material: {
         findMany: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
       },
       creatorMaterial: {
         findMany: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
         upsert: jest.fn(),
         updateMany: jest.fn(),
       },
@@ -222,6 +230,54 @@ describe('CreatorsService', () => {
       expect(formatted.lastName).toBeUndefined();
       expect(formatted.username).toBeUndefined();
       expect(formatted.personalizedLink).toBeUndefined();
+
+      // Assert live and supporter flags
+      expect(formatted.showSupportersOnPage).toBe(true);
+      expect(formatted.isPublished).toBe(false);
+    });
+
+    it('should include formatted material info with thumbnails, color, and price', () => {
+      const formatted = service.formatCreatorProfile({
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
+        materials: [
+          {
+            id: 'cm-1',
+            creatorId: 'c-1',
+            materialId: 'm-1',
+            price: 150000,
+            currency: 'NGN',
+            displayName: 'Special Ankara',
+            material: {
+              id: 'm-1',
+              name: 'Ankara',
+              slug: 'ankara',
+              description: 'African print',
+              color: '#7F3516',
+              thumbnailSmallUrl: 'https://cdn.example.com/ankara-sm.png',
+              thumbnailLargeUrl: 'https://cdn.example.com/ankara-lg.png',
+              defaultPrice: 100000,
+              currency: 'NGN',
+              status: 'ACTIVE',
+            },
+          },
+        ],
+      });
+
+      expect(formatted.materials).toHaveLength(1);
+      expect(formatted.materials[0].name).toBe('Ankara');
+      expect(formatted.materials[0].displayName).toBe('Special Ankara');
+      expect(formatted.materials[0].color).toBe('#7F3516');
+      expect(formatted.materials[0].thumbnailSmallUrl).toBe(
+        'https://cdn.example.com/ankara-sm.png',
+      );
+      expect(formatted.materials[0].thumbnailLargeUrl).toBe(
+        'https://cdn.example.com/ankara-lg.png',
+      );
+      expect(formatted.materials[0].price).toBe(150000);
+      expect(formatted.materials[0].isCustom).toBe(false);
+      expect(formatted.materials[0].material).toBeDefined();
+      expect(formatted.materials[0].material.color).toBe('#7F3516');
     });
   });
 
@@ -437,6 +493,51 @@ describe('CreatorsService', () => {
     });
   });
 
+  describe('createCustomMaterial', () => {
+    it('should create custom material scoped to creator and link to creator materials', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'creator-1',
+        slug: 'fisayo',
+      });
+      prisma.material.findFirst.mockResolvedValue({
+        id: 'mat-primary',
+        defaultPrice: 100000,
+        currency: 'NGN',
+      });
+      prisma.material.create.mockResolvedValue({
+        id: 'mat-custom-1',
+        name: 'Silk Velvet',
+        creatorId: 'creator-1',
+        defaultPrice: 100000,
+        currency: 'NGN',
+      });
+      prisma.creatorMaterial.create.mockResolvedValue({
+        id: 'cm-custom-1',
+        creatorId: 'creator-1',
+        materialId: 'mat-custom-1',
+        price: 100000,
+        displayName: 'Silk Velvet',
+        material: { id: 'mat-custom-1', creatorId: 'creator-1' },
+      });
+
+      const res = await service.createCustomMaterial('user-1', {
+        name: 'Silk Velvet',
+        description: 'Luxury custom fabric',
+      });
+
+      expect(res.isCustom).toBe(true);
+      expect(prisma.material.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          creatorId: 'creator-1',
+          name: 'Silk Velvet',
+          defaultPrice: 100000,
+          currency: 'NGN',
+        }),
+      });
+      expect(prisma.creatorMaterial.create).toHaveBeenCalled();
+    });
+  });
+
   describe('saveCreatorMaterials', () => {
     it('should throw NotFoundException if profile does not exist', async () => {
       prisma.creatorProfile.findUnique.mockResolvedValue(null);
@@ -584,6 +685,183 @@ describe('CreatorsService', () => {
       await expect(service.getShareLinkBySlug('nonexistent')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('updateCreatorSettings', () => {
+    it('should update thank-you message', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        thankYouMessage: 'Thank you for your generosity! 🎉',
+      });
+
+      const res = await service.updateCreatorSettings('u-1', {
+        thankYouMessage: 'Thank you for your generosity! 🎉',
+      });
+
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: {
+            thankYouMessage: 'Thank you for your generosity! 🎉',
+          },
+        }),
+      );
+      expect(res.thankYouMessage).toBe('Thank you for your generosity! 🎉');
+    });
+
+    it('should toggle showSupportersOnPage setting', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        showSupportersOnPage: false,
+      });
+
+      const res = await service.updateCreatorSettings('u-1', {
+        showSupportersOnPage: false,
+      });
+
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: {
+            showSupportersOnPage: false,
+          },
+        }),
+      );
+      expect(res.showSupportersOnPage).toBe(false);
+    });
+
+    it('should set theme material when a valid platform material id is given', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.material.findFirst.mockResolvedValue({
+        id: 'mat-ankara',
+        name: 'Ankara',
+        status: 'ACTIVE',
+        creatorId: null,
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        themeMaterialId: 'mat-ankara',
+      });
+
+      const res = await service.updateCreatorSettings('u-1', {
+        themeMaterialId: 'mat-ankara',
+      });
+
+      expect(prisma.material.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: 'mat-ankara',
+            status: 'ACTIVE',
+            creatorId: null,
+          }),
+        }),
+      );
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: { themeMaterialId: 'mat-ankara' },
+        }),
+      );
+      expect(res.themeMaterialId).toBe('mat-ankara');
+    });
+
+    it('should throw BadRequestException for an invalid or unknown themeMaterialId', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.material.findFirst.mockResolvedValue(null); // not found
+
+      await expect(
+        service.updateCreatorSettings('u-1', {
+          themeMaterialId: 'bad-id',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('updatePageStatus', () => {
+    it('should reject publishing if required setup fields are incomplete', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        creatorName: 'Adeola',
+        slug: 'adeola',
+        bio: null, // missing bio
+        avatarUrl: null, // missing avatar
+        thankYouMessage: null, // missing thank-you message
+        materials: [], // missing materials
+      });
+
+      await expect(
+        service.updatePageStatus('u-1', { isPublished: true }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should allow publishing when all required setup fields are filled', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
+        bio: 'Fashion designer in Lagos',
+        avatarUrl: 'https://example.com/avatar.jpg',
+        thankYouMessage: 'Thank you so much! 🙏',
+        materials: [{ id: 'cm-1', status: 'ACTIVE' }],
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        isPublished: true,
+      });
+
+      const res = await service.updatePageStatus('u-1', { isPublished: true });
+
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: { isPublished: true },
+        }),
+      );
+      expect(res.isPublished).toBe(true);
+    });
+
+    it('should allow unpublishing without validating completeness', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        creatorName: null,
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        isPublished: false,
+      });
+
+      const res = await service.updatePageStatus('u-1', { isPublished: false });
+
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: { isPublished: false },
+        }),
+      );
+      expect(res.isPublished).toBe(false);
     });
   });
 });
