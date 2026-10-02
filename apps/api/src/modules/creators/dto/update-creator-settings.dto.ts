@@ -1,6 +1,5 @@
 import {
   IsBoolean,
-  IsHexColor,
   IsOptional,
   IsString,
   IsUUID,
