@@ -577,3 +577,18 @@ model AuditLog {
   @@index([createdAt])
   @@map("audit_logs")
 }
+
+// --------------------------------------------------------
+// WAITLIST
+// --------------------------------------------------------
+
+model WaitlistEntry {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([createdAt])
+  @@map("waitlist_entries")
+}
