@@ -242,7 +242,7 @@ describe('createBetterAuth', () => {
       expect(secret.split('.').length).toBe(3);
     });
 
-    it('should include Render and Apple domains in trustedOrigins', () => {
+    it('should include Render, Apple, and mobile redirect schemes in trustedOrigins', () => {
       createBetterAuth(mockPrisma);
       const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
 
@@ -252,6 +252,9 @@ describe('createBetterAuth', () => {
       expect(passedConfig.trustedOrigins).toContain(
         'https://appleid.apple.com',
       );
+      expect(passedConfig.trustedOrigins).toContain('bmay://');
+      expect(passedConfig.trustedOrigins).toContain('bmay-dev://');
+      expect(passedConfig.trustedOrigins).toContain('bmay-preview://');
     });
   });
 });

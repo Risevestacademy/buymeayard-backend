@@ -133,7 +133,8 @@ export class MaterialsController {
   @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
   @ApiOperation({
     summary: 'Edit an existing material (Admin only)',
-    description: 'Updates material name, description, imageUrl, slug, or status.',
+    description:
+      'Updates material name, description, imageUrl, slug, or status.',
   })
   @ApiParam({ name: 'id', description: 'Material ID' })
   @ApiResponse({

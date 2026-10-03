@@ -196,6 +196,12 @@ export function createBetterAuth(
       'https://appleid.apple.com',
       'buymeayard://',
       'buymeayard://*',
+      'bmay://',
+      'bmay://*',
+      'bmay-dev://',
+      'bmay-dev://*',
+      'bmay-preview://',
+      'bmay-preview://*',
       'exp://',
       'exp://*',
       ...(process.env.ADDITIONAL_TRUSTED_ORIGINS

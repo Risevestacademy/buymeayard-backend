@@ -13,49 +13,67 @@ const DEFAULT_PLATFORM_MATERIALS = [
   {
     name: 'Ankara',
     slug: 'ankara',
-    description: 'Traditional African wax print fabric, widely worn at celebrations and everyday occasions.',
-    thumbnailSmallUrl: 'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill,q_auto,f_auto/materials/ankara-sm',
-    thumbnailLargeUrl: 'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill,q_auto,f_auto/materials/ankara-lg',
+    description:
+      'Traditional African wax print fabric, widely worn at celebrations and everyday occasions.',
+    thumbnailSmallUrl:
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048027/ankara_1_aprayy.png',
+    thumbnailLargeUrl:
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048029/ankara_vafdfc.png',
     color: '#7F3516', // Primary/700 - rich terracotta earth
   },
   {
     name: 'Adire',
     slug: 'adire',
-    description: 'Hand-crafted indigo-dyed fabric with rich Yoruba heritage and bold resist-dye patterns.',
-    thumbnailSmallUrl: 'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill,q_auto,f_auto/materials/adire-sm',
-    thumbnailLargeUrl: 'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill,q_auto,f_auto/materials/adire-lg',
+    description:
+      'Hand-crafted indigo-dyed fabric with rich Yoruba heritage and bold resist-dye patterns.',
+    thumbnailSmallUrl:
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/adire_jhpw59.png',
+    thumbnailLargeUrl:
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/adire_jhpw59.png',
     color: '#4A2E8A', // Secondary - Amethyst/600 - deep indigo purple
   },
   {
     name: 'Ochafu',
     slug: 'ochafu',
-    description: 'Classic traditional woven textile fabric from eastern Nigeria, used for ceremonies and royalty.',
-    thumbnailSmallUrl: 'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill,q_auto,f_auto/materials/ochafu-sm',
-    thumbnailLargeUrl: 'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill,q_auto,f_auto/materials/ochafu-lg',
+    description:
+      'Classic traditional woven textile fabric from eastern Nigeria, used for ceremonies and royalty.',
+    thumbnailSmallUrl:
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/ochafu_1_zv9ayh.png',
+    thumbnailLargeUrl:
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048031/ochafu_jpe0sw.png',
     color: '#54230E', // Primary/800 - deep royal umber
   },
   {
     name: 'Aso-Oke',
     slug: 'aso-oke',
-    description: 'Hand-woven prestige cloth from the Yoruba people of Nigeria, synonymous with celebration.',
-    thumbnailSmallUrl: 'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill,q_auto,f_auto/materials/aso-oke-sm',
-    thumbnailLargeUrl: 'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill,q_auto,f_auto/materials/aso-oke-lg',
+    description:
+      'Hand-woven prestige cloth from the Yoruba people of Nigeria, synonymous with celebration.',
+    thumbnailSmallUrl:
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/aso-oke_1_vdvwnw.png',
+    thumbnailLargeUrl:
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/aso-oke_qtypsn.png',
     color: '#AB491F', // Primary/600 - warm rust orange
   },
   {
     name: 'Akwete',
     slug: 'akwete',
-    description: 'Distinctive hand-woven textile from Akwete, Abia State — known for its bold geometric designs.',
-    thumbnailSmallUrl: 'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill,q_auto,f_auto/materials/akwete-sm',
-    thumbnailLargeUrl: 'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill,q_auto,f_auto/materials/akwete-lg',
+    description:
+      'Distinctive hand-woven textile from Akwete, Abia State — known for its bold geometric designs.',
+    thumbnailSmallUrl:
+      'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill,q_auto,f_auto/materials/akwete-sm',
+    thumbnailLargeUrl:
+      'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill,q_auto,f_auto/materials/akwete-lg',
     color: '#676670', // Neutral/500 - elegant graphite slate
   },
   {
     name: 'Lace',
     slug: 'lace',
-    description: 'Intricate and elegant luxury lace fabric, a staple for Nigerian celebrations and ceremonies.',
-    thumbnailSmallUrl: 'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill,q_auto,f_auto/materials/lace-sm',
-    thumbnailLargeUrl: 'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill,q_auto,f_auto/materials/lace-lg',
+    description:
+      'Intricate and elegant luxury lace fabric, a staple for Nigerian celebrations and ceremonies.',
+    thumbnailSmallUrl:
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/lace_1_cruzn4.png',
+    thumbnailLargeUrl:
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/lace_vxlyec.png',
     color: '#CAA8F5', // Secondary - Amethyst/300 - soft lilac lavender
   },
 ];
@@ -178,8 +196,7 @@ export class MaterialsService {
           dto.thumbnailLargeUrl !== undefined
             ? dto.thumbnailLargeUrl?.trim() || null
             : undefined,
-        color:
-          dto.color !== undefined ? dto.color?.trim() || null : undefined,
+        color: dto.color !== undefined ? dto.color?.trim() || null : undefined,
         status: dto.status !== undefined ? dto.status : undefined,
       },
     });
@@ -329,9 +346,7 @@ export class MaterialsService {
     }
 
     const yardQty =
-      yards !== undefined && !isNaN(yards) && yards > 0
-        ? Math.round(yards)
-        : 1;
+      yards !== undefined && !isNaN(yards) && yards > 0 ? Math.round(yards) : 1;
     const totalAmount = yardQty * basePricePerYard;
     const totalAmountMinor = yardQty * basePriceMinor;
 

@@ -79,3 +79,15 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      # KYC relies on Postgres row locks, unique constraints and CHECK
+      # constraints, which unit tests cannot exercise. Apply every migration
+      # to the CI database (also proves migrations work on a clean DB), then
+      # run the real-Postgres concurrency suite against it.
+      - name: Apply migrations (clean database)
+        run: pnpm --filter @buymeayard/api exec prisma migrate deploy
+
+      - name: KYC concurrency (real Postgres)
+        run: pnpm --filter @buymeayard/api test:e2e -- kyc-concurrency
+        env:
+          KYC_DB_TEST_URL: ${{ env.DATABASE_URL }}

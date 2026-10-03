@@ -624,7 +624,7 @@ export class CreatorsService {
       throw new NotFoundException('Creator profile not found');
     }
 
-    let items = await this.prisma.creatorMaterial.findMany({
+    const items = await this.prisma.creatorMaterial.findMany({
       where: { creatorId: profile.id, status: 'ACTIVE' },
       include: { material: true },
       orderBy: { createdAt: 'asc' },
@@ -1162,6 +1162,7 @@ export class CreatorsService {
     }
 
     const isPublished = Boolean(profile.isPublished);
+    const isKycCompleted = profile.kycStatus === 'VERIFIED';
 
     return {
       ...cleanProfile,
@@ -1172,6 +1173,7 @@ export class CreatorsService {
       selectedMaterials: materials,
       showSupportersOnPage: profile.showSupportersOnPage ?? true,
       isPublished,
+      isKycCompleted,
     };
   }
 
