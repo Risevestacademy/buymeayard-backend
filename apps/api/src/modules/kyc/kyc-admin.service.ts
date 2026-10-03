@@ -20,7 +20,7 @@ import type {
 } from '../../infrastructure/kyc/kyc-provider.interface';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { KycTransitionService } from './kyc-transition.service';
-import { KycService } from './kyc.service';
+import { KYC_TRANSACTION_OPTIONS, KycService } from './kyc.service';
 import { RECONCILABLE_STATUSES } from './kyc-state';
 import { KycQueueQueryDto } from './dto/admin-kyc.dto';
 
@@ -263,7 +263,7 @@ export class KycAdminService {
         });
       }
       return outcome.submission;
-    });
+    }, KYC_TRANSACTION_OPTIONS);
 
     if (revoked.providerReference) {
       await this.provider
@@ -314,7 +314,7 @@ export class KycAdminService {
         },
       });
       return updated;
-    });
+    }, KYC_TRANSACTION_OPTIONS);
   }
 
   /**
@@ -358,16 +358,18 @@ export class KycAdminService {
       reviewNote?: string;
     },
   ) {
-    const outcome = await this.prisma.$transaction((tx) =>
-      this.transitions.transition(tx, {
-        submissionId: submission.id,
-        to,
-        expectedFrom: extra.expectedFrom,
-        source: KycReviewSource.ADMIN,
-        actorId: adminId,
-        rejectionReason: extra.rejectionReason ?? null,
-        reviewNote: extra.reviewNote ?? null,
-      }),
+    const outcome = await this.prisma.$transaction(
+      (tx) =>
+        this.transitions.transition(tx, {
+          submissionId: submission.id,
+          to,
+          expectedFrom: extra.expectedFrom,
+          source: KycReviewSource.ADMIN,
+          actorId: adminId,
+          rejectionReason: extra.rejectionReason ?? null,
+          reviewNote: extra.reviewNote ?? null,
+        }),
+      KYC_TRANSACTION_OPTIONS,
     );
 
     if (!outcome.changed && outcome.reason !== 'same_status') {

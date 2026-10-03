@@ -88,6 +88,11 @@ export type WebhookResult =
   | { received: true; status: 'already_processed' }
   | { received: true; ignored: string };
 
+export const KYC_TRANSACTION_OPTIONS = {
+  maxWait: 15_000,
+  timeout: 30_000,
+};
+
 @Injectable()
 export class KycService {
   private readonly logger = new Logger(KycService.name);
@@ -359,7 +364,7 @@ export class KycService {
         });
 
         return { received: true } as const;
-      });
+      }, KYC_TRANSACTION_OPTIONS);
     } catch (err) {
       // A concurrent delivery of the same event won the insert race. Any
       // other unique violation is a real failure: rethrow so Didit retries.
@@ -401,14 +406,16 @@ export class KycService {
       decision.status,
       decision.summary,
     );
-    const outcome = await this.prisma.$transaction((tx) =>
-      this.transitions.transition(tx, {
-        submissionId: submission.id,
-        to: policy.to,
-        source: KycReviewSource.RECONCILE,
-        providerStatus: decision.providerStatus,
-        summary: policy.summary,
-      }),
+    const outcome = await this.prisma.$transaction(
+      (tx) =>
+        this.transitions.transition(tx, {
+          submissionId: submission.id,
+          to: policy.to,
+          source: KycReviewSource.RECONCILE,
+          providerStatus: decision.providerStatus,
+          summary: policy.summary,
+        }),
+      KYC_TRANSACTION_OPTIONS,
     );
     return outcome.submission;
   }
@@ -600,6 +607,7 @@ export class KycService {
 
         return { limitReached: false, submission: created, resumed: false };
       },
+      KYC_TRANSACTION_OPTIONS,
     );
 
     if (result.limitReached) {
@@ -636,12 +644,14 @@ export class KycService {
     if (submission.providerReference) {
       await this.provider.deleteSession(submission.providerReference);
     }
-    await this.prisma.$transaction((tx) =>
-      this.transitions.transition(tx, {
-        submissionId: submission.id,
-        to: S.CANCELLED,
-        source: KycReviewSource.SYSTEM,
-      }),
+    await this.prisma.$transaction(
+      (tx) =>
+        this.transitions.transition(tx, {
+          submissionId: submission.id,
+          to: S.CANCELLED,
+          source: KycReviewSource.SYSTEM,
+        }),
+      KYC_TRANSACTION_OPTIONS,
     );
   }
 
