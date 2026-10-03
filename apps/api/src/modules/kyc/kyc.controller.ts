@@ -24,6 +24,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { StartKycSessionDto } from './dto/start-kyc-session.dto';
+import {
+  KycStatusResponseDto,
+  StartKycSessionResponseDto,
+} from './dto/kyc-response.dto';
 
 @ApiTags('kyc')
 @ApiBearerAuth()
@@ -41,7 +45,11 @@ export class KycController {
     description:
       'Returns the creator KYC status, whether contributions are enabled, prefill values for the details step, and the latest attempt. Syncs with the provider if a result is overdue.',
   })
-  @ApiResponse({ status: 200, description: 'KYC status returned.' })
+  @ApiResponse({
+    status: 200,
+    description: 'KYC status returned.',
+    type: KycStatusResponseDto,
+  })
   async getMyKyc(@CurrentUser('id') userId: string) {
     return this.kycService.getMyKyc(userId);
   }
@@ -60,7 +68,11 @@ export class KycController {
     description:
       'Submits the confirmed details and returns a Didit session. Web: pass verificationUrl to the Didit web SDK. React Native: pass sessionToken to the Didit RN SDK. Returns the existing session when an unfinished one exists with the same details.',
   })
-  @ApiResponse({ status: 200, description: 'Session created or resumed.' })
+  @ApiResponse({
+    status: 200,
+    description: 'Session created or resumed.',
+    type: StartKycSessionResponseDto,
+  })
   @ApiResponse({ status: 400, description: 'Invalid details.' })
   @ApiResponse({
     status: 409,
