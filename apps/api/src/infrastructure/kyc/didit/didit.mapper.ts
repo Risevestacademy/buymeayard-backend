@@ -40,7 +40,10 @@ export function mapDiditStatus(label: unknown): KycSubmissionStatus | null {
 }
 
 /** Our document choice -> Didit `expected_document_types` codes. */
-export function toDiditDocumentTypes(type: KycDocumentType): string[] {
+export function toDiditDocumentTypes(
+  type?: KycDocumentType | null,
+): string[] | undefined {
+  if (!type) return undefined;
   switch (type) {
     case KycDocumentType.PASSPORT:
       return ['P'];
@@ -49,6 +52,8 @@ export function toDiditDocumentTypes(type: KycDocumentType): string[] {
     case KycDocumentType.NATIONAL_ID:
     case KycDocumentType.VOTERS_CARD:
       return ['ID']; // Didit classifies NIN cards and voter cards as ID cards
+    default:
+      return undefined;
   }
 }
 

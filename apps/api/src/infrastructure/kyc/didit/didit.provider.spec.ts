@@ -69,6 +69,31 @@ describe('DiditProvider HTTP behaviour', () => {
     });
   });
 
+  it('creates a session without expected details when omitted', async () => {
+    respond(201, {
+      session_id: 's-2',
+      session_token: 'tok-2',
+      url: 'https://verify.didit.me/session/s-2',
+      status: 'Not Started',
+      workflow_id: 'wf-1',
+    });
+
+    await expect(
+      provider().createSession({
+        vendorData: 'creator-2',
+        callbackUrl: 'https://creator.example.com/kyc/complete',
+      }),
+    ).resolves.toMatchObject({
+      sessionId: 's-2',
+      sessionToken: 'tok-2',
+      status: S.CREATED,
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const parsedBody = JSON.parse(init.body);
+    expect(parsedBody.expected_details).toBeUndefined();
+  });
+
   it('reports exhausted credits as a distinct 503 KYC_UNAVAILABLE', async () => {
     respond(400, {
       detail:

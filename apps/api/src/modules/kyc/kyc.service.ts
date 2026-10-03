@@ -105,27 +105,39 @@ export class KycService {
 
   async startSession(
     userId: string,
-    dto: StartKycSessionDto,
+    dto: StartKycSessionDto = {},
     headers: IncomingHttpHeaders,
   ): Promise<StartKycSessionResponse> {
     const creator = await this.getCreatorOrThrow(userId);
     this.assertCanVerify(creator);
 
-    const dobError = validateDateOfBirth(dto.dateOfBirth);
-    if (dobError) {
-      throw new BadRequestException({
-        code: ErrorCodes.VALIDATION_ERROR,
-        message: dobError,
-      });
+    if (dto?.dateOfBirth) {
+      const dobError = validateDateOfBirth(dto.dateOfBirth);
+      if (dobError) {
+        throw new BadRequestException({
+          code: ErrorCodes.VALIDATION_ERROR,
+          message: dobError,
+        });
+      }
     }
 
-    const claimed: KycExpectedDetails = {
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      dateOfBirth: dto.dateOfBirth,
-      country: dto.country,
-      documentType: dto.documentType,
-    };
+    const hasClaimed = Boolean(
+      dto?.firstName ||
+        dto?.lastName ||
+        dto?.dateOfBirth ||
+        dto?.country ||
+        dto?.documentType,
+    );
+
+    const claimed: KycExpectedDetails | null = hasClaimed
+      ? {
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          dateOfBirth: dto.dateOfBirth,
+          country: dto.country,
+          documentType: dto.documentType,
+        }
+      : null;
 
     let latest = await this.findLatestSubmission(creator.id);
 
@@ -444,7 +456,7 @@ export class KycService {
 
   private async openSession(
     creator: CreatorWithUser,
-    claimed: KycExpectedDetails,
+    claimed: KycExpectedDetails | null,
     headers: IncomingHttpHeaders,
     resumeOf: KycSubmission | null,
   ): Promise<StartKycSessionResponse> {
@@ -517,7 +529,7 @@ export class KycService {
             );
           }
           // A row adopted from a webhook has no claimed details yet.
-          if (!existing.claimedDetails) {
+          if (!existing.claimedDetails && claimed) {
             const filled = await tx.kycSubmission.update({
               where: { id: existing.id },
               data: {
@@ -545,7 +557,9 @@ export class KycService {
             providerStatus: session.providerStatus,
             status: S.CREATED,
             workflowId: session.workflowId ?? null,
-            claimedDetails: claimed as unknown as Prisma.InputJsonValue,
+            ...(claimed
+              ? { claimedDetails: claimed as unknown as Prisma.InputJsonValue }
+              : {}),
             lastSyncedAt: new Date(),
           },
         });
@@ -805,33 +819,38 @@ export class KycService {
     if (!value || typeof value !== 'object' || Array.isArray(value))
       return null;
     const v = value as Record<string, unknown>;
-    if (
-      typeof v.firstName !== 'string' ||
-      typeof v.lastName !== 'string' ||
-      typeof v.dateOfBirth !== 'string' ||
-      typeof v.country !== 'string' ||
-      !Object.values(KycDocumentType).includes(
+    const hasAny = Boolean(
+      v.firstName || v.lastName || v.dateOfBirth || v.country || v.documentType,
+    );
+    if (!hasAny) return null;
+    return {
+      firstName: typeof v.firstName === 'string' ? v.firstName : undefined,
+      lastName: typeof v.lastName === 'string' ? v.lastName : undefined,
+      dateOfBirth:
+        typeof v.dateOfBirth === 'string' ? v.dateOfBirth : undefined,
+      country: typeof v.country === 'string' ? v.country : undefined,
+      documentType: Object.values(KycDocumentType).includes(
         v.documentType as KycDocumentType,
       )
-    ) {
-      return null;
-    }
-    return v as unknown as KycExpectedDetails;
+        ? (v.documentType as KycDocumentType)
+        : undefined,
+    };
   }
 
   private sameDetails(
     stored: Prisma.JsonValue,
-    claimed: KycExpectedDetails,
+    claimed: KycExpectedDetails | null,
   ): boolean {
     const prev = this.parseClaimed(stored);
-    if (!prev) return false;
-    const norm = (s: string) => s.trim().toLowerCase();
+    if (!prev && !claimed) return true;
+    if (!prev || !claimed) return false;
+    const norm = (s?: string) => s?.trim().toLowerCase() ?? '';
     return (
       norm(prev.firstName) === norm(claimed.firstName) &&
       norm(prev.lastName) === norm(claimed.lastName) &&
-      prev.dateOfBirth === claimed.dateOfBirth &&
-      prev.country === claimed.country &&
-      prev.documentType === claimed.documentType
+      (prev.dateOfBirth ?? null) === (claimed.dateOfBirth ?? null) &&
+      (prev.country ?? null) === (claimed.country ?? null) &&
+      (prev.documentType ?? null) === (claimed.documentType ?? null)
     );
   }
 

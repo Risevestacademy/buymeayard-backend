@@ -4,18 +4,18 @@ import { KycDocumentType, KycSubmissionStatus } from '@buymeayard/types';
 export const KYC_PROVIDER = 'KYC_PROVIDER';
 
 export interface KycExpectedDetails {
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string; // YYYY-MM-DD
-  country: string; // ISO 3166-1 alpha-3
-  documentType: KycDocumentType;
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string; // YYYY-MM-DD
+  country?: string; // ISO 3166-1 alpha-3
+  documentType?: KycDocumentType;
 }
 
 export interface CreateKycSessionParams {
   vendorData: string; // Our creator profile ID
   callbackUrl: string;
   email?: string;
-  expectedDetails: KycExpectedDetails;
+  expectedDetails?: KycExpectedDetails | null;
   metadata?: Record<string, string | number | boolean>;
 }
 

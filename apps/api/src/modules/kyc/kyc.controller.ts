@@ -66,7 +66,7 @@ export class KycController {
   @ApiOperation({
     summary: 'Start or resume identity verification',
     description:
-      'Submits the confirmed details and returns a Didit session. Web: pass verificationUrl to the Didit web SDK. React Native: pass sessionToken to the Didit RN SDK. Returns the existing session when an unfinished one exists with the same details.',
+      'Creates or resumes a Didit session. If no body or empty body is provided, Didit prompts the user to select document type and capture ID/selfie. Web: pass verificationUrl to the Didit web SDK or redirect. React Native: pass sessionToken to the Didit RN SDK. Returns the existing session when an unfinished one exists.',
   })
   @ApiResponse({
     status: 200,
@@ -83,7 +83,7 @@ export class KycController {
   @ApiResponse({ status: 502, description: 'KYC_PROVIDER_ERROR.' })
   async startSession(
     @CurrentUser('id') userId: string,
-    @Body() dto: StartKycSessionDto,
+    @Body() dto: StartKycSessionDto = {},
     @Req() req: Request,
   ) {
     return this.kycService.startSession(userId, dto, req.headers);

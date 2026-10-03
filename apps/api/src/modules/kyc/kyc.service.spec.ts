@@ -9,6 +9,7 @@ import { KycDocumentType, KycSubmissionStatus as S } from '@buymeayard/types';
 import { KycService } from './kyc.service';
 import { KycAdminService } from './kyc-admin.service';
 import { KycTransitionService } from './kyc-transition.service';
+import { StartKycSessionDto } from './dto/start-kyc-session.dto';
 import { FakePrisma } from './kyc.test-utils';
 import {
   emptyAdminDecisionView,
@@ -143,8 +144,11 @@ describe('KycService', () => {
     );
   });
 
-  const start = (userId: string, dto = details, headers = {}) =>
-    service.startSession(userId, dto, headers);
+  const start = (
+    userId: string,
+    dto: StartKycSessionDto = details,
+    headers = {},
+  ) => service.startSession(userId, dto, headers);
 
   describe('startSession', () => {
     it('creates a session and moves the creator to pending', async () => {
@@ -168,6 +172,46 @@ describe('KycService', () => {
       expect(creator.kycStatus).toBe('PENDING');
       expect(creator.status).toBe('KYC_PENDING');
       expect(prisma.submissions[0].claimedDetails).toEqual(details);
+    });
+
+    it('creates a session without user input so Didit handles all verification', async () => {
+      const creator = prisma.addCreator();
+      const res = await start(creator.userId, {});
+
+      expect(res).toEqual({
+        submissionId: prisma.submissions[0].id,
+        status: S.CREATED,
+        verificationUrl: 'https://verify.didit.me/session/1',
+        sessionToken: 'tok-1',
+        resumed: false,
+      });
+      expect(provider.createSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          vendorData: creator.id,
+          expectedDetails: null,
+        }),
+      );
+      expect(creator.kycStatus).toBe('PENDING');
+      expect(creator.status).toBe('KYC_PENDING');
+      expect(prisma.submissions[0].claimedDetails).toBeNull();
+    });
+
+    it('resumes an open session started without details', async () => {
+      const creator = prisma.addCreator();
+      await start(creator.userId, {});
+
+      provider.createSession.mockResolvedValueOnce({
+        sessionId: 'sess-1',
+        url: 'https://verify.didit.me/session/1',
+        sessionToken: 'tok-1',
+        providerStatus: 'Not Started',
+        status: S.CREATED,
+        workflowId: WORKFLOW,
+      });
+
+      const res = await start(creator.userId, {});
+      expect(res.resumed).toBe(true);
+      expect(prisma.submissions).toHaveLength(1);
     });
 
     it('uses the mobile deep link for mobile clients', async () => {

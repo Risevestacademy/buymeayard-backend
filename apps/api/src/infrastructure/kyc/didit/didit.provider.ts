@@ -54,6 +54,14 @@ export class DiditProvider implements KycProvider {
   ): Promise<KycSessionResult> {
     this.assertConfigured();
     const { expectedDetails } = params;
+    const hasExpected = Boolean(
+      expectedDetails &&
+        (expectedDetails.firstName ||
+          expectedDetails.lastName ||
+          expectedDetails.dateOfBirth ||
+          expectedDetails.country ||
+          expectedDetails.documentType),
+    );
 
     const body = await this.request('POST', '/v3/session/', {
       workflow_id: this.workflowId,
@@ -67,15 +75,31 @@ export class DiditProvider implements KycProvider {
             },
           }
         : {}),
-      expected_details: {
-        first_name: expectedDetails.firstName,
-        last_name: expectedDetails.lastName,
-        date_of_birth: expectedDetails.dateOfBirth,
-        id_country: expectedDetails.country,
-        expected_document_types: toDiditDocumentTypes(
-          expectedDetails.documentType,
-        ),
-      },
+      ...(hasExpected && expectedDetails
+        ? {
+            expected_details: {
+              ...(expectedDetails.firstName
+                ? { first_name: expectedDetails.firstName }
+                : {}),
+              ...(expectedDetails.lastName
+                ? { last_name: expectedDetails.lastName }
+                : {}),
+              ...(expectedDetails.dateOfBirth
+                ? { date_of_birth: expectedDetails.dateOfBirth }
+                : {}),
+              ...(expectedDetails.country
+                ? { id_country: expectedDetails.country }
+                : {}),
+              ...(expectedDetails.documentType
+                ? {
+                    expected_document_types: toDiditDocumentTypes(
+                      expectedDetails.documentType,
+                    ),
+                  }
+                : {}),
+            },
+          }
+        : {}),
       ...(params.metadata ? { metadata: params.metadata } : {}),
     });
 
