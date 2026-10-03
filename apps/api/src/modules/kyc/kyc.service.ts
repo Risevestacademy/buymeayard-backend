@@ -196,6 +196,7 @@ export class KycService {
     return {
       kycStatus: creator.kycStatus as KycStatus,
       creatorStatus: creator.status as CreatorStatus,
+      isKycCompleted: creator.kycStatus === KycStatus.VERIFIED,
       contributionsEnabled: creator.status === CreatorStatus.ACTIVE,
       canStartSession:
         !PROTECTED_CREATOR_STATUSES.has(creator.status) &&

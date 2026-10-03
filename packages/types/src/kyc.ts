@@ -32,6 +32,7 @@ export interface StartKycSessionResponse {
 export interface KycStatusResponse {
   kycStatus: KycStatus;
   creatorStatus: CreatorStatus;
+  isKycCompleted: boolean;
   contributionsEnabled: boolean;
   canStartSession: boolean;
   prefill: {

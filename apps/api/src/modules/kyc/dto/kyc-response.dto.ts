@@ -83,6 +83,13 @@ export class KycStatusResponseDto {
   @ApiProperty({
     example: false,
     description:
+      'Whether the creator has successfully completed identity verification (KYC)',
+  })
+  isKycCompleted: boolean;
+
+  @ApiProperty({
+    example: false,
+    description:
       'Whether the creator can receive yard contributions on their public page',
   })
   contributionsEnabled: boolean;

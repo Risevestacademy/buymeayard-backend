@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiCookieAuth,
   ApiHeader,
   ApiOperation,
@@ -29,7 +30,7 @@ import {
   StartKycSessionResponseDto,
 } from './dto/kyc-response.dto';
 
-@ApiTags('kyc')
+@ApiTags('creators')
 @ApiBearerAuth()
 @ApiCookieAuth('better-auth.session_token')
 @UseGuards(RolesGuard)
@@ -41,9 +42,9 @@ export class KycController {
   @Get()
   @Header('Cache-Control', 'no-store')
   @ApiOperation({
-    summary: 'Get my KYC status',
+    summary: 'Get current KYC verification status',
     description:
-      'Returns the creator KYC status, whether contributions are enabled, prefill values for the details step, and the latest attempt. Syncs with the provider if a result is overdue.',
+      'Returns the creator KYC verification status, whether identity verification is completed (isKycCompleted), whether contributions are enabled, and details of the latest attempt. Automatically syncs with Didit if a decision is pending.',
   })
   @ApiResponse({
     status: 200,
@@ -64,9 +65,18 @@ export class KycController {
       'Send "mobile" from the React Native app to use the app deep-link callback.',
   })
   @ApiOperation({
-    summary: 'Start or resume identity verification',
+    summary: 'Start or resume identity verification session (Zero-input)',
     description:
-      'Creates or resumes a Didit session. If no body or empty body is provided, Didit prompts the user to select document type and capture ID/selfie. Web: pass verificationUrl to the Didit web SDK or redirect. React Native: pass sessionToken to the Didit RN SDK. Returns the existing session when an unfinished one exists.',
+      'Initiates an identity verification session with Didit. Send an empty JSON object `{}` to let Didit present its own hosted UI for country selection, document upload, and 3D selfie check. Web: redirect creator to `verificationUrl` or open with Didit Web SDK. React Native: pass `sessionToken` to Didit React Native SDK.',
+  })
+  @ApiBody({
+    required: false,
+    description:
+      'Optional. Send an empty JSON object `{}` to let Didit handle all document selection and selfie capture directly in its hosted UI. No form inputs required.',
+    schema: {
+      type: 'object',
+      example: {},
+    },
   })
   @ApiResponse({
     status: 200,

@@ -1162,6 +1162,7 @@ export class CreatorsService {
     }
 
     const isPublished = Boolean(profile.isPublished);
+    const isKycCompleted = profile.kycStatus === 'VERIFIED';
 
     return {
       ...cleanProfile,
@@ -1172,6 +1173,7 @@ export class CreatorsService {
       selectedMaterials: materials,
       showSupportersOnPage: profile.showSupportersOnPage ?? true,
       isPublished,
+      isKycCompleted,
     };
   }
 

@@ -33,6 +33,10 @@ async function bootstrap() {
       'https://buymeayard-main-dev.up.railway.app',
       'https://buymeayard-creator-dev.up.railway.app',
       'https://buymeayard-admin-dev.up.railway.app',
+      'bmay://',
+      'bmay-dev://',
+      'bmay-preview://',
+      'buymeayard://',
     ],
     credentials: true,
   });

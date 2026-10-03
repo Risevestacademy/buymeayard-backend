@@ -231,9 +231,10 @@ describe('CreatorsService', () => {
       expect(formatted.username).toBeUndefined();
       expect(formatted.personalizedLink).toBeUndefined();
 
-      // Assert live and supporter flags
+      // Assert live, supporter, and KYC flags
       expect(formatted.showSupportersOnPage).toBe(true);
       expect(formatted.isPublished).toBe(false);
+      expect(formatted.isKycCompleted).toBe(false);
     });
 
     it('should include formatted material info with thumbnails, color, and price', () => {

@@ -338,6 +338,13 @@ export class CreatorProfileDataDto {
   isPublished: boolean;
 
   @ApiProperty({
+    example: false,
+    description:
+      'Whether the creator has successfully completed identity verification (KYC) and is approved.',
+  })
+  isKycCompleted: boolean;
+
+  @ApiProperty({
     example: 'PROFILE_CREATED',
     description: 'Creator account lifecycle status',
     enum: [
