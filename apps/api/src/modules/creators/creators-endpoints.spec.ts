@@ -166,6 +166,7 @@ describe('Creators Endpoints (HTTP Integration)', () => {
           ...clean,
           creatorName: p.creatorName || p.user?.name || '',
           slug: p.slug || p.username || '',
+          material: p.materials?.[0] || null,
         };
       }),
     };
@@ -364,6 +365,9 @@ describe('Creators Endpoints (HTTP Integration)', () => {
       expect(response.body).toHaveProperty('slug', 'adeola');
       expect(response.body).toHaveProperty('materials');
       expect(response.body.materials).toHaveLength(1);
+      expect(response.body).toHaveProperty('material');
+      expect(response.body.material).toHaveProperty('id', 'cm-1');
+      expect(response.body.material).toHaveProperty('displayName', 'My Ankara');
     });
 
     it('should return 404 when creator slug does not exist', async () => {

@@ -278,6 +278,76 @@ describe('CreatorsService', () => {
       expect(formatted.materials[0].isCustom).toBe(false);
       expect(formatted.materials[0].material).toBeDefined();
       expect(formatted.materials[0].material.color).toBe('#7F3516');
+      expect(formatted.material).toBeDefined();
+      expect(formatted.material?.id).toBe('cm-1');
+      expect(formatted.material?.name).toBe('Ankara');
+      expect(formatted.selectedMaterials).toHaveLength(1);
+    });
+
+    it('should return empty materials and null material when creator has no selected materials', () => {
+      const formatted = service.formatCreatorProfile({
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
+        materials: [],
+      });
+
+      expect(formatted.materials).toEqual([]);
+      expect(formatted.selectedMaterials).toEqual([]);
+      expect(formatted.material).toBeNull();
+    });
+
+    it('should return themeMaterial as selected material when themeMaterial is set', () => {
+      const formatted = service.formatCreatorProfile({
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
+        themeMaterialId: 'm-adire',
+        themeMaterial: {
+          id: 'm-adire',
+          name: 'Adire',
+          slug: 'adire',
+          description: 'Indigo dyed cloth',
+          color: '#1A237E',
+          thumbnailSmallUrl: 'https://cdn.example.com/adire-sm.png',
+          thumbnailLargeUrl: 'https://cdn.example.com/adire-lg.png',
+          defaultPrice: 100000,
+          currency: 'NGN',
+          status: 'ACTIVE',
+        },
+        materials: [],
+      });
+
+      expect(formatted.materials).toHaveLength(1);
+      expect(formatted.material).toBeDefined();
+      expect(formatted.material?.id).toBe('m-adire');
+      expect(formatted.material?.name).toBe('Adire');
+      expect(formatted.material?.slug).toBe('adire');
+    });
+
+    it('should filter to only the selected theme material if multiple platform materials are present', () => {
+      const formatted = service.formatCreatorProfile({
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
+        themeMaterialId: 'm-adire',
+        materials: [
+          {
+            id: 'cm-ankara',
+            materialId: 'm-ankara',
+            price: 100000,
+            material: { id: 'm-ankara', name: 'Ankara', creatorId: null },
+          },
+          {
+            id: 'cm-adire',
+            materialId: 'm-adire',
+            price: 120000,
+            material: { id: 'm-adire', name: 'Adire', creatorId: null },
+          },
+        ],
+      });
+
+      expect(formatted.materials).toHaveLength(1);
+      expect(formatted.materials[0].name).toBe('Adire');
+      expect(formatted.material?.id).toBe('cm-adire');
+      expect(formatted.material?.name).toBe('Adire');
     });
   });
 

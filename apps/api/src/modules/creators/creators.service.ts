@@ -51,6 +51,7 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
+        themeMaterial: true,
         materials: {
           where: {
             status: 'ACTIVE',
@@ -84,6 +85,7 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
+        themeMaterial: true,
         materials: {
           where: {
             status: 'ACTIVE',
@@ -99,10 +101,6 @@ export class CreatorsService {
       throw new NotFoundException(
         `Creator with identifier "${slug}" not found`,
       );
-    }
-
-    if (!creator.materials || creator.materials.length === 0) {
-      creator.materials = await this.ensureCreatorMaterials(creator.id);
     }
 
     return creator;
@@ -283,6 +281,7 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
+        themeMaterial: true,
         materials: {
           where: {
             status: 'ACTIVE',
@@ -296,10 +295,6 @@ export class CreatorsService {
 
     if (!creator) {
       throw new NotFoundException(`Creator profile for user not found`);
-    }
-
-    if (!creator.materials || creator.materials.length === 0) {
-      creator.materials = await this.ensureCreatorMaterials(creator.id);
     }
 
     return creator;
@@ -527,14 +522,13 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
+        themeMaterial: true,
         materials: {
           where: { status: 'ACTIVE' },
           include: { material: true },
         },
       },
     });
-
-    await this.ensureCreatorMaterials(profile.id);
 
     return this.formatCreatorProfile(updated);
   }
@@ -636,8 +630,33 @@ export class CreatorsService {
       orderBy: { createdAt: 'asc' },
     });
 
-    if (items.length === 0) {
-      items = await this.ensureCreatorMaterials(profile.id);
+    if (items.length === 0 && profile.themeMaterialId) {
+      const themeMat = await this.prisma.material.findUnique({
+        where: { id: profile.themeMaterialId },
+      });
+      if (themeMat) {
+        return [
+          {
+            id: themeMat.id,
+            creatorId: profile.id,
+            materialId: themeMat.id,
+            price: themeMat.defaultPrice,
+            currency: themeMat.currency,
+            displayName: themeMat.name,
+            name: themeMat.name,
+            slug: themeMat.slug,
+            color: themeMat.color,
+            thumbnailSmallUrl: themeMat.thumbnailSmallUrl,
+            thumbnailLargeUrl: themeMat.thumbnailLargeUrl,
+            imageUrl: themeMat.imageUrl,
+            status: themeMat.status,
+            isCustom: Boolean(themeMat.creatorId),
+            material: themeMat,
+            createdAt: themeMat.createdAt,
+            updatedAt: themeMat.updatedAt,
+          },
+        ];
+      }
     }
 
     return items.map((item) => ({
@@ -879,6 +898,37 @@ export class CreatorsService {
           );
         }
         data.themeMaterialId = dto.themeMaterialId;
+
+        // Ensure active creatorMaterial record exists for the selected theme material
+        await this.prisma.creatorMaterial.upsert({
+          where: {
+            creatorId_materialId: {
+              creatorId: profile.id,
+              materialId: dto.themeMaterialId,
+            },
+          },
+          create: {
+            creatorId: profile.id,
+            materialId: dto.themeMaterialId,
+            price: material.defaultPrice,
+            currency: material.currency,
+            displayName: material.name,
+            status: 'ACTIVE',
+          },
+          update: {
+            status: 'ACTIVE',
+          },
+        });
+
+        // Deactivate other platform materials so only the selected theme is active
+        await this.prisma.creatorMaterial.updateMany({
+          where: {
+            creatorId: profile.id,
+            materialId: { not: dto.themeMaterialId },
+            material: { creatorId: null },
+          },
+          data: { status: 'INACTIVE' },
+        });
       }
     }
 
@@ -940,7 +990,7 @@ export class CreatorsService {
         missingFields.push('thankYouMessage');
 
       const activeMaterialsCount = profile.materials?.length || 0;
-      if (activeMaterialsCount === 0) {
+      if (activeMaterialsCount === 0 && !profile.themeMaterialId) {
         missingFields.push('materials (theme)');
       }
 
@@ -966,6 +1016,7 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
+        themeMaterial: true,
         materials: {
           where: { status: 'ACTIVE' },
           include: { material: true },
@@ -1001,8 +1052,27 @@ export class CreatorsService {
       ...cleanProfile
     } = profile;
 
-    const materials = rawMaterials
-      ? rawMaterials.map((item: any) => {
+    // If a theme material is set and rawMaterials contains multiple platform materials,
+    // filter to only the selected theme material and any custom creator materials.
+    let targetMaterials = rawMaterials || [];
+    if (
+      profile.themeMaterialId &&
+      Array.isArray(rawMaterials) &&
+      rawMaterials.length > 1
+    ) {
+      const filtered = rawMaterials.filter(
+        (item: any) =>
+          item.materialId === profile.themeMaterialId ||
+          item.id === profile.themeMaterialId ||
+          Boolean(item.material?.creatorId),
+      );
+      if (filtered.length > 0) {
+        targetMaterials = filtered;
+      }
+    }
+
+    let materials = targetMaterials
+      ? targetMaterials.map((item: any) => {
           const mat = item.material || {};
           return {
             id: item.id,
@@ -1040,13 +1110,66 @@ export class CreatorsService {
         })
       : [];
 
+    // Fallback: If no materials in materials array, but themeMaterial exists on profile
+    if (materials.length === 0 && profile.themeMaterial) {
+      const mat = profile.themeMaterial;
+      const themeItem = {
+        id: mat.id,
+        creatorId: profile.id,
+        materialId: mat.id,
+        price: mat.defaultPrice ?? 100000,
+        currency: mat.currency || 'NGN',
+        displayName: mat.name,
+        name: mat.name,
+        slug: mat.slug,
+        description: mat.description || null,
+        color: mat.color || null,
+        thumbnailSmallUrl: mat.thumbnailSmallUrl || null,
+        thumbnailLargeUrl: mat.thumbnailLargeUrl || null,
+        imageUrl: mat.imageUrl || null,
+        status: mat.status || 'ACTIVE',
+        isCustom: Boolean(mat.creatorId),
+        material: {
+          id: mat.id,
+          name: mat.name,
+          slug: mat.slug,
+          description: mat.description,
+          iconUrl: mat.imageUrl,
+          thumbnailSmallUrl: mat.thumbnailSmallUrl,
+          thumbnailLargeUrl: mat.thumbnailLargeUrl,
+          color: mat.color,
+          basePrice: mat.defaultPrice,
+          status: mat.status,
+        },
+        createdAt: mat.createdAt,
+        updatedAt: mat.updatedAt,
+      };
+      materials = [themeItem];
+    }
+
+    // Determine primary selected material
+    let selectedMaterial = null;
+    if (profile.themeMaterialId) {
+      selectedMaterial =
+        materials.find(
+          (m: any) =>
+            m.materialId === profile.themeMaterialId ||
+            m.id === profile.themeMaterialId,
+        ) || null;
+    }
+    if (!selectedMaterial && materials.length > 0) {
+      selectedMaterial = materials[0];
+    }
+
     const isPublished = Boolean(profile.isPublished);
 
     return {
       ...cleanProfile,
       creatorName,
       slug: cleanSlug,
+      material: selectedMaterial || null,
       materials,
+      selectedMaterials: materials,
       showSupportersOnPage: profile.showSupportersOnPage ?? true,
       isPublished,
     };

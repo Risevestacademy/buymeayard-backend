@@ -373,12 +373,27 @@ export class CreatorProfileDataDto {
   })
   socialLinks: CreatorSocialLinkResponseDto[];
 
+  @ApiPropertyOptional({
+    type: CreatorMaterialResponseDto,
+    description:
+      'The selected yard material / fabric theme for the creator profile page',
+    nullable: true,
+  })
+  material?: CreatorMaterialResponseDto | null;
+
   @ApiProperty({
     type: [CreatorMaterialResponseDto],
     description:
       'Active yard materials configured by the creator with custom pricing',
   })
   materials: CreatorMaterialResponseDto[];
+
+  @ApiPropertyOptional({
+    type: [CreatorMaterialResponseDto],
+    description:
+      'The list of selected yard materials configured by the creator',
+  })
+  selectedMaterials?: CreatorMaterialResponseDto[];
 
   @ApiProperty({ example: '2026-09-25T14:00:00.000Z' })
   createdAt: Date;
