@@ -13,7 +13,10 @@ import {
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
+import { CreateCustomMaterialDto } from './dto/create-custom-material.dto';
 import { CreatorShareLinkDataDto } from './dto/share-link.dto';
+import { UpdateCreatorSettingsDto } from './dto/update-creator-settings.dto';
+import { UpdatePageStatusDto } from './dto/update-page-status.dto';
 
 @Injectable()
 export class CreatorsService {
@@ -48,6 +51,15 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
+        themeMaterial: true,
+        materials: {
+          where: {
+            status: 'ACTIVE',
+          },
+          include: {
+            material: true,
+          },
+        },
       },
     });
 
@@ -73,6 +85,7 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
+        themeMaterial: true,
         materials: {
           where: {
             status: 'ACTIVE',
@@ -268,6 +281,7 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
+        themeMaterial: true,
         materials: {
           where: {
             status: 'ACTIVE',
@@ -508,7 +522,11 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
-        materials: true,
+        themeMaterial: true,
+        materials: {
+          where: { status: 'ACTIVE' },
+          include: { material: true },
+        },
       },
     });
 
@@ -606,11 +624,108 @@ export class CreatorsService {
       throw new NotFoundException('Creator profile not found');
     }
 
-    return this.prisma.creatorMaterial.findMany({
+    let items = await this.prisma.creatorMaterial.findMany({
       where: { creatorId: profile.id, status: 'ACTIVE' },
       include: { material: true },
       orderBy: { createdAt: 'asc' },
     });
+
+    if (items.length === 0 && profile.themeMaterialId) {
+      const themeMat = await this.prisma.material.findUnique({
+        where: { id: profile.themeMaterialId },
+      });
+      if (themeMat) {
+        return [
+          {
+            id: themeMat.id,
+            creatorId: profile.id,
+            materialId: themeMat.id,
+            price: themeMat.defaultPrice,
+            currency: themeMat.currency,
+            displayName: themeMat.name,
+            name: themeMat.name,
+            slug: themeMat.slug,
+            color: themeMat.color,
+            thumbnailSmallUrl: themeMat.thumbnailSmallUrl,
+            thumbnailLargeUrl: themeMat.thumbnailLargeUrl,
+            imageUrl: themeMat.imageUrl,
+            status: themeMat.status,
+            isCustom: Boolean(themeMat.creatorId),
+            material: themeMat,
+            createdAt: themeMat.createdAt,
+            updatedAt: themeMat.updatedAt,
+          },
+        ];
+      }
+    }
+
+    return items.map((item) => ({
+      ...item,
+      name: item.material?.name || item.displayName,
+      slug: item.material?.slug,
+      color: item.material?.color,
+      thumbnailSmallUrl: item.material?.thumbnailSmallUrl,
+      thumbnailLargeUrl: item.material?.thumbnailLargeUrl,
+      isCustom: Boolean(item.material?.creatorId),
+    }));
+  }
+
+  async createCustomMaterial(userId: string, dto: CreateCustomMaterialDto) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    const baseSlug = (dto.name || 'custom')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    const randomSuffix = Math.random().toString(36).substring(2, 7);
+    const slug = `${profile.slug}-${baseSlug}-${randomSuffix}`;
+
+    const primaryMat = await this.prisma.material.findFirst({
+      where: { status: 'ACTIVE', creatorId: null },
+    });
+    const defaultPrice = primaryMat?.defaultPrice ?? 100000;
+    const currency = primaryMat?.currency ?? 'NGN';
+
+    const material = await this.prisma.material.create({
+      data: {
+        creatorId: profile.id,
+        name: dto.name.trim(),
+        slug,
+        description: dto.description?.trim() || null,
+        imageUrl: dto.imageUrl?.trim() || null,
+        thumbnailSmallUrl: dto.thumbnailSmallUrl?.trim() || null,
+        thumbnailLargeUrl: dto.thumbnailLargeUrl?.trim() || null,
+        color: dto.color?.trim() || null,
+        defaultPrice,
+        currency,
+        status: 'ACTIVE',
+      },
+    });
+
+    const creatorMaterial = await this.prisma.creatorMaterial.create({
+      data: {
+        creatorId: profile.id,
+        materialId: material.id,
+        price: defaultPrice,
+        currency,
+        displayName: dto.name.trim(),
+        description: dto.description?.trim() || null,
+        status: 'ACTIVE',
+      },
+      include: { material: true },
+    });
+
+    return {
+      ...creatorMaterial,
+      isCustom: true,
+    };
   }
 
   async saveCreatorMaterials(userId: string, dto: SaveCreatorMaterialsDto) {
@@ -622,10 +737,14 @@ export class CreatorsService {
       throw new NotFoundException('Creator profile not found');
     }
 
-    // Validate that all referenced materials exist in the platform catalogue
+    // Validate that all referenced materials exist in the catalogue (platform or owned by this creator)
     const materialIds = dto.materials.map((m) => m.materialId);
     const catalogueMaterials = await this.prisma.material.findMany({
-      where: { id: { in: materialIds }, status: 'ACTIVE' },
+      where: {
+        id: { in: materialIds },
+        status: 'ACTIVE',
+        OR: [{ creatorId: null }, { creatorId: profile.id }],
+      },
     });
 
     const foundIds = new Set(catalogueMaterials.map((m) => m.id));
@@ -636,10 +755,16 @@ export class CreatorsService {
       );
     }
 
+    const catalogueMap = new Map(catalogueMaterials.map((c) => [c.id, c]));
+
     // Use a transaction: upsert each submitted material, deactivate the rest
     await this.prisma.$transaction(async (tx) => {
       // Upsert each material the creator wants active
       for (const item of dto.materials) {
+        const defaultPrice =
+          catalogueMap.get(item.materialId)?.defaultPrice ?? 100000;
+        const price = item.price ?? defaultPrice;
+
         await tx.creatorMaterial.upsert({
           where: {
             creatorId_materialId: {
@@ -650,12 +775,12 @@ export class CreatorsService {
           create: {
             creatorId: profile.id,
             materialId: item.materialId,
-            price: item.price,
+            price,
             displayName: item.displayName || null,
             status: 'ACTIVE',
           },
           update: {
-            price: item.price,
+            price,
             displayName: item.displayName || null,
             status: 'ACTIVE',
           },
@@ -683,6 +808,225 @@ export class CreatorsService {
     });
   }
 
+  // Helper to guarantee a creator always has material items available
+  async ensureCreatorMaterials(profileId: string) {
+    try {
+      const active = await this.prisma.creatorMaterial.findMany({
+        where: { creatorId: profileId, status: 'ACTIVE' },
+        include: { material: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (active && active.length > 0) {
+        return active;
+      }
+
+      const platformMaterials = await this.prisma.material.findMany({
+        where: { status: 'ACTIVE', creatorId: null },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (platformMaterials && platformMaterials.length > 0) {
+        for (const mat of platformMaterials) {
+          await this.prisma.creatorMaterial.upsert({
+            where: {
+              creatorId_materialId: {
+                creatorId: profileId,
+                materialId: mat.id,
+              },
+            },
+            create: {
+              creatorId: profileId,
+              materialId: mat.id,
+              price: mat.defaultPrice,
+              currency: mat.currency,
+              displayName: mat.name,
+              status: 'ACTIVE',
+            },
+            update: {
+              status: 'ACTIVE',
+            },
+          });
+        }
+
+        return this.prisma.creatorMaterial.findMany({
+          where: { creatorId: profileId, status: 'ACTIVE' },
+          include: { material: true },
+          orderBy: { createdAt: 'asc' },
+        });
+      }
+    } catch (err) {
+      console.warn(
+        '[CreatorsService] ensureCreatorMaterials non-critical error:',
+        err,
+      );
+    }
+    return [];
+  }
+
+  // -----------------------------------------------------------
+  // Supporter Settings & Page Status
+  // -----------------------------------------------------------
+
+  async updateCreatorSettings(userId: string, dto: UpdateCreatorSettingsDto) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    const data: Record<string, any> = {};
+
+    // ── Appearance: theme material ──────────────────────────────────────────
+    if (dto.themeMaterialId !== undefined) {
+      if (dto.themeMaterialId === null) {
+        data.themeMaterialId = null;
+      } else {
+        // Validate it's an active platform material
+        const material = await this.prisma.material.findFirst({
+          where: {
+            id: dto.themeMaterialId,
+            status: 'ACTIVE',
+            creatorId: null, // platform materials only
+          },
+        });
+        if (!material) {
+          throw new BadRequestException(
+            `Material with id "${dto.themeMaterialId}" not found or is not a valid platform theme.`,
+          );
+        }
+        data.themeMaterialId = dto.themeMaterialId;
+
+        // Ensure active creatorMaterial record exists for the selected theme material
+        await this.prisma.creatorMaterial.upsert({
+          where: {
+            creatorId_materialId: {
+              creatorId: profile.id,
+              materialId: dto.themeMaterialId,
+            },
+          },
+          create: {
+            creatorId: profile.id,
+            materialId: dto.themeMaterialId,
+            price: material.defaultPrice,
+            currency: material.currency,
+            displayName: material.name,
+            status: 'ACTIVE',
+          },
+          update: {
+            status: 'ACTIVE',
+          },
+        });
+
+        // Deactivate other platform materials so only the selected theme is active
+        await this.prisma.creatorMaterial.updateMany({
+          where: {
+            creatorId: profile.id,
+            materialId: { not: dto.themeMaterialId },
+            material: { creatorId: null },
+          },
+          data: { status: 'INACTIVE' },
+        });
+      }
+    }
+
+    // ── Supporter Interactions ──────────────────────────────────────────────
+    if (dto.thankYouMessage !== undefined) {
+      data.thankYouMessage = dto.thankYouMessage.trim() || null;
+    }
+    if (dto.showSupportersOnPage !== undefined) {
+      data.showSupportersOnPage = dto.showSupportersOnPage;
+    }
+
+    const updated = await this.prisma.creatorProfile.update({
+      where: { id: profile.id },
+      data,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+        socialLinks: true,
+        materials: {
+          where: { status: 'ACTIVE' },
+          include: { material: true },
+        },
+        themeMaterial: true,
+      },
+    });
+
+    return updated;
+  }
+
+  async updatePageStatus(userId: string, dto: UpdatePageStatusDto) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      include: {
+        materials: {
+          where: { status: 'ACTIVE' },
+          include: { material: true },
+        },
+      },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    if (dto.isPublished) {
+      // Validate all required setup fields before publishing
+      const missingFields: string[] = [];
+      if (!profile.creatorName?.trim()) missingFields.push('creatorName');
+      if (!profile.slug?.trim()) missingFields.push('slug');
+      if (!profile.bio?.trim()) missingFields.push('bio');
+      if (!profile.avatarUrl?.trim()) missingFields.push('avatarUrl');
+      if (!profile.thankYouMessage?.trim())
+        missingFields.push('thankYouMessage');
+
+      const activeMaterialsCount = profile.materials?.length || 0;
+      if (activeMaterialsCount === 0 && !profile.themeMaterialId) {
+        missingFields.push('materials (theme)');
+      }
+
+      if (missingFields.length > 0) {
+        throw new BadRequestException(
+          `Cannot publish creator page. All setup fields must be completed. Missing: ${missingFields.join(', ')}`,
+        );
+      }
+    }
+
+    const updated = await this.prisma.creatorProfile.update({
+      where: { id: profile.id },
+      data: {
+        isPublished: dto.isPublished,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+        socialLinks: true,
+        themeMaterial: true,
+        materials: {
+          where: { status: 'ACTIVE' },
+          include: { material: true },
+        },
+      },
+    });
+
+    return updated;
+  }
+
   formatCreatorProfile(profile: any) {
     if (!profile) return profile;
 
@@ -704,13 +1048,130 @@ export class CreatorsService {
       lastName: _lastName,
       username: _username,
       personalizedLink: _personalizedLink,
+      materials: rawMaterials,
       ...cleanProfile
     } = profile;
+
+    // If a theme material is set and rawMaterials contains multiple platform materials,
+    // filter to only the selected theme material and any custom creator materials.
+    let targetMaterials = rawMaterials || [];
+    if (
+      profile.themeMaterialId &&
+      Array.isArray(rawMaterials) &&
+      rawMaterials.length > 1
+    ) {
+      const filtered = rawMaterials.filter(
+        (item: any) =>
+          item.materialId === profile.themeMaterialId ||
+          item.id === profile.themeMaterialId ||
+          Boolean(item.material?.creatorId),
+      );
+      if (filtered.length > 0) {
+        targetMaterials = filtered;
+      }
+    }
+
+    let materials = targetMaterials
+      ? targetMaterials.map((item: any) => {
+          const mat = item.material || {};
+          return {
+            id: item.id,
+            creatorId: item.creatorId,
+            materialId: item.materialId,
+            price: item.price ?? mat.defaultPrice ?? 100000,
+            currency: item.currency || mat.currency || 'NGN',
+            displayName: item.displayName || mat.name || null,
+            name: mat.name || item.displayName || '',
+            slug: mat.slug || '',
+            description: item.description || mat.description || null,
+            color: mat.color || null,
+            thumbnailSmallUrl: mat.thumbnailSmallUrl || null,
+            thumbnailLargeUrl: mat.thumbnailLargeUrl || null,
+            imageUrl: mat.imageUrl || null,
+            status: item.status || 'ACTIVE',
+            isCustom: Boolean(mat.creatorId),
+            material: item.material
+              ? {
+                  id: mat.id,
+                  name: mat.name,
+                  slug: mat.slug,
+                  description: mat.description,
+                  iconUrl: mat.imageUrl,
+                  thumbnailSmallUrl: mat.thumbnailSmallUrl,
+                  thumbnailLargeUrl: mat.thumbnailLargeUrl,
+                  color: mat.color,
+                  basePrice: mat.defaultPrice,
+                  status: mat.status,
+                }
+              : undefined,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+          };
+        })
+      : [];
+
+    // Fallback: If no materials in materials array, but themeMaterial exists on profile
+    if (materials.length === 0 && profile.themeMaterial) {
+      const mat = profile.themeMaterial;
+      const themeItem = {
+        id: mat.id,
+        creatorId: profile.id,
+        materialId: mat.id,
+        price: mat.defaultPrice ?? 100000,
+        currency: mat.currency || 'NGN',
+        displayName: mat.name,
+        name: mat.name,
+        slug: mat.slug,
+        description: mat.description || null,
+        color: mat.color || null,
+        thumbnailSmallUrl: mat.thumbnailSmallUrl || null,
+        thumbnailLargeUrl: mat.thumbnailLargeUrl || null,
+        imageUrl: mat.imageUrl || null,
+        status: mat.status || 'ACTIVE',
+        isCustom: Boolean(mat.creatorId),
+        material: {
+          id: mat.id,
+          name: mat.name,
+          slug: mat.slug,
+          description: mat.description,
+          iconUrl: mat.imageUrl,
+          thumbnailSmallUrl: mat.thumbnailSmallUrl,
+          thumbnailLargeUrl: mat.thumbnailLargeUrl,
+          color: mat.color,
+          basePrice: mat.defaultPrice,
+          status: mat.status,
+        },
+        createdAt: mat.createdAt,
+        updatedAt: mat.updatedAt,
+      };
+      materials = [themeItem];
+    }
+
+    // Determine primary selected material
+    let selectedMaterial = null;
+    if (profile.themeMaterialId) {
+      selectedMaterial =
+        materials.find(
+          (m: any) =>
+            m.materialId === profile.themeMaterialId ||
+            m.id === profile.themeMaterialId,
+        ) || null;
+    }
+    if (!selectedMaterial && materials.length > 0) {
+      selectedMaterial = materials[0];
+    }
+
+    const isPublished = Boolean(profile.isPublished);
 
     return {
       ...cleanProfile,
       creatorName,
       slug: cleanSlug,
+      material: selectedMaterial || null,
+      materials,
+      selectedMaterials: materials,
+      showSupportersOnPage: profile.showSupportersOnPage ?? true,
+      isPublished,
     };
   }
 

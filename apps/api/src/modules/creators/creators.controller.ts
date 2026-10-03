@@ -3,6 +3,7 @@ import {
   Get,
   Put,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -30,15 +31,17 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
+import { CreateCustomMaterialDto } from './dto/create-custom-material.dto';
 import {
-  CreatorResponseDto,
-  CreatorListResponseDto,
+  CreatorProfileDataDto,
   CreatorMaterialResponseDto,
   AvatarUploadResponseDto,
   ApiErrorResponseDto,
 } from './dto/creator-response.dto';
 import { CheckSlugResponseDto } from './dto/check-slug.dto';
 import { CreatorShareLinkResponseDto } from './dto/share-link.dto';
+import { UpdateCreatorSettingsDto } from './dto/update-creator-settings.dto';
+import { UpdatePageStatusDto } from './dto/update-page-status.dto';
 
 @ApiTags('creators')
 @Controller('creators')
@@ -61,8 +64,8 @@ export class CreatorsController {
   })
   @ApiResponse({
     status: 200,
-    description: 'Creators returned successfully.',
-    type: CreatorListResponseDto,
+    description: 'List of active creator profiles returned successfully.',
+    type: [CreatorProfileDataDto],
   })
   async getCreators(@Query() query: any) {
     return this.creatorsService.findAll(query);
@@ -79,7 +82,7 @@ export class CreatorsController {
   @ApiResponse({
     status: 200,
     description: 'Creator profile returned successfully.',
-    type: CreatorResponseDto,
+    type: CreatorProfileDataDto,
   })
   @ApiResponse({
     status: 401,
@@ -124,7 +127,7 @@ export class CreatorsController {
   @ApiResponse({
     status: 200,
     description: 'Creator profile onboarded successfully.',
-    type: CreatorResponseDto,
+    type: CreatorProfileDataDto,
   })
   @ApiResponse({
     status: 400,
@@ -178,7 +181,7 @@ export class CreatorsController {
   @ApiResponse({
     status: 200,
     description: 'Profile updated successfully.',
-    type: CreatorResponseDto,
+    type: CreatorProfileDataDto,
   })
   @ApiResponse({
     status: 400,
@@ -315,6 +318,160 @@ export class CreatorsController {
     return this.creatorsService.saveCreatorMaterials(userId, dto);
   }
 
+  @Post('me/materials/custom')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Add a custom material / appearance for the creator',
+    description:
+      'Creates a personal custom material belonging only to the authenticated creator and adds it to their active yard menu. Supports name, description, color swatch, and thumbnail images (small + large).',
+  })
+  @ApiBody({
+    type: CreateCustomMaterialDto,
+    examples: {
+      minimal: {
+        summary: 'Name only',
+        value: { name: 'Silk Georgette' },
+      },
+      full: {
+        summary: 'All fields',
+        value: {
+          name: 'Silk Georgette',
+          description: 'Exclusive custom silk fabric for my supporters',
+          color: '#C2185B',
+          thumbnailSmallUrl:
+            'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill/materials/silk-sm.jpg',
+          thumbnailLargeUrl:
+            'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill/materials/silk-lg.jpg',
+          imageUrl:
+            'https://res.cloudinary.com/demo/image/upload/custom-silk.jpg',
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Custom material created successfully.',
+    type: CreatorMaterialResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error — invalid URL, color, or missing name.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator profile not found.',
+    type: ApiErrorResponseDto,
+  })
+  async createCustomMaterial(
+    @CurrentUser('id') userId: string,
+    @Body() dto: CreateCustomMaterialDto,
+  ) {
+    return this.creatorsService.createCustomMaterial(userId, dto);
+  }
+
+  @Patch('me/settings')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Update creator page settings',
+    description:
+      'Unified endpoint to update Appearance settings (choose your theme material) and Supporter Interaction settings (personalized thank-you message + show supporter count toggle). All fields are optional — only provided fields are updated.',
+  })
+  @ApiBody({
+    type: UpdateCreatorSettingsDto,
+    examples: {
+      themeOnly: {
+        summary: 'Set appearance theme only',
+        value: { themeMaterialId: 'c1a2b3d4-e5f6-7890-abcd-ef1234567890' },
+      },
+      supporterInteractions: {
+        summary: 'Set thank-you message and toggle',
+        value: {
+          thankYouMessage: 'Thank you for the yard! 🙏',
+          showSupportersOnPage: true,
+        },
+      },
+      combined: {
+        summary: 'All settings at once',
+        value: {
+          themeMaterialId: 'c1a2b3d4-e5f6-7890-abcd-ef1234567890',
+          thankYouMessage: 'Thank you for the yard! 🙏',
+          showSupportersOnPage: false,
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Creator settings updated successfully.',
+    type: CreatorProfileDataDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid themeMaterialId or validation error.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid session token.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator profile not found.',
+    type: ApiErrorResponseDto,
+  })
+  async updateCreatorSettings(
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdateCreatorSettingsDto,
+  ) {
+    const profile = await this.creatorsService.updateCreatorSettings(
+      userId,
+      dto,
+    );
+    return this.creatorsService.formatCreatorProfile(profile);
+  }
+
+  @Patch('me/page-status')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Publish or unpublish creator support page',
+    description:
+      'Toggles public availability of the creator page. When publishing (isPublished = true), validates that all required setup fields (creatorName, slug, bio, avatar, thank-you message, and active materials) are fulfilled.',
+  })
+  @ApiBody({ type: UpdatePageStatusDto })
+  @ApiResponse({
+    status: 200,
+    description: 'Creator page publish status updated successfully.',
+    type: CreatorProfileDataDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Cannot publish profile — required setup fields are incomplete.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid session token.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator profile not found.',
+    type: ApiErrorResponseDto,
+  })
+  async updatePageStatus(
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdatePageStatusDto,
+  ) {
+    const profile = await this.creatorsService.updatePageStatus(userId, dto);
+    return this.creatorsService.formatCreatorProfile(profile);
+  }
+
   @Get('me/share-link')
   @ApiBearerAuth()
   @ApiCookieAuth('better-auth.session_token')
@@ -385,7 +542,7 @@ export class CreatorsController {
   @ApiResponse({
     status: 200,
     description: 'Public creator profile returned successfully.',
-    type: CreatorResponseDto,
+    type: CreatorProfileDataDto,
   })
   @ApiResponse({
     status: 404,

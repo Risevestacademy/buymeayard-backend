@@ -18,13 +18,15 @@ export class CreatorMaterialItemDto {
   @IsUUID()
   materialId: string;
 
-  @ApiProperty({
-    example: 500000,
-    description: 'Custom price per yard in minor units (kobo). 500000 = ₦5,000',
+  @ApiPropertyOptional({
+    example: 100000,
+    description:
+      'Optional price per yard in minor units (kobo). If omitted, inherits the platform universal base price.',
   })
+  @IsOptional()
   @IsInt()
   @Min(100)
-  price: number;
+  price?: number;
 
   @ApiPropertyOptional({
     example: 'My Ankara',

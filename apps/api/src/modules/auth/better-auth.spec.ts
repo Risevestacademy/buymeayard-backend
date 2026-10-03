@@ -1,7 +1,12 @@
-import { createBetterAuth } from './better-auth';
+import {
+  createBetterAuth,
+  generateAppleClientSecret,
+  resolveAppleClientSecret,
+} from './better-auth';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { USER_EVENTS } from '../analytics/events/user.events';
 import { betterAuth } from 'better-auth';
+import * as crypto from 'crypto';
 
 jest.mock('better-auth', () => ({
   betterAuth: jest.fn((config) => ({
@@ -151,6 +156,102 @@ describe('createBetterAuth', () => {
           userId: 'u-1',
         }),
       ).resolves.not.toThrow();
+    });
+  });
+
+  describe('Apple OAuth secret generation and configuration', () => {
+    const origEnv = process.env;
+
+    beforeEach(() => {
+      process.env = { ...origEnv };
+    });
+
+    afterAll(() => {
+      process.env = origEnv;
+    });
+
+    it('should generate a valid ES256 JWT using generateAppleClientSecret', () => {
+      const { publicKey, privateKey } = crypto.generateKeyPairSync('ec', {
+        namedCurve: 'prime256v1',
+      });
+      const privPem = privateKey.export({
+        type: 'pkcs8',
+        format: 'pem',
+      }) as string;
+      const pubPem = publicKey.export({
+        type: 'spki',
+        format: 'pem',
+      }) as string;
+
+      const jwt = generateAppleClientSecret({
+        clientId: 'com.buymeayard.web',
+        teamId: 'TEAM123456',
+        keyId: 'KEY1234567',
+        privateKey: privPem,
+      });
+
+      expect(typeof jwt).toBe('string');
+      const parts = jwt.split('.');
+      expect(parts.length).toBe(3);
+
+      const header = JSON.parse(
+        Buffer.from(parts[0], 'base64url').toString('utf8'),
+      );
+      expect(header.alg).toBe('ES256');
+      expect(header.kid).toBe('KEY1234567');
+
+      const payload = JSON.parse(
+        Buffer.from(parts[1], 'base64url').toString('utf8'),
+      );
+      expect(payload.iss).toBe('TEAM123456');
+      expect(payload.sub).toBe('com.buymeayard.web');
+      expect(payload.aud).toBe('https://appleid.apple.com');
+
+      const isValid = crypto.verify(
+        'sha256',
+        Buffer.from(`${parts[0]}.${parts[1]}`),
+        { key: pubPem, dsaEncoding: 'ieee-p1363' },
+        Buffer.from(parts[2], 'base64url'),
+      );
+      expect(isValid).toBe(true);
+    });
+
+    it('should prioritize APPLE_CLIENT_SECRET if already set in environment', () => {
+      process.env.APPLE_CLIENT_SECRET = 'pre-generated-apple-secret-jwt';
+      const secret = resolveAppleClientSecret();
+      expect(secret).toBe('pre-generated-apple-secret-jwt');
+    });
+
+    it('should dynamically resolve Apple client secret when private key credentials are set', () => {
+      delete process.env.APPLE_CLIENT_SECRET;
+      const { privateKey } = crypto.generateKeyPairSync('ec', {
+        namedCurve: 'prime256v1',
+      });
+      const privPem = privateKey.export({
+        type: 'pkcs8',
+        format: 'pem',
+      }) as string;
+
+      process.env.APPLE_CLIENT_ID = 'com.buymeayard.web';
+      process.env.APPLE_TEAM_ID = 'TEAM999999';
+      process.env.APPLE_KEY_ID = 'KEY9999999';
+      process.env.APPLE_PRIVATE_KEY = privPem;
+
+      const secret = resolveAppleClientSecret();
+      expect(typeof secret).toBe('string');
+      expect(secret.split('.').length).toBe(3);
+    });
+
+    it('should include Render and Apple domains in trustedOrigins', () => {
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      expect(passedConfig.trustedOrigins).toContain(
+        'https://buymeayardbackend.onrender.com',
+      );
+      expect(passedConfig.trustedOrigins).toContain(
+        'https://appleid.apple.com',
+      );
     });
   });
 });
