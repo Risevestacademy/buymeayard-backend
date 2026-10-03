@@ -16,9 +16,9 @@ const DEFAULT_PLATFORM_MATERIALS = [
     description:
       'Traditional African wax print fabric, widely worn at celebrations and everyday occasions.',
     thumbnailSmallUrl:
-      'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill,q_auto,f_auto/materials/ankara-sm',
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048027/ankara_1_aprayy.png',
     thumbnailLargeUrl:
-      'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill,q_auto,f_auto/materials/ankara-lg',
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048029/ankara_vafdfc.png',
     color: '#7F3516', // Primary/700 - rich terracotta earth
   },
   {
@@ -27,9 +27,9 @@ const DEFAULT_PLATFORM_MATERIALS = [
     description:
       'Hand-crafted indigo-dyed fabric with rich Yoruba heritage and bold resist-dye patterns.',
     thumbnailSmallUrl:
-      'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill,q_auto,f_auto/materials/adire-sm',
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/adire_jhpw59.png',
     thumbnailLargeUrl:
-      'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill,q_auto,f_auto/materials/adire-lg',
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/adire_jhpw59.png',
     color: '#4A2E8A', // Secondary - Amethyst/600 - deep indigo purple
   },
   {
@@ -38,9 +38,9 @@ const DEFAULT_PLATFORM_MATERIALS = [
     description:
       'Classic traditional woven textile fabric from eastern Nigeria, used for ceremonies and royalty.',
     thumbnailSmallUrl:
-      'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill,q_auto,f_auto/materials/ochafu-sm',
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/ochafu_1_zv9ayh.png',
     thumbnailLargeUrl:
-      'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill,q_auto,f_auto/materials/ochafu-lg',
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048031/ochafu_jpe0sw.png',
     color: '#54230E', // Primary/800 - deep royal umber
   },
   {
@@ -49,9 +49,9 @@ const DEFAULT_PLATFORM_MATERIALS = [
     description:
       'Hand-woven prestige cloth from the Yoruba people of Nigeria, synonymous with celebration.',
     thumbnailSmallUrl:
-      'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill,q_auto,f_auto/materials/aso-oke-sm',
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/aso-oke_1_vdvwnw.png',
     thumbnailLargeUrl:
-      'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill,q_auto,f_auto/materials/aso-oke-lg',
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/aso-oke_qtypsn.png',
     color: '#AB491F', // Primary/600 - warm rust orange
   },
   {
@@ -71,9 +71,9 @@ const DEFAULT_PLATFORM_MATERIALS = [
     description:
       'Intricate and elegant luxury lace fabric, a staple for Nigerian celebrations and ceremonies.',
     thumbnailSmallUrl:
-      'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill,q_auto,f_auto/materials/lace-sm',
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/lace_1_cruzn4.png',
     thumbnailLargeUrl:
-      'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill,q_auto,f_auto/materials/lace-lg',
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791048028/lace_vxlyec.png',
     color: '#CAA8F5', // Secondary - Amethyst/300 - soft lilac lavender
   },
 ];
