@@ -56,11 +56,11 @@ export class DiditProvider implements KycProvider {
     const { expectedDetails } = params;
     const hasExpected = Boolean(
       expectedDetails &&
-        (expectedDetails.firstName ||
-          expectedDetails.lastName ||
-          expectedDetails.dateOfBirth ||
-          expectedDetails.country ||
-          expectedDetails.documentType),
+      (expectedDetails.firstName ||
+        expectedDetails.lastName ||
+        expectedDetails.dateOfBirth ||
+        expectedDetails.country ||
+        expectedDetails.documentType),
     );
 
     const body = await this.request('POST', '/v3/session/', {

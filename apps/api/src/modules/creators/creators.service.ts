@@ -624,7 +624,7 @@ export class CreatorsService {
       throw new NotFoundException('Creator profile not found');
     }
 
-    let items = await this.prisma.creatorMaterial.findMany({
+    const items = await this.prisma.creatorMaterial.findMany({
       where: { creatorId: profile.id, status: 'ACTIVE' },
       include: { material: true },
       orderBy: { createdAt: 'asc' },

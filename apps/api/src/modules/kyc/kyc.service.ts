@@ -123,10 +123,10 @@ export class KycService {
 
     const hasClaimed = Boolean(
       dto?.firstName ||
-        dto?.lastName ||
-        dto?.dateOfBirth ||
-        dto?.country ||
-        dto?.documentType,
+      dto?.lastName ||
+      dto?.dateOfBirth ||
+      dto?.country ||
+      dto?.documentType,
     );
 
     const claimed: KycExpectedDetails | null = hasClaimed
