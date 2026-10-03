@@ -7,7 +7,13 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   constructor() {
+    let url = process.env.DATABASE_URL;
+    if (url && !url.includes('pool_timeout=')) {
+      url += (url.includes('?') ? '&' : '?') + 'pool_timeout=30';
+    }
+
     super({
+      datasources: url ? { db: { url } } : undefined,
       transactionOptions: {
         maxWait: 15_000,
         timeout: 30_000,
