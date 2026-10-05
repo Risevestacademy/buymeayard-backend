@@ -256,5 +256,16 @@ describe('createBetterAuth', () => {
       expect(passedConfig.trustedOrigins).toContain('bmay-dev://');
       expect(passedConfig.trustedOrigins).toContain('bmay-preview://');
     });
+
+    it('should configure Google account linking with requireLocalEmailVerified disabled', () => {
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      expect(passedConfig.account?.accountLinking).toEqual({
+        enabled: true,
+        trustedProviders: ['google'],
+        requireLocalEmailVerified: false,
+      });
+    });
   });
 });
