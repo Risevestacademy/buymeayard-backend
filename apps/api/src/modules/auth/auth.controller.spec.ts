@@ -560,7 +560,10 @@ describe('AuthController', () => {
       res.redirect = jest.fn();
       res.setHeader = jest.fn();
       const headers = new Headers();
-      headers.set('set-cookie', 'better-auth.state=secret_state; Path=/; HttpOnly');
+      headers.set(
+        'set-cookie',
+        'better-auth.state=secret_state; Path=/; HttpOnly',
+      );
       authService.signInSocial.mockResolvedValue({
         url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
         redirect: true,
@@ -577,7 +580,9 @@ describe('AuthController', () => {
 
       expect(res.setHeader).toHaveBeenCalledWith(
         'set-cookie',
-        expect.arrayContaining([expect.stringContaining('better-auth.state=secret_state')]),
+        expect.arrayContaining([
+          expect.stringContaining('better-auth.state=secret_state'),
+        ]),
       );
       expect(res.redirect).toHaveBeenCalledWith(
         'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
@@ -674,7 +679,7 @@ describe('AuthController', () => {
 
       const capturedHeaders: string[] = [];
       const res: any = {
-        setHeader: jest.fn((k, v) => {
+        setHeader: jest.fn((k) => {
           capturedHeaders.push(k.toLowerCase());
         }),
         getHeader: jest.fn(),

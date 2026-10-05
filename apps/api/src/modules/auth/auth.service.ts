@@ -113,9 +113,9 @@ export class AuthService implements OnModuleInit {
     }
 
     return {
-      url: (res as any)?.url,
-      redirect: (res as any)?.redirect ?? true,
-      headers: (res as any)?.headers,
+      url: res?.url,
+      redirect: res?.redirect ?? true,
+      headers: res?.headers,
     };
   }
 
