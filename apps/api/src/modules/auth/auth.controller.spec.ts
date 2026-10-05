@@ -11,6 +11,7 @@ jest.mock('./better-auth', () => ({
 
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { toNodeHandler } from 'better-auth/node';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -559,7 +560,10 @@ describe('AuthController', () => {
       res.redirect = jest.fn();
       res.setHeader = jest.fn();
       const headers = new Headers();
-      headers.set('set-cookie', 'better-auth.state=secret_state; Path=/; HttpOnly');
+      headers.set(
+        'set-cookie',
+        'better-auth.state=secret_state; Path=/; HttpOnly',
+      );
       authService.signInSocial.mockResolvedValue({
         url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
         redirect: true,
@@ -576,7 +580,9 @@ describe('AuthController', () => {
 
       expect(res.setHeader).toHaveBeenCalledWith(
         'set-cookie',
-        expect.arrayContaining([expect.stringContaining('better-auth.state=secret_state')]),
+        expect.arrayContaining([
+          expect.stringContaining('better-auth.state=secret_state'),
+        ]),
       );
       expect(res.redirect).toHaveBeenCalledWith(
         'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
@@ -606,6 +612,84 @@ describe('AuthController', () => {
         errorCallbackURL: 'http://localhost:3000/auth/error',
         headers: expect.any(Headers),
       });
+    });
+  });
+
+  describe('handleBetterAuth', () => {
+    it('should append token to redirect Location when redirecting to mobile callback deep link', async () => {
+      const mockHandler = jest.fn((req, res) => {
+        res.setHeader('location', 'bmay-dev://oauth-callback');
+        res.setHeader('set-cookie', [
+          'better-auth.session_token=test-session-token-999; Path=/; HttpOnly',
+        ]);
+        res.writeHead(302);
+      });
+      (toNodeHandler as jest.Mock).mockReturnValue(mockHandler);
+
+      const originalWriteHead = jest.fn();
+      const headers: Record<string, any> = {};
+      const res: any = {
+        setHeader: jest.fn((k, v) => {
+          headers[k.toLowerCase()] = v;
+        }),
+        getHeader: jest.fn((k) => headers[k.toLowerCase()]),
+        writeHead: originalWriteHead,
+      };
+      const req: any = { headers: {} };
+
+      await controller.handleBetterAuth(req, res);
+
+      expect(headers['location']).toBe(
+        'bmay-dev://oauth-callback?token=test-session-token-999',
+      );
+      expect(originalWriteHead).toHaveBeenCalledWith(302);
+    });
+
+    it('should not alter web redirects', async () => {
+      const mockHandler = jest.fn((req, res) => {
+        res.setHeader('location', 'http://localhost:3000/dashboard');
+        res.setHeader('set-cookie', [
+          'better-auth.session_token=test-session-token-999; Path=/; HttpOnly',
+        ]);
+        res.writeHead(302);
+      });
+      (toNodeHandler as jest.Mock).mockReturnValue(mockHandler);
+
+      const headers: Record<string, any> = {};
+      const res: any = {
+        setHeader: jest.fn((k, v) => {
+          headers[k.toLowerCase()] = v;
+        }),
+        getHeader: jest.fn((k) => headers[k.toLowerCase()]),
+        writeHead: jest.fn(),
+      };
+      const req: any = { headers: {} };
+
+      await controller.handleBetterAuth(req, res);
+
+      expect(headers['location']).toBe('http://localhost:3000/dashboard');
+    });
+
+    it('should suppress set-cookie on mobile requests', async () => {
+      const mockHandler = jest.fn((req, res) => {
+        res.setHeader('set-cookie', ['cookie=123']);
+        res.writeHead(200);
+      });
+      (toNodeHandler as jest.Mock).mockReturnValue(mockHandler);
+
+      const capturedHeaders: string[] = [];
+      const res: any = {
+        setHeader: jest.fn((k) => {
+          capturedHeaders.push(k.toLowerCase());
+        }),
+        getHeader: jest.fn(),
+        writeHead: jest.fn(),
+      };
+      const req: any = { headers: { 'x-client-type': 'mobile' } };
+
+      await controller.handleBetterAuth(req, res);
+
+      expect(capturedHeaders).not.toContain('set-cookie');
     });
   });
 });

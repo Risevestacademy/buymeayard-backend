@@ -494,10 +494,16 @@ describe('AuthService', () => {
 
     it('should parse Response object and extract headers and location', async () => {
       const headers = new Headers();
-      headers.set('location', 'https://accounts.google.com/o/oauth2/v2/auth?client_id=resp_test');
+      headers.set(
+        'location',
+        'https://accounts.google.com/o/oauth2/v2/auth?client_id=resp_test',
+      );
       headers.set('set-cookie', 'better-auth.state=xyz; Path=/; HttpOnly');
       const mockResponse = new Response(
-        JSON.stringify({ url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=resp_test', redirect: true }),
+        JSON.stringify({
+          url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=resp_test',
+          redirect: true,
+        }),
         { status: 200, headers },
       );
       mockBetterAuthInstance.api.signInSocial.mockResolvedValue(mockResponse);

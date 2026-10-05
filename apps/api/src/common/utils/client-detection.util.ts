@@ -63,6 +63,29 @@ export function isMobileRequest(
 }
 
 /**
+ * Extracts session token from cookie string or array of cookie strings.
+ */
+export function extractSessionTokenFromCookie(
+  setCookie: string | string[] | number | undefined,
+): string | undefined {
+  if (!setCookie) return undefined;
+  const cookies = Array.isArray(setCookie) ? setCookie : [String(setCookie)];
+  for (const cookie of cookies) {
+    const match = cookie.match(
+      /(?:__Secure-)?better-auth\.session_token=([^;]+)/,
+    );
+    if (match && match[1]) {
+      try {
+        return decodeURIComponent(match[1]);
+      } catch {
+        return match[1];
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
  * Extracts session token from Better Auth Web Response or parsed response body.
  */
 export function extractSessionToken(
@@ -98,16 +121,70 @@ export function extractSessionToken(
     if (raw) setCookies = [raw];
   }
 
-  for (const cookie of setCookies) {
-    const match = cookie.match(/better-auth\.session_token=([^;]+)/);
-    if (match && match[1]) {
-      try {
-        return decodeURIComponent(match[1]);
-      } catch {
-        return match[1];
-      }
-    }
+  return extractSessionTokenFromCookie(setCookies);
+}
+
+/**
+ * Determines whether a redirect URL is intended for a mobile application client.
+ * Identifies custom schemes (e.g. `bmay-dev://`, `buymeayard://`, `exp://`)
+ * or mobile query parameters / request headers.
+ */
+export function isMobileRedirectUrl(
+  url: string,
+  reqHeaders?:
+    | Headers
+    | IncomingHttpHeaders
+    | Record<string, string | string[] | undefined>,
+): boolean {
+  if (!url || typeof url !== 'string') return false;
+
+  // Custom deep link scheme (e.g. bmay://, bmay-dev://, buymeayard://, exp://)
+  if (
+    url.includes('://') &&
+    !url.startsWith('http://') &&
+    !url.startsWith('https://')
+  ) {
+    return true;
   }
 
-  return undefined;
+  // Check URL query parameters for mobile markers
+  try {
+    const parsed = new URL(url, 'http://localhost');
+    const from = parsed.searchParams.get('from')?.toLowerCase();
+    const client = parsed.searchParams.get('client')?.toLowerCase();
+    const platform = parsed.searchParams.get('platform')?.toLowerCase();
+    if (
+      from === 'mobile' ||
+      client === 'mobile' ||
+      client === 'app' ||
+      platform === 'mobile' ||
+      parsed.searchParams.get('mobile') === 'true'
+    ) {
+      return true;
+    }
+  } catch {
+    // ignore URL parse errors
+  }
+
+  // Check if request headers identify client as mobile
+  if (reqHeaders && isMobileRequest(reqHeaders)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Appends the session token to a callback URL (preserving any existing search parameters).
+ */
+export function appendTokenToUrl(rawUrl: string, token: string): string {
+  if (!rawUrl || !token) return rawUrl;
+  try {
+    const parsed = new URL(rawUrl);
+    parsed.searchParams.set('token', token);
+    return parsed.toString();
+  } catch {
+    const sep = rawUrl.includes('?') ? '&' : '?';
+    return `${rawUrl}${sep}token=${encodeURIComponent(token)}`;
+  }
 }

@@ -214,6 +214,11 @@ export function createBetterAuth(
     account: {
       modelName: 'authAccount',
       skipStateCookieCheck: true,
+      accountLinking: {
+        enabled: true,
+        trustedProviders: ['google'],
+        requireLocalEmailVerified: false,
+      },
     } as any,
     onAPIError: {
       errorURL:

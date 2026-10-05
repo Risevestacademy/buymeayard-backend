@@ -42,6 +42,9 @@ import { ErrorCodes } from '../../common/errors/error-codes';
 import {
   isMobileRequest,
   extractSessionToken,
+  extractSessionTokenFromCookie,
+  isMobileRedirectUrl,
+  appendTokenToUrl,
 } from '../../common/utils/client-detection.util';
 
 @ApiTags('auth')
@@ -475,16 +478,68 @@ export class AuthController {
   @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Better Auth native SDK handler endpoint' })
   async handleBetterAuth(@Req() req: Request, @Res() res: Response) {
-    // If mobile request header is present, suppress Set-Cookie from native handler
-    if (isMobileRequest(req.headers)) {
-      const originalSetHeader = res.setHeader.bind(res);
-      res.setHeader = function (name: string, value: any) {
-        if (name.toLowerCase() === 'set-cookie') {
+    const isMobileReq = isMobileRequest(req.headers);
+    let capturedSetCookie: any;
+
+    const originalSetHeader = res.setHeader.bind(res);
+    const originalWriteHead = res.writeHead.bind(res);
+
+    res.setHeader = function (name: string, value: any) {
+      if (name.toLowerCase() === 'set-cookie') {
+        capturedSetCookie = value;
+        if (isMobileReq) {
           return res;
         }
-        return originalSetHeader(name, value);
-      };
-    }
+      }
+      return originalSetHeader(name, value);
+    };
+
+    res.writeHead = function (statusCode: any, ...rest: any[]) {
+      let headersObj: Record<string, any> | undefined;
+      if (rest.length > 0) {
+        const lastArg = rest[rest.length - 1];
+        if (
+          typeof lastArg === 'object' &&
+          lastArg !== null &&
+          !Array.isArray(lastArg)
+        ) {
+          headersObj = lastArg;
+        }
+      }
+
+      const location =
+        headersObj?.location ||
+        headersObj?.Location ||
+        res.getHeader('location');
+
+      if (
+        typeof location === 'string' &&
+        isMobileRedirectUrl(location, req.headers)
+      ) {
+        const cookieVal =
+          capturedSetCookie ||
+          headersObj?.['set-cookie'] ||
+          headersObj?.['Set-Cookie'] ||
+          res.getHeader('set-cookie');
+
+        const token =
+          extractSessionTokenFromCookie(cookieVal) ||
+          (res.getHeader('set-auth-token') as string | undefined) ||
+          headersObj?.['set-auth-token'];
+
+        if (token) {
+          const updatedLocation = appendTokenToUrl(location, token);
+          if (headersObj) {
+            if ('location' in headersObj) headersObj.location = updatedLocation;
+            if ('Location' in headersObj) headersObj.Location = updatedLocation;
+          }
+          originalSetHeader('location', updatedLocation);
+        }
+      }
+
+      return (originalWriteHead as any)(statusCode, ...rest);
+    };
+
     return toNodeHandler(this.authService.getAuth())(req, res);
   }
 
