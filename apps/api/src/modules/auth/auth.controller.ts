@@ -156,18 +156,34 @@ export class AuthController {
   async socialSignIn(
     @Body() dto: SocialSignInDto,
     @Req() req: Request,
+    @Res({ passthrough: true }) res?: Response,
   ): Promise<SocialSignInResponseDto> {
     const isMobile = isMobileRequest(req.headers);
     const callbackURL =
       dto.callbackURL || (isMobile ? 'buymeayard://oauth-callback' : undefined);
+    const errorCallbackURL = dto.errorCallbackURL || callbackURL;
 
     const result = await this.authService.signInSocial({
       provider: dto.provider,
       callbackURL,
-      errorCallbackURL: dto.errorCallbackURL,
+      errorCallbackURL,
       newUserCallbackURL: dto.newUserCallbackURL,
       headers: fromNodeHeaders(req.headers),
     });
+
+    if (res && result.headers) {
+      if (typeof (result.headers as any).getSetCookie === 'function') {
+        const setCookies = (result.headers as any).getSetCookie();
+        if (Array.isArray(setCookies) && setCookies.length > 0) {
+          res.setHeader('set-cookie', setCookies);
+        }
+      } else {
+        const setCookie = result.headers.get('set-cookie');
+        if (setCookie) {
+          res.setHeader('set-cookie', setCookie);
+        }
+      }
+    }
 
     return {
       url: result.url,
@@ -196,6 +212,13 @@ export class AuthController {
     example: 'buymeayard://oauth-callback',
   })
   @ApiQuery({
+    name: 'errorCallbackURL',
+    required: false,
+    description:
+      'Where to redirect if an OAuth error occurs (e.g. user denied consent, state mismatch)',
+    example: 'buymeayard://oauth-callback',
+  })
+  @ApiQuery({
     name: 'redirect',
     required: false,
     type: Boolean,
@@ -216,16 +239,37 @@ export class AuthController {
     @Query('redirect') redirectParam: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
+    @Query('errorCallbackURL') errorCallbackURL?: string,
   ) {
     const isMobile = isMobileRequest(req.headers);
     const effectiveCallback =
       callbackURL || (isMobile ? 'buymeayard://oauth-callback' : undefined);
+    const effectiveErrorCallback =
+      errorCallbackURL ||
+      (req.query?.errorCallbackURL as string | undefined) ||
+      effectiveCallback;
 
     const result = await this.authService.signInSocial({
       provider,
       callbackURL: effectiveCallback,
+      errorCallbackURL: effectiveErrorCallback,
       headers: fromNodeHeaders(req.headers),
     });
+
+    // Forward Set-Cookie headers from Better Auth (state cookie, etc.)
+    if (result.headers) {
+      if (typeof (result.headers as any).getSetCookie === 'function') {
+        const setCookies = (result.headers as any).getSetCookie();
+        if (Array.isArray(setCookies) && setCookies.length > 0) {
+          res.setHeader('set-cookie', setCookies);
+        }
+      } else {
+        const setCookie = result.headers.get('set-cookie');
+        if (setCookie) {
+          res.setHeader('set-cookie', setCookie);
+        }
+      }
+    }
 
     const wantsJson =
       redirectParam === 'false' ||

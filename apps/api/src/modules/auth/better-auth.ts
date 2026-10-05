@@ -213,6 +213,13 @@ export function createBetterAuth(
     }),
     account: {
       modelName: 'authAccount',
+      skipStateCookieCheck: true,
+    } as any,
+    onAPIError: {
+      errorURL:
+        process.env.CREATOR_FRONTEND_URL ||
+        process.env.FRONTEND_URL ||
+        undefined,
     },
     secret:
       options?.secret ||
