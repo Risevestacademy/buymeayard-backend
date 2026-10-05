@@ -80,22 +80,43 @@ export class AuthService implements OnModuleInit {
     errorCallbackURL?: string;
     newUserCallbackURL?: string;
     headers?: Headers;
-  }): Promise<{ url: string; redirect: boolean }> {
+  }): Promise<{ url: string; redirect: boolean; headers?: Headers }> {
     const defaultCallback =
       this.configService.get<string>('BETTER_AUTH_URL') ||
       'http://localhost:3000';
 
+    const callbackURL = params.callbackURL || defaultCallback;
+    const errorCallbackURL = params.errorCallbackURL || callbackURL;
+
     const res = await (this.getAuth().api as any).signInSocial({
       body: {
         provider: params.provider,
-        callbackURL: params.callbackURL || defaultCallback,
-        errorCallbackURL: params.errorCallbackURL,
+        callbackURL,
+        errorCallbackURL,
         newUserCallbackURL: params.newUserCallbackURL,
       },
       ...(params.headers ? { headers: params.headers } : {}),
+      asResponse: true,
     });
 
-    return res as { url: string; redirect: boolean };
+    if (res instanceof Response) {
+      const data = (await res.json().catch(() => ({}))) as {
+        url?: string;
+        redirect?: boolean;
+      };
+      const location = res.headers.get('location') || data.url || '';
+      return {
+        url: location,
+        redirect: data.redirect ?? true,
+        headers: res.headers,
+      };
+    }
+
+    return {
+      url: (res as any)?.url,
+      redirect: (res as any)?.redirect ?? true,
+      headers: (res as any)?.headers,
+    };
   }
 
   async signOut(params?: { headers?: Headers }): Promise<globalThis.Response> {

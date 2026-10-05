@@ -483,12 +483,34 @@ describe('AuthService', () => {
         body: {
           provider: 'google',
           callbackURL: 'buymeayard://oauth-callback',
-          errorCallbackURL: undefined,
+          errorCallbackURL: 'buymeayard://oauth-callback',
           newUserCallbackURL: undefined,
         },
+        asResponse: true,
       });
       expect(res.url).toContain('accounts.google.com');
       expect(res.redirect).toBe(true);
+    });
+
+    it('should parse Response object and extract headers and location', async () => {
+      const headers = new Headers();
+      headers.set('location', 'https://accounts.google.com/o/oauth2/v2/auth?client_id=resp_test');
+      headers.set('set-cookie', 'better-auth.state=xyz; Path=/; HttpOnly');
+      const mockResponse = new Response(
+        JSON.stringify({ url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=resp_test', redirect: true }),
+        { status: 200, headers },
+      );
+      mockBetterAuthInstance.api.signInSocial.mockResolvedValue(mockResponse);
+
+      const res = await service.signInSocial({
+        provider: 'google',
+        callbackURL: 'http://localhost:3000/callback',
+        errorCallbackURL: 'http://localhost:3000/error',
+      });
+
+      expect(res.url).toContain('resp_test');
+      expect(res.redirect).toBe(true);
+      expect(res.headers?.get('set-cookie')).toContain('better-auth.state=xyz');
     });
   });
 });

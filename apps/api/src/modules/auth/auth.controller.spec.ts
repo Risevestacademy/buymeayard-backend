@@ -479,7 +479,7 @@ describe('AuthController', () => {
       expect(authService.signInSocial).toHaveBeenCalledWith({
         provider: 'google',
         callbackURL: 'buymeayard://oauth-callback',
-        errorCallbackURL: undefined,
+        errorCallbackURL: 'buymeayard://oauth-callback',
         newUserCallbackURL: undefined,
         headers: expect.any(Headers),
       });
@@ -501,7 +501,7 @@ describe('AuthController', () => {
       expect(authService.signInSocial).toHaveBeenCalledWith({
         provider: 'apple',
         callbackURL: 'buymeayard://oauth-callback',
-        errorCallbackURL: undefined,
+        errorCallbackURL: 'buymeayard://oauth-callback',
         newUserCallbackURL: undefined,
         headers: expect.any(Headers),
       });
@@ -551,6 +551,60 @@ describe('AuthController', () => {
       expect(res.json).toHaveBeenCalledWith({
         url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
         redirect: true,
+      });
+    });
+
+    it('should forward Set-Cookie headers from authService on redirect', async () => {
+      const { req, res } = createMockReqRes();
+      res.redirect = jest.fn();
+      res.setHeader = jest.fn();
+      const headers = new Headers();
+      headers.set('set-cookie', 'better-auth.state=secret_state; Path=/; HttpOnly');
+      authService.signInSocial.mockResolvedValue({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+        headers,
+      });
+
+      await controller.directSocialRedirect(
+        'google',
+        'http://localhost:3000/dashboard',
+        undefined,
+        req,
+        res,
+      );
+
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'set-cookie',
+        expect.arrayContaining([expect.stringContaining('better-auth.state=secret_state')]),
+      );
+      expect(res.redirect).toHaveBeenCalledWith(
+        'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+      );
+    });
+
+    it('should pass errorCallbackURL query param to authService.signInSocial', async () => {
+      const { req, res } = createMockReqRes();
+      res.redirect = jest.fn();
+      authService.signInSocial.mockResolvedValue({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+      });
+
+      await controller.directSocialRedirect(
+        'google',
+        'http://localhost:3000/dashboard',
+        undefined,
+        req,
+        res,
+        'http://localhost:3000/auth/error',
+      );
+
+      expect(authService.signInSocial).toHaveBeenCalledWith({
+        provider: 'google',
+        callbackURL: 'http://localhost:3000/dashboard',
+        errorCallbackURL: 'http://localhost:3000/auth/error',
+        headers: expect.any(Headers),
       });
     });
   });
