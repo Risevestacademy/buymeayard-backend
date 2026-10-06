@@ -21,6 +21,10 @@ describe('CreatorsController', () => {
     getShareLinkBySlug: jest.Mock;
     updateCreatorSettings: jest.Mock;
     updatePageStatus: jest.Mock;
+    getDashboardOverview: jest.Mock;
+    getDashboardBalance: jest.Mock;
+    getDashboardEarnings: jest.Mock;
+    getDashboardContributions: jest.Mock;
   };
 
   const rawCreatorProfile = {
@@ -51,6 +55,10 @@ describe('CreatorsController', () => {
       getShareLinkBySlug: jest.fn(),
       updateCreatorSettings: jest.fn(),
       updatePageStatus: jest.fn(),
+      getDashboardOverview: jest.fn(),
+      getDashboardBalance: jest.fn(),
+      getDashboardEarnings: jest.fn(),
+      getDashboardContributions: jest.fn(),
       formatCreatorProfile: jest.fn((p) => {
         if (!p) return p;
         const {
@@ -376,6 +384,100 @@ describe('CreatorsController', () => {
       });
       expect(creatorsService.formatCreatorProfile).toHaveBeenCalled();
       expect(result.isPublished).toBe(true);
+    });
+  });
+
+  describe('getDashboard (GET /creators/me/dashboard)', () => {
+    it('should delegate to creatorsService.getDashboardOverview with default or query period', async () => {
+      const mockDashboard = {
+        creator: { id: 'c-1', creatorName: 'Adeola', pageStatus: 'LIVE' },
+        metrics: { totalContributions: 24, totalContributionAmount: 12000000 },
+        balance: { availableBalance: 9800000, canWithdraw: true },
+        recentContributions: [],
+        earningsChart: { period: '30d', points: [] },
+      };
+      creatorsService.getDashboardOverview.mockResolvedValue(mockDashboard);
+
+      const res = await controller.getDashboard('user-1', '30d');
+      expect(creatorsService.getDashboardOverview).toHaveBeenCalledWith(
+        'user-1',
+        '30d',
+      );
+      expect(res).toBe(mockDashboard);
+    });
+  });
+
+  describe('getOverview (GET /creators/me/overview)', () => {
+    it('should alias to getDashboardOverview', async () => {
+      const mockDashboard = { creator: { id: 'c-1' } };
+      creatorsService.getDashboardOverview.mockResolvedValue(mockDashboard);
+
+      const res = await controller.getOverview('user-1', '7d');
+      expect(creatorsService.getDashboardOverview).toHaveBeenCalledWith(
+        'user-1',
+        '7d',
+      );
+      expect(res).toBe(mockDashboard);
+    });
+  });
+
+  describe('getDashboardEarnings (GET /creators/me/dashboard/earnings)', () => {
+    it('should delegate to creatorsService.getDashboardEarnings', async () => {
+      const mockEarnings = {
+        period: '90d',
+        totalGrossAmount: 15000000,
+        points: [],
+      };
+      creatorsService.getDashboardEarnings.mockResolvedValue(mockEarnings);
+
+      const res = await controller.getDashboardEarnings('user-1', {
+        period: '90d',
+      });
+      expect(creatorsService.getDashboardEarnings).toHaveBeenCalledWith(
+        'user-1',
+        { period: '90d' },
+      );
+      expect(res).toBe(mockEarnings);
+    });
+  });
+
+  describe('getDashboardContributions (GET /creators/me/dashboard/contributions)', () => {
+    it('should delegate to creatorsService.getDashboardContributions', async () => {
+      const mockContributions = {
+        data: [],
+        pagination: { total: 0, page: 1, limit: 10, totalPages: 1 },
+      };
+      creatorsService.getDashboardContributions.mockResolvedValue(
+        mockContributions,
+      );
+
+      const res = await controller.getDashboardContributions('user-1', {
+        page: 1,
+        limit: 10,
+      });
+      expect(creatorsService.getDashboardContributions).toHaveBeenCalledWith(
+        'user-1',
+        { page: 1, limit: 10 },
+      );
+      expect(res).toBe(mockContributions);
+    });
+  });
+
+  describe('getDashboardBalance (GET /creators/me/dashboard/balance)', () => {
+    it('should delegate to creatorsService.getDashboardBalance', async () => {
+      const mockBalance = {
+        availableBalance: 5000000,
+        pendingBalance: 1000000,
+        withdrawnToDate: 2000000,
+        canWithdraw: true,
+      };
+      creatorsService.getDashboardBalance.mockResolvedValue(mockBalance);
+
+      const res = await controller.getDashboardBalance('user-1');
+      expect(creatorsService.getDashboardBalance).toHaveBeenCalledWith(
+        'user-1',
+      );
+      expect(res).toBe(mockBalance);
     });
   });
 });
