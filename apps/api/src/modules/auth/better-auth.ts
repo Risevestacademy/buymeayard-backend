@@ -8,9 +8,30 @@ import {
   isMobileRequest,
   isMobileRedirectUrl,
 } from '../../common/utils/client-detection.util';
+import { isPasswordValid } from '../../common/decorators/is-valid-password.decorator';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { USER_EVENTS } from '../analytics/events/user.events';
+
+/**
+ * Safely resolves OAuth state during OAuth callback flows.
+ * Uses dynamic import to avoid CommonJS/ESM compatibility issues in Jest/NestJS.
+ */
+export async function getOAuthStateFromContext(
+  context?: any,
+): Promise<{ callbackURL?: string; errorURL?: string } | null> {
+  if (context?.oauthState) {
+    return context.oauthState;
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const dynamicImport = new Function('return import("better-auth/api")');
+    const api = await dynamicImport();
+    return (await api.getOAuthState()) ?? null;
+  } catch {
+    return null;
+  }
+}
 
 export interface BetterAuthOptions {
   secret?: string;
@@ -377,15 +398,49 @@ export function createBetterAuth(
         secure: true,
       },
     },
+    hooks: {
+      before: async (ctx: any) => {
+        if (
+          (ctx?.path === '/sign-in/social' ||
+            ctx?.path?.startsWith('/sign-in/social')) &&
+          ctx?.body
+        ) {
+          const body = ctx.body;
+          if (
+            body.callbackURL &&
+            isMobileRedirectUrl(body.callbackURL, ctx.headers) &&
+            !body.errorCallbackURL
+          ) {
+            body.errorCallbackURL = body.callbackURL;
+          }
+        }
+        if (
+          (ctx?.path === '/reset-password' ||
+            ctx?.path?.startsWith('/reset-password')) &&
+          ctx?.body?.newPassword
+        ) {
+          if (!isPasswordValid(ctx.body.newPassword)) {
+            // eslint-disable-next-line @typescript-eslint/only-throw-error
+            throw new APIError('BAD_REQUEST', {
+              code: 'INVALID_PASSWORD',
+              message:
+                'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character',
+            });
+          }
+        }
+      },
+    },
     databaseHooks: {
       user: {
         create: {
           before: async (_user: any, context?: any) => {
             const reqHeaders = context?.headers || context?.request?.headers;
+            const oauthState = await getOAuthStateFromContext(context);
             const callbackURL =
               context?.body?.callbackURL ||
               context?.query?.callbackURL ||
-              context?.context?.callbackURL;
+              context?.context?.callbackURL ||
+              oauthState?.callbackURL;
             const isMobile =
               (reqHeaders && isMobileRequest(reqHeaders)) ||
               (callbackURL && isMobileRedirectUrl(callbackURL, reqHeaders));
@@ -423,10 +478,12 @@ export function createBetterAuth(
         create: {
           before: async (session: any, context?: any) => {
             const reqHeaders = context?.headers || context?.request?.headers;
+            const oauthState = await getOAuthStateFromContext(context);
             const callbackURL =
               context?.body?.callbackURL ||
               context?.query?.callbackURL ||
-              context?.context?.callbackURL;
+              context?.context?.callbackURL ||
+              oauthState?.callbackURL;
 
             const isMobile =
               (reqHeaders && isMobileRequest(reqHeaders)) ||
