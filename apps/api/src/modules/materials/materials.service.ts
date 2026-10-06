@@ -60,9 +60,9 @@ const DEFAULT_PLATFORM_MATERIALS = [
     description:
       'Distinctive hand-woven textile from Akwete, Abia State — known for its bold geometric designs.',
     thumbnailSmallUrl:
-      'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill,q_auto,f_auto/materials/akwete-sm',
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791282348/akwete-small_dsy242.png',
     thumbnailLargeUrl:
-      'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill,q_auto,f_auto/materials/akwete-lg',
+      'https://res.cloudinary.com/dymntdsp9/image/upload/v1791282348/akwete-big_jv3bj3.png',
     color: '#676670', // Neutral/500 - elegant graphite slate
   },
   {
