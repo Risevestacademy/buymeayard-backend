@@ -39,6 +39,10 @@ describe('Creators Endpoints (HTTP Integration)', () => {
     getShareLink: jest.Mock;
     getShareLinkBySlug: jest.Mock;
     formatCreatorProfile: jest.Mock;
+    getDashboardOverview: jest.Mock;
+    getDashboardBalance: jest.Mock;
+    getDashboardEarnings: jest.Mock;
+    getDashboardContributions: jest.Mock;
   };
 
   const mockUser = {
@@ -168,6 +172,95 @@ describe('Creators Endpoints (HTTP Integration)', () => {
           slug: p.slug || p.username || '',
           material: p.materials?.[0] || null,
         };
+      }),
+      getDashboardOverview: jest.fn().mockResolvedValue({
+        creator: {
+          id: 'creator-uuid-1',
+          creatorName: 'Adeola Johnson',
+          slug: 'adeola',
+          avatarUrl: 'https://cdn.buymeayard.com/avatars/adeola.jpg',
+          status: 'ACTIVE',
+          isPublished: true,
+          pageStatus: 'LIVE',
+          pageStatusLabel: 'Page is live',
+          publicUrl: 'https://buymeayard.com/adeola',
+        },
+        metrics: {
+          totalContributions: 24,
+          totalContributionAmount: 12000000,
+          netEarnings: 11400000,
+          platformFees: 600000,
+          currency: 'NGN',
+        },
+        balance: {
+          availableBalance: 9800000,
+          pendingBalance: 1600000,
+          withdrawnToDate: 0,
+          currency: 'NGN',
+          canWithdraw: true,
+          kycStatus: 'VERIFIED',
+          hasPayoutMethod: true,
+        },
+        recentContributions: [
+          {
+            id: 'sup-1',
+            supporter: {
+              id: 'user-s1',
+              name: 'Ada Okafor',
+              initials: 'AO',
+              avatarUrl: null,
+              isAnonymous: false,
+            },
+            material: {
+              name: 'Ankara',
+              color: '#E05A47',
+              thumbnailUrl: 'https://cdn.example.com/ankara.jpg',
+              quantity: 2,
+            },
+            message: 'Keep making great content!',
+            amount: 1000000,
+            creatorAmount: 950000,
+            currency: 'NGN',
+            createdAt: '2026-10-06T08:00:00.000Z',
+          },
+        ],
+        earningsChart: {
+          period: '30d',
+          totalGross: 12000000,
+          totalFees: 600000,
+          totalNet: 11400000,
+          currency: 'NGN',
+          dataPoints: [
+            {
+              date: '2026-10-06',
+              label: 'Oct 6',
+              grossAmount: 1000000,
+              netAmount: 950000,
+              contributionsCount: 1,
+            },
+          ],
+        },
+      }),
+      getDashboardBalance: jest.fn().mockResolvedValue({
+        availableBalance: 9800000,
+        pendingBalance: 1600000,
+        withdrawnToDate: 0,
+        currency: 'NGN',
+        canWithdraw: true,
+        kycStatus: 'VERIFIED',
+        hasPayoutMethod: true,
+      }),
+      getDashboardEarnings: jest.fn().mockResolvedValue({
+        period: '30d',
+        totalGross: 12000000,
+        totalFees: 600000,
+        totalNet: 11400000,
+        currency: 'NGN',
+        dataPoints: [],
+      }),
+      getDashboardContributions: jest.fn().mockResolvedValue({
+        data: [],
+        pagination: { total: 0, page: 1, limit: 10, totalPages: 1 },
       }),
     };
 
@@ -418,6 +511,101 @@ describe('Creators Endpoints (HTTP Integration)', () => {
       await request(app.getHttpServer())
         .get('/creators/nonexistent/share-link')
         .expect(404);
+    });
+  });
+
+  describe('GET /creators/me/dashboard', () => {
+    it('should return 200 with full creator dashboard overview', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/creators/me/dashboard?period=30d')
+        .expect(200);
+
+      expect(creatorsService.getDashboardOverview).toHaveBeenCalledWith(
+        mockUser.id,
+        '30d',
+      );
+      expect(response.body).toHaveProperty('creator');
+      expect(response.body.creator).toHaveProperty(
+        'creatorName',
+        'Adeola Johnson',
+      );
+      expect(response.body.creator).toHaveProperty('pageStatus', 'LIVE');
+      expect(response.body).toHaveProperty('metrics');
+      expect(response.body.metrics).toHaveProperty('totalContributions', 24);
+      expect(response.body.metrics).toHaveProperty(
+        'totalContributionAmount',
+        12000000,
+      );
+      expect(response.body).toHaveProperty('balance');
+      expect(response.body.balance).toHaveProperty('availableBalance', 9800000);
+      expect(response.body.balance).toHaveProperty('canWithdraw', true);
+      expect(response.body).toHaveProperty('recentContributions');
+      expect(response.body.recentContributions).toHaveLength(1);
+      expect(response.body.recentContributions[0].supporter).toHaveProperty(
+        'initials',
+        'AO',
+      );
+      expect(response.body).toHaveProperty('earningsChart');
+      expect(response.body.earningsChart).toHaveProperty('period', '30d');
+    });
+  });
+
+  describe('GET /creators/me/overview', () => {
+    it('should alias to dashboard and return 200', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/creators/me/overview')
+        .expect(200);
+
+      expect(creatorsService.getDashboardOverview).toHaveBeenCalledWith(
+        mockUser.id,
+        undefined,
+      );
+      expect(response.body).toHaveProperty('creator');
+      expect(response.body).toHaveProperty('metrics');
+    });
+  });
+
+  describe('GET /creators/me/dashboard/earnings', () => {
+    it('should return 200 with earnings chart', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/creators/me/dashboard/earnings?period=30d')
+        .expect(200);
+
+      expect(creatorsService.getDashboardEarnings).toHaveBeenCalledWith(
+        mockUser.id,
+        expect.objectContaining({ period: '30d' }),
+      );
+      expect(response.body).toHaveProperty('period', '30d');
+      expect(response.body).toHaveProperty('totalGross', 12000000);
+    });
+  });
+
+  describe('GET /creators/me/dashboard/contributions', () => {
+    it('should return 200 with paginated contributions', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/creators/me/dashboard/contributions?page=1&limit=10')
+        .expect(200);
+
+      expect(creatorsService.getDashboardContributions).toHaveBeenCalledWith(
+        mockUser.id,
+        expect.objectContaining({ page: 1, limit: 10 }),
+      );
+      expect(response.body).toHaveProperty('data');
+      expect(response.body).toHaveProperty('pagination');
+    });
+  });
+
+  describe('GET /creators/me/dashboard/balance', () => {
+    it('should return 200 with balance breakdown', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/creators/me/dashboard/balance')
+        .expect(200);
+
+      expect(creatorsService.getDashboardBalance).toHaveBeenCalledWith(
+        mockUser.id,
+      );
+      expect(response.body).toHaveProperty('availableBalance', 9800000);
+      expect(response.body).toHaveProperty('canWithdraw', true);
     });
   });
 });

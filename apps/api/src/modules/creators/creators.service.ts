@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  Optional,
   NotFoundException,
   ConflictException,
   BadRequestException,
@@ -10,6 +11,9 @@ import {
   STORAGE_PROVIDER,
   StorageProvider,
 } from '../../infrastructure/storage/storage-provider.interface';
+import { LedgerService } from '../ledger/ledger.service';
+import { AccountType, PayoutStatus } from '@buymeayard/types';
+import { ErrorCodes } from '../../common/errors/error-codes';
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
@@ -17,14 +21,30 @@ import { CreateCustomMaterialDto } from './dto/create-custom-material.dto';
 import { CreatorShareLinkDataDto } from './dto/share-link.dto';
 import { UpdateCreatorSettingsDto } from './dto/update-creator-settings.dto';
 import { UpdatePageStatusDto } from './dto/update-page-status.dto';
+import {
+  CreatorDashboardResponseDto,
+  DashboardMetricsDto,
+  DashboardBalanceDto,
+  DashboardContributionDto,
+  DashboardEarningsChartDto,
+  DashboardEarningsQueryDto,
+  DashboardContributionsQueryDto,
+  DashboardContributionsListResponseDto,
+} from './dto/creator-dashboard.dto';
 
 @Injectable()
 export class CreatorsService {
+  private readonly ledger: LedgerService;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(STORAGE_PROVIDER)
     private readonly storage: StorageProvider,
-  ) {}
+    @Optional()
+    ledgerService?: LedgerService,
+  ) {
+    this.ledger = ledgerService || new LedgerService(this.prisma);
+  }
 
   async findAll(_query?: { search?: string }) {
     const where: any = {
@@ -1259,5 +1279,576 @@ export class CreatorsService {
         telegram: `https://t.me/share/url?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(shareText)}`,
       },
     };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Creator Overview Dashboard Methods
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async getDashboardOverview(
+    userId: string,
+    period: '7d' | '30d' | '90d' | '12m' | 'all' = '30d',
+  ): Promise<CreatorDashboardResponseDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      include: {
+        payoutMethods: true,
+        user: true,
+      },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    const [metrics, balance, recentContributions, earningsChart] =
+      await Promise.all([
+        this.getDashboardMetrics(creator.id),
+        this.getDashboardBalanceForCreator(creator),
+        this.getRecentContributions(creator.id, 5),
+        this.buildEarningsChart(creator.id, period),
+      ]);
+
+    const frontendUrl =
+      process.env.FRONTEND_URL ||
+      process.env.CREATOR_FRONTEND_URL ||
+      'http://localhost:3000';
+
+    let pageStatus = 'DRAFT';
+    let pageStatusLabel = 'Draft';
+    if (creator.status === 'ACTIVE' && creator.isPublished) {
+      pageStatus = 'LIVE';
+      pageStatusLabel = 'Page is live';
+    } else if (creator.isPublished) {
+      pageStatus = 'PUBLISHED';
+      pageStatusLabel = 'Published';
+    } else if (creator.status === 'SUSPENDED') {
+      pageStatus = 'SUSPENDED';
+      pageStatusLabel = 'Suspended';
+    }
+
+    const cleanSlug = (creator.slug || '').replace(/^@+/, '').trim();
+    const publicUrl = `${frontendUrl.replace(/\/+$/, '')}/${cleanSlug}`;
+
+    return {
+      creator: {
+        id: creator.id,
+        creatorName: creator.creatorName || creator.user?.name || '',
+        slug: cleanSlug,
+        avatarUrl: creator.avatarUrl,
+        status: creator.status,
+        isPublished: creator.isPublished,
+        pageStatus,
+        pageStatusLabel,
+        publicUrl,
+      },
+      metrics,
+      balance,
+      recentContributions,
+      earningsChart,
+    };
+  }
+
+  async getDashboardBalance(userId: string): Promise<DashboardBalanceDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      include: {
+        payoutMethods: true,
+      },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    return this.getDashboardBalanceForCreator(creator);
+  }
+
+  async getDashboardEarnings(
+    userId: string,
+    query?: DashboardEarningsQueryDto,
+  ): Promise<DashboardEarningsChartDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    return this.buildEarningsChart(creator.id, query?.period || '30d');
+  }
+
+  async getDashboardContributions(
+    userId: string,
+    query?: DashboardContributionsQueryDto,
+  ): Promise<DashboardContributionsListResponseDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    const page = Math.max(1, query?.page || 1);
+    const limit = Math.min(50, Math.max(1, query?.limit || 10));
+    const skip = (page - 1) * limit;
+
+    const [total, supports] = await Promise.all([
+      this.prisma.support.count({
+        where: {
+          creatorId: creator.id,
+          status: { in: ['PAID', 'COMPLETED'] },
+        },
+      }),
+      this.prisma.support.findMany({
+        where: {
+          creatorId: creator.id,
+          status: { in: ['PAID', 'COMPLETED'] },
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip,
+        take: limit,
+        include: {
+          supporter: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+            },
+          },
+          items: {
+            include: {
+              creatorMaterial: {
+                include: {
+                  material: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    const data: DashboardContributionDto[] = supports.map((support) => {
+      const isAnonymous = support.isAnonymous;
+      const supporterName = isAnonymous
+        ? 'Anonymous'
+        : support.supporter?.name || 'Supporter';
+
+      const firstItem = support.items[0];
+      const material = firstItem
+        ? {
+            name: firstItem.materialNameSnapshot,
+            color: firstItem.creatorMaterial?.material?.color || null,
+            thumbnailUrl:
+              firstItem.creatorMaterial?.material?.thumbnailSmallUrl ||
+              firstItem.creatorMaterial?.material?.imageUrl ||
+              null,
+            quantity: support.items.reduce((acc, it) => acc + it.quantity, 0),
+          }
+        : null;
+
+      return {
+        id: support.id,
+        supporter: {
+          id: isAnonymous ? null : support.supporter?.id || null,
+          name: supporterName,
+          initials: this.extractInitials(supporterName),
+          avatarUrl: isAnonymous ? null : support.supporter?.image || null,
+          isAnonymous,
+        },
+        material,
+        message: support.message || null,
+        amount: support.totalAmount,
+        creatorAmount: support.creatorAmount,
+        currency: support.currency,
+        createdAt: support.createdAt,
+      };
+    });
+
+    return {
+      data,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit) || 1,
+      },
+    };
+  }
+
+  private async getDashboardMetrics(
+    creatorId: string,
+  ): Promise<DashboardMetricsDto> {
+    const agg = await this.prisma.support.aggregate({
+      where: {
+        creatorId,
+        status: { in: ['PAID', 'COMPLETED'] },
+      },
+      _count: {
+        id: true,
+      },
+      _sum: {
+        totalAmount: true,
+        creatorAmount: true,
+        platformFee: true,
+      },
+    });
+
+    return {
+      totalContributions: agg._count.id || 0,
+      totalContributionAmount: agg._sum.totalAmount || 0,
+      netEarnings: agg._sum.creatorAmount || 0,
+      platformFees: agg._sum.platformFee || 0,
+      currency: 'NGN',
+    };
+  }
+
+  private async getDashboardBalanceForCreator(
+    creator: any,
+  ): Promise<DashboardBalanceDto> {
+    const account = await this.ledger.getOrCreateAccount(
+      AccountType.CREATOR,
+      creator.id,
+      'NGN',
+    );
+    const availableBalance = await this.ledger.getAccountBalance(account.id);
+
+    const pendingPayoutsAgg = await this.prisma.payout.aggregate({
+      where: {
+        creatorId: creator.id,
+        status: {
+          in: [
+            PayoutStatus.REQUESTED,
+            PayoutStatus.PENDING,
+            PayoutStatus.PROCESSING,
+          ],
+        },
+      },
+      _sum: {
+        amount: true,
+      },
+    });
+    const pendingBalance = pendingPayoutsAgg._sum.amount || 0;
+
+    const completedPayoutsAgg = await this.prisma.payout.aggregate({
+      where: {
+        creatorId: creator.id,
+        status: PayoutStatus.SUCCESS,
+      },
+      _sum: {
+        amount: true,
+      },
+    });
+    const withdrawnToDate = completedPayoutsAgg._sum.amount || 0;
+
+    const hasPayoutMethod = (creator.payoutMethods || []).length > 0;
+    const canWithdraw =
+      creator.kycStatus === 'VERIFIED' &&
+      creator.status === 'ACTIVE' &&
+      availableBalance > 0 &&
+      hasPayoutMethod;
+
+    return {
+      availableBalance,
+      pendingBalance,
+      withdrawnToDate,
+      currency: 'NGN',
+      canWithdraw,
+      kycStatus: creator.kycStatus,
+      hasPayoutMethod,
+    };
+  }
+
+  private async getRecentContributions(
+    creatorId: string,
+    limit = 5,
+  ): Promise<DashboardContributionDto[]> {
+    const supports = await this.prisma.support.findMany({
+      where: {
+        creatorId,
+        status: { in: ['PAID', 'COMPLETED'] },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: limit,
+      include: {
+        supporter: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+          },
+        },
+        items: {
+          include: {
+            creatorMaterial: {
+              include: {
+                material: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    return supports.map((support) => {
+      const isAnonymous = support.isAnonymous;
+      const supporterName = isAnonymous
+        ? 'Anonymous'
+        : support.supporter?.name || 'Supporter';
+
+      const firstItem = support.items[0];
+      const material = firstItem
+        ? {
+            name: firstItem.materialNameSnapshot,
+            color: firstItem.creatorMaterial?.material?.color || null,
+            thumbnailUrl:
+              firstItem.creatorMaterial?.material?.thumbnailSmallUrl ||
+              firstItem.creatorMaterial?.material?.imageUrl ||
+              null,
+            quantity: support.items.reduce((acc, it) => acc + it.quantity, 0),
+          }
+        : null;
+
+      return {
+        id: support.id,
+        supporter: {
+          id: isAnonymous ? null : support.supporter?.id || null,
+          name: supporterName,
+          initials: this.extractInitials(supporterName),
+          avatarUrl: isAnonymous ? null : support.supporter?.image || null,
+          isAnonymous,
+        },
+        material,
+        message: support.message || null,
+        amount: support.totalAmount,
+        creatorAmount: support.creatorAmount,
+        currency: support.currency,
+        createdAt: support.createdAt,
+      };
+    });
+  }
+
+  private async buildEarningsChart(
+    creatorId: string,
+    period: '7d' | '30d' | '90d' | '12m' | 'all' = '30d',
+  ): Promise<DashboardEarningsChartDto> {
+    const now = new Date();
+    let startDate: Date | null = null;
+    let interval: 'day' | 'week' | 'month' = 'day';
+
+    if (period === '7d') {
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 6);
+      startDate.setHours(0, 0, 0, 0);
+      interval = 'day';
+    } else if (period === '30d') {
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 29);
+      startDate.setHours(0, 0, 0, 0);
+      interval = 'day';
+    } else if (period === '90d') {
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 89);
+      startDate.setHours(0, 0, 0, 0);
+      interval = 'week';
+    } else if (period === '12m') {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+      interval = 'month';
+    } else if (period === 'all') {
+      const earliest = await this.prisma.support.findFirst({
+        where: { creatorId, status: { in: ['PAID', 'COMPLETED'] } },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      });
+      startDate = earliest
+        ? new Date(
+            earliest.createdAt.getFullYear(),
+            earliest.createdAt.getMonth(),
+            1,
+          )
+        : new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      interval = 'month';
+    }
+
+    const buckets: {
+      key: string;
+      date: string;
+      label: string;
+      startDate: Date;
+      endDate: Date;
+      grossAmount: number;
+      netAmount: number;
+      contributionsCount: number;
+    }[] = [];
+
+    if (interval === 'day') {
+      const cur = new Date(startDate!);
+      while (cur <= now) {
+        const key = cur.toISOString().split('T')[0];
+        const dayStart = new Date(cur);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(cur);
+        dayEnd.setHours(23, 59, 59, 999);
+        const label = cur.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        });
+        buckets.push({
+          key,
+          date: key,
+          label,
+          startDate: dayStart,
+          endDate: dayEnd,
+          grossAmount: 0,
+          netAmount: 0,
+          contributionsCount: 0,
+        });
+        cur.setDate(cur.getDate() + 1);
+      }
+    } else if (interval === 'week') {
+      const cur = new Date(startDate!);
+      let weekIndex = 1;
+      while (cur <= now) {
+        const key = cur.toISOString().split('T')[0];
+        const weekStart = new Date(cur);
+        weekStart.setHours(0, 0, 0, 0);
+        const nextCur = new Date(cur);
+        nextCur.setDate(cur.getDate() + 6);
+        nextCur.setHours(23, 59, 59, 999);
+        const label = cur.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        });
+        buckets.push({
+          key: `w-${weekIndex}-${key}`,
+          date: key,
+          label,
+          startDate: weekStart,
+          endDate: nextCur,
+          grossAmount: 0,
+          netAmount: 0,
+          contributionsCount: 0,
+        });
+        cur.setDate(cur.getDate() + 7);
+        weekIndex++;
+      }
+    } else {
+      const cur = new Date(startDate!.getFullYear(), startDate!.getMonth(), 1);
+      while (cur <= now) {
+        const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`;
+        const mStart = new Date(
+          cur.getFullYear(),
+          cur.getMonth(),
+          1,
+          0,
+          0,
+          0,
+          0,
+        );
+        const mEnd = new Date(
+          cur.getFullYear(),
+          cur.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        );
+        const label = cur.toLocaleDateString('en-US', {
+          month: 'short',
+          year: cur.getFullYear() !== now.getFullYear() ? '2-digit' : undefined,
+        });
+        buckets.push({
+          key,
+          date: key,
+          label,
+          startDate: mStart,
+          endDate: mEnd,
+          grossAmount: 0,
+          netAmount: 0,
+          contributionsCount: 0,
+        });
+        cur.setMonth(cur.getMonth() + 1);
+      }
+    }
+
+    const supports = await this.prisma.support.findMany({
+      where: {
+        creatorId,
+        status: { in: ['PAID', 'COMPLETED'] },
+        ...(startDate ? { createdAt: { gte: startDate, lte: now } } : {}),
+      },
+      select: {
+        totalAmount: true,
+        creatorAmount: true,
+        platformFee: true,
+        createdAt: true,
+      },
+    });
+
+    let totalGross = 0;
+    let totalFees = 0;
+    let totalNet = 0;
+
+    for (const sup of supports) {
+      totalGross += sup.totalAmount;
+      totalFees += sup.platformFee;
+      totalNet += sup.creatorAmount;
+
+      const t = sup.createdAt.getTime();
+      const bucket = buckets.find(
+        (b) => t >= b.startDate.getTime() && t <= b.endDate.getTime(),
+      );
+      if (bucket) {
+        bucket.grossAmount += sup.totalAmount;
+        bucket.netAmount += sup.creatorAmount;
+        bucket.contributionsCount += 1;
+      }
+    }
+
+    const dataPoints = buckets.map((b) => ({
+      date: b.date,
+      label: b.label,
+      grossAmount: b.grossAmount,
+      netAmount: b.netAmount,
+      contributionsCount: b.contributionsCount,
+    }));
+
+    return {
+      period,
+      totalGross,
+      totalFees,
+      totalNet,
+      currency: 'NGN',
+      dataPoints,
+    };
+  }
+
+  private extractInitials(name: string): string {
+    if (!name || !name.trim()) return '??';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) {
+      return parts[0].substring(0, 2).toUpperCase();
+    }
+    return (parts[0][0] + parts[1][0]).toUpperCase();
   }
 }
