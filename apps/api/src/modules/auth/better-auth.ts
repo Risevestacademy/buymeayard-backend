@@ -1,10 +1,14 @@
-import { betterAuth } from 'better-auth';
+import { betterAuth, APIError } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
 import * as crypto from 'crypto';
-import { isMobileRequest } from '../../common/utils/client-detection.util';
+import {
+  isMobileRequest,
+  isMobileRedirectUrl,
+} from '../../common/utils/client-detection.util';
+import { ErrorCodes } from '../../common/errors/error-codes';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { USER_EVENTS } from '../analytics/events/user.events';
 
@@ -216,7 +220,7 @@ export function createBetterAuth(
       skipStateCookieCheck: true,
       accountLinking: {
         enabled: true,
-        trustedProviders: ['google'],
+        trustedProviders: ['google', 'apple'],
         requireLocalEmailVerified: false,
       },
     } as any,
@@ -239,18 +243,22 @@ export function createBetterAuth(
       google: {
         clientId: process.env.GOOGLE_CLIENT_ID || '',
         clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+        disableSignUp: true,
       },
       apple: {
         clientId: process.env.APPLE_CLIENT_ID || '',
         clientSecret: resolveAppleClientSecret(),
+        disableSignUp: true,
       },
       twitter: {
         clientId: process.env.TWITTER_CLIENT_ID || '',
         clientSecret: process.env.TWITTER_CLIENT_SECRET || '',
+        disableSignUp: true,
       },
       facebook: {
         clientId: process.env.FACEBOOK_CLIENT_ID || '',
         clientSecret: process.env.FACEBOOK_CLIENT_SECRET || '',
+        disableSignUp: true,
       },
     },
     emailAndPassword: {
@@ -372,6 +380,25 @@ export function createBetterAuth(
     databaseHooks: {
       user: {
         create: {
+          before: async (_user: any, context?: any) => {
+            const reqHeaders = context?.headers || context?.request?.headers;
+            const callbackURL =
+              context?.body?.callbackURL ||
+              context?.query?.callbackURL ||
+              context?.context?.callbackURL;
+            const isMobile =
+              (reqHeaders && isMobileRequest(reqHeaders)) ||
+              (callbackURL && isMobileRedirectUrl(callbackURL, reqHeaders));
+
+            if (isMobile) {
+              // eslint-disable-next-line @typescript-eslint/only-throw-error
+              throw new APIError('FORBIDDEN', {
+                code: ErrorCodes.REGISTRATION_WEB_ONLY,
+                message:
+                  'Account registration is only available on web. Please visit our website to create an account.',
+              });
+            }
+          },
           after: async (user: any) => {
             if (eventEmitter) {
               eventEmitter.emit(USER_EVENTS.CREATED, {
@@ -394,6 +421,34 @@ export function createBetterAuth(
        */
       session: {
         create: {
+          before: async (session: any, context?: any) => {
+            const reqHeaders = context?.headers || context?.request?.headers;
+            const callbackURL =
+              context?.body?.callbackURL ||
+              context?.query?.callbackURL ||
+              context?.context?.callbackURL;
+
+            const isMobile =
+              (reqHeaders && isMobileRequest(reqHeaders)) ||
+              (callbackURL && isMobileRedirectUrl(callbackURL, reqHeaders));
+
+            if (isMobile) {
+              const userRole = await prisma.userRole.findFirst({
+                where: {
+                  userId: session.userId,
+                  role: { name: 'CREATOR' },
+                },
+              });
+              if (!userRole) {
+                // eslint-disable-next-line @typescript-eslint/only-throw-error
+                throw new APIError('FORBIDDEN', {
+                  code: ErrorCodes.MOBILE_ACCESS_DENIED,
+                  message:
+                    'The mobile app is only available for creators. Please use the web platform or apply to become a creator.',
+                });
+              }
+            }
+          },
           after: async (session: any) => {
             if (eventEmitter) {
               try {
@@ -484,6 +539,7 @@ export function createBetterAuth(
             tokenUrl: 'https://api.instagram.com/oauth/access_token',
             userInfoUrl: 'https://graph.instagram.com/me?fields=id,username',
             scopes: ['user_profile'],
+            disableSignUp: true,
           },
           {
             providerId: 'tiktok',
@@ -493,6 +549,7 @@ export function createBetterAuth(
             tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
             userInfoUrl: 'https://open.tiktokapis.com/v2/user/info/',
             scopes: ['user.info.basic'],
+            disableSignUp: true,
           },
         ],
       }),

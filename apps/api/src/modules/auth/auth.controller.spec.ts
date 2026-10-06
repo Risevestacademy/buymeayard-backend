@@ -30,6 +30,8 @@ describe('AuthController', () => {
     userHasRole: jest.Mock;
     getIsOnboarded: jest.Mock;
     getUserAuthFlags: jest.Mock;
+    revokeSessionByToken: jest.Mock;
+    getSessionByToken: jest.Mock;
   };
 
   const createMockReqRes = (headers: Record<string, string> = {}) => {
@@ -76,6 +78,8 @@ describe('AuthController', () => {
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
       }),
+      revokeSessionByToken: jest.fn().mockResolvedValue(null),
+      getSessionByToken: jest.fn().mockResolvedValue(null),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -172,6 +176,30 @@ describe('AuthController', () => {
         HttpException,
       );
     });
+
+    it('should reject mobile registration requests with 403 Forbidden and REGISTRATION_WEB_ONLY', async () => {
+      const dto = {
+        email: 'mobile@example.com',
+        password: 'Password123!',
+        name: 'Mobile User',
+      };
+      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
+
+      await expect(controller.register(dto, req, res)).rejects.toThrow(
+        HttpException,
+      );
+
+      try {
+        await controller.register(dto, req, res);
+      } catch (err: any) {
+        expect(err.getStatus()).toBe(HttpStatus.FORBIDDEN);
+        expect(err.getResponse()).toMatchObject({
+          code: 'REGISTRATION_WEB_ONLY',
+        });
+      }
+
+      expect(authService.signUpEmail).not.toHaveBeenCalled();
+    });
   });
 
   // --------------------------------------------------------
@@ -231,6 +259,34 @@ describe('AuthController', () => {
         'authorization',
         expect.stringContaining('Bearer'),
       );
+    });
+
+    it('should reject non-creator mobile logins with 403 Forbidden and MOBILE_ACCESS_DENIED and revoke session', async () => {
+      const dto = { email: 'supporter@example.com', password: 'Password123!' };
+      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
+
+      authService.signInEmail.mockImplementation(() =>
+        createSuccessResponse({
+          user: { id: 'u1' },
+          token: 'token456',
+        }),
+      );
+      authService.userHasRole.mockResolvedValue(false);
+
+      await expect(controller.login(dto, req, res)).rejects.toThrow(
+        HttpException,
+      );
+
+      try {
+        await controller.login(dto, req, res);
+      } catch (err: any) {
+        expect(err.getStatus()).toBe(HttpStatus.FORBIDDEN);
+        expect(err.getResponse()).toMatchObject({
+          code: 'MOBILE_ACCESS_DENIED',
+        });
+      }
+
+      expect(authService.revokeSessionByToken).toHaveBeenCalledWith('token456');
     });
   });
 

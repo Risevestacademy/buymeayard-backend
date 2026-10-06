@@ -233,4 +233,27 @@ export class AuthService implements OnModuleInit {
       isProfileSetupCompleted: isCompleted,
     };
   }
+
+  /**
+   * Look up an active session and user by session token.
+   */
+  async getSessionByToken(token: string) {
+    return this.prisma.session.findUnique({
+      where: { token },
+      include: {
+        user: true,
+      },
+    });
+  }
+
+  /**
+   * Invalidate / delete a session by session token.
+   */
+  async revokeSessionByToken(token: string) {
+    return this.prisma.session
+      .delete({
+        where: { token },
+      })
+      .catch(() => null);
+  }
 }
