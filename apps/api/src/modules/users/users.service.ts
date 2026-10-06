@@ -34,6 +34,7 @@ export class UsersService {
             creatorName: true,
             status: true,
             kycStatus: true,
+            kycBlockedReason: true,
           },
         },
       },
@@ -67,6 +68,7 @@ export class UsersService {
             creatorName: user.creatorProfile.creatorName || user.name || '',
             status: user.creatorProfile.status,
             kycStatus: user.creatorProfile.kycStatus,
+            kycBlockedReason: user.creatorProfile.kycBlockedReason ?? null,
           }
         : null,
       createdAt: user.createdAt,

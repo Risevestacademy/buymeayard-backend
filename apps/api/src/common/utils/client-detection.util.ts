@@ -188,3 +188,18 @@ export function appendTokenToUrl(rawUrl: string, token: string): string {
     return `${rawUrl}${sep}token=${encodeURIComponent(token)}`;
   }
 }
+
+/**
+ * Appends an error code to a callback URL (preserving any existing search parameters).
+ */
+export function appendErrorToUrl(rawUrl: string, error: string): string {
+  if (!rawUrl || !error) return rawUrl;
+  try {
+    const parsed = new URL(rawUrl);
+    parsed.searchParams.set('error', error);
+    return parsed.toString();
+  } catch {
+    const sep = rawUrl.includes('?') ? '&' : '?';
+    return `${rawUrl}${sep}error=${encodeURIComponent(error)}`;
+  }
+}

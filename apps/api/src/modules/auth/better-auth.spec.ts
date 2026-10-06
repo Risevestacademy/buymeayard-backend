@@ -13,6 +13,15 @@ jest.mock('better-auth', () => ({
     _config: config,
     api: {},
   })),
+  APIError: class MockAPIError extends Error {
+    status: string;
+    body: any;
+    constructor(status: string, body?: any) {
+      super(body?.message || status);
+      this.status = status;
+      this.body = body;
+    }
+  },
 }));
 
 jest.mock('better-auth/adapters/prisma', () => ({
@@ -257,15 +266,137 @@ describe('createBetterAuth', () => {
       expect(passedConfig.trustedOrigins).toContain('bmay-preview://');
     });
 
-    it('should configure Google account linking with requireLocalEmailVerified disabled', () => {
+    it('should configure Google and Apple account linking with requireLocalEmailVerified disabled', () => {
       createBetterAuth(mockPrisma);
       const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
 
       expect(passedConfig.account?.accountLinking).toEqual({
         enabled: true,
-        trustedProviders: ['google'],
+        trustedProviders: ['google', 'apple'],
         requireLocalEmailVerified: false,
       });
+    });
+
+    it('should configure disableSignUp: true on all social providers', () => {
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      expect(passedConfig.socialProviders.google.disableSignUp).toBe(true);
+      expect(passedConfig.socialProviders.apple.disableSignUp).toBe(true);
+      expect(passedConfig.socialProviders.twitter.disableSignUp).toBe(true);
+      expect(passedConfig.socialProviders.facebook.disableSignUp).toBe(true);
+    });
+  });
+
+  describe('mobile gating databaseHooks', () => {
+    it('should reject mobile registration attempts with REGISTRATION_WEB_ONLY', async () => {
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      expect(passedConfig.databaseHooks?.user?.create?.before).toBeDefined();
+
+      const contextWithMobileHeader = {
+        headers: { 'x-client-type': 'mobile' },
+      };
+
+      await expect(
+        passedConfig.databaseHooks.user.create.before(
+          { id: 'user-new', email: 'test@example.com' },
+          contextWithMobileHeader,
+        ),
+      ).rejects.toThrow();
+
+      try {
+        await passedConfig.databaseHooks.user.create.before(
+          { id: 'user-new', email: 'test@example.com' },
+          contextWithMobileHeader,
+        );
+      } catch (err: any) {
+        expect(err.body?.code).toBe('REGISTRATION_WEB_ONLY');
+      }
+    });
+
+    it('should allow web registration in user.create.before', async () => {
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      const webContext = {
+        headers: { 'user-agent': 'Mozilla/5.0 Chrome/120.0' },
+      };
+
+      await expect(
+        passedConfig.databaseHooks.user.create.before(
+          { id: 'user-web', email: 'web@example.com' },
+          webContext,
+        ),
+      ).resolves.not.toThrow();
+    });
+
+    it('should reject mobile session creation for non-creator with MOBILE_ACCESS_DENIED', async () => {
+      mockPrisma.userRole.findFirst = jest.fn().mockResolvedValue(null);
+
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      const mobileContext = {
+        headers: { 'x-client-type': 'mobile' },
+      };
+
+      await expect(
+        passedConfig.databaseHooks.session.create.before(
+          { id: 's-1', userId: 'supporter-1' },
+          mobileContext,
+        ),
+      ).rejects.toThrow();
+
+      try {
+        await passedConfig.databaseHooks.session.create.before(
+          { id: 's-1', userId: 'supporter-1' },
+          mobileContext,
+        );
+      } catch (err: any) {
+        expect(err.body?.code).toBe('MOBILE_ACCESS_DENIED');
+      }
+    });
+
+    it('should allow mobile session creation for creator users', async () => {
+      mockPrisma.userRole.findFirst = jest.fn().mockResolvedValue({
+        id: 'ur-1',
+        userId: 'creator-1',
+        role: { name: 'CREATOR' },
+      });
+
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      const mobileContext = {
+        headers: { 'x-client-type': 'mobile' },
+      };
+
+      await expect(
+        passedConfig.databaseHooks.session.create.before(
+          { id: 's-2', userId: 'creator-1' },
+          mobileContext,
+        ),
+      ).resolves.not.toThrow();
+    });
+
+    it('should allow web session creation for any user', async () => {
+      mockPrisma.userRole.findFirst = jest.fn().mockResolvedValue(null);
+
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      const webContext = {
+        headers: { 'user-agent': 'Mozilla/5.0 Chrome/120.0' },
+      };
+
+      await expect(
+        passedConfig.databaseHooks.session.create.before(
+          { id: 's-3', userId: 'supporter-1' },
+          webContext,
+        ),
+      ).resolves.not.toThrow();
     });
   });
 });

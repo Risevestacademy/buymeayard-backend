@@ -83,6 +83,17 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    if (isMobileRequest(req.headers)) {
+      throw new HttpException(
+        {
+          code: ErrorCodes.REGISTRATION_WEB_ONLY,
+          message:
+            'Account registration is only available on web. Please visit our website to create an account.',
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
     const webRes = await this.authService.signUpEmail({
       ...dto,
       headers: fromNodeHeaders(req.headers),
@@ -124,11 +135,33 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const isMobile = isMobileRequest(req.headers);
     const webRes = await this.authService.signInEmail({
       ...dto,
       headers: fromNodeHeaders(req.headers),
     });
     const body = await this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
+
+    if (isMobile && body && typeof body === 'object' && body.user?.id) {
+      const isCreator = await this.authService.userHasRole(
+        body.user.id,
+        'CREATOR',
+      );
+      if (!isCreator) {
+        if (body.token) {
+          await this.authService.revokeSessionByToken(body.token);
+        }
+        throw new HttpException(
+          {
+            code: ErrorCodes.MOBILE_ACCESS_DENIED,
+            message:
+              'The mobile app is only available for creators. Please use the web platform or apply to become a creator.',
+          },
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    }
+
     if (body && typeof body === 'object' && body.user?.id) {
       const authFlags = await this.authService.getUserAuthFlags(body.user.id);
       Object.assign(body, authFlags);
@@ -526,6 +559,14 @@ export class AuthController {
           extractSessionTokenFromCookie(cookieVal) ||
           (res.getHeader('set-auth-token') as string | undefined) ||
           headersObj?.['set-auth-token'];
+
+        if (typeof res.removeHeader === 'function') {
+          res.removeHeader('set-cookie');
+        }
+        if (headersObj) {
+          delete headersObj['set-cookie'];
+          delete headersObj['Set-Cookie'];
+        }
 
         if (token) {
           const updatedLocation = appendTokenToUrl(location, token);
