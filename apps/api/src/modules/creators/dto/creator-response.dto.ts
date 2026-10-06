@@ -368,6 +368,14 @@ export class CreatorProfileDataDto {
   kycStatus: string;
 
   @ApiPropertyOptional({
+    example: 'Identity document unreadable or mismatched',
+    description:
+      'Reason why KYC verification was blocked or rejected by an administrator',
+    nullable: true,
+  })
+  kycBlockedReason?: string | null;
+
+  @ApiPropertyOptional({
     type: EmbeddedUserDto,
     description: 'Embedded user account details',
     nullable: true,
