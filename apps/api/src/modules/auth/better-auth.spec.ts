@@ -398,5 +398,143 @@ describe('createBetterAuth', () => {
         ),
       ).resolves.not.toThrow();
     });
+
+    it('should reject OAuth registration attempts when oauthState has a mobile callbackURL', async () => {
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      const oauthMobileContext = {
+        headers: { 'user-agent': 'Mozilla/5.0 Chrome/120.0' },
+        oauthState: {
+          callbackURL: 'bmay-dev://oauth-callback',
+        },
+      };
+
+      await expect(
+        passedConfig.databaseHooks.user.create.before(
+          { id: 'user-new', email: 'oauth@example.com' },
+          oauthMobileContext,
+        ),
+      ).rejects.toThrow();
+
+      try {
+        await passedConfig.databaseHooks.user.create.before(
+          { id: 'user-new', email: 'oauth@example.com' },
+          oauthMobileContext,
+        );
+      } catch (err: any) {
+        expect(err.body?.code).toBe('REGISTRATION_WEB_ONLY');
+      }
+    });
+
+    it('should reject OAuth session creation for non-creator when oauthState has a mobile callbackURL', async () => {
+      mockPrisma.userRole.findFirst = jest.fn().mockResolvedValue(null);
+
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      const oauthMobileContext = {
+        headers: { 'user-agent': 'Mozilla/5.0 Chrome/120.0' },
+        oauthState: {
+          callbackURL: 'bmay-dev://oauth-callback',
+        },
+      };
+
+      await expect(
+        passedConfig.databaseHooks.session.create.before(
+          { id: 's-oauth-1', userId: 'non-creator-user' },
+          oauthMobileContext,
+        ),
+      ).rejects.toThrow();
+
+      try {
+        await passedConfig.databaseHooks.session.create.before(
+          { id: 's-oauth-1', userId: 'non-creator-user' },
+          oauthMobileContext,
+        );
+      } catch (err: any) {
+        expect(err.body?.code).toBe('MOBILE_ACCESS_DENIED');
+      }
+    });
+
+    it('should allow OAuth session creation for creator users when oauthState has a mobile callbackURL', async () => {
+      mockPrisma.userRole.findFirst = jest.fn().mockResolvedValue({
+        id: 'ur-1',
+        userId: 'creator-oauth-user',
+        role: { name: 'CREATOR' },
+      });
+
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      const oauthMobileContext = {
+        headers: { 'user-agent': 'Mozilla/5.0 Chrome/120.0' },
+        oauthState: {
+          callbackURL: 'bmay-dev://oauth-callback',
+        },
+      };
+
+      await expect(
+        passedConfig.databaseHooks.session.create.before(
+          { id: 's-oauth-2', userId: 'creator-oauth-user' },
+          oauthMobileContext,
+        ),
+      ).resolves.not.toThrow();
+    });
+
+    it('should automatically set errorCallbackURL in hooks.before when social sign-in has a mobile callbackURL', async () => {
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      const ctx: any = {
+        path: '/sign-in/social',
+        headers: {},
+        body: {
+          callbackURL: 'buymeayard://oauth-callback',
+        },
+      };
+
+      await passedConfig.hooks.before(ctx);
+
+      expect(ctx.body.errorCallbackURL).toBe('buymeayard://oauth-callback');
+    });
+
+    it('should reject weak newPassword in hooks.before on /reset-password', async () => {
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      const weakCtx: any = {
+        path: '/reset-password',
+        headers: {},
+        body: {
+          token: 'some-token',
+          newPassword: 'weakpassword',
+        },
+      };
+
+      await expect(passedConfig.hooks.before(weakCtx)).rejects.toThrow();
+
+      try {
+        await passedConfig.hooks.before(weakCtx);
+      } catch (err: any) {
+        expect(err.body?.code).toBe('INVALID_PASSWORD');
+      }
+    });
+
+    it('should allow strong newPassword in hooks.before on /reset-password', async () => {
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      const strongCtx: any = {
+        path: '/reset-password',
+        headers: {},
+        body: {
+          token: 'some-token',
+          newPassword: 'StrongPassword123!',
+        },
+      };
+
+      await expect(passedConfig.hooks.before(strongCtx)).resolves.not.toThrow();
+    });
   });
 });
