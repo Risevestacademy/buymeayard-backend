@@ -466,9 +466,12 @@ When fetching contributions for the dashboard:
 
 | Endpoint | Method | Purpose | Status in Codebase |
 | :--- | :--- | :--- | :--- |
-| `/api/v1/creators/me/overview` | `GET` | **Single aggregated endpoint** for full dashboard render | ⏳ **Needs Implementation** |
-| `/api/v1/creators/me/balance` | `GET` | Real-time available, pending, withdrawn balances | ⚠️ Needs Pending & Withdrawn fields |
-| `/api/v1/creators/me/recent-contributions` | `GET` | Recent gifts list with supporter & fabric badges | ⏳ **Needs Implementation** |
-| `/api/v1/creators/me/analytics/earnings` | `GET` | Time-series bar chart data points | ⏳ **Needs Implementation** |
-| `/api/v1/creators/me/share-link` | `GET` | QR Code and share modal data | ⏳ **Needs Implementation** |
-| `/api/v1/creators/me/payouts` | `POST` | Execute withdrawal from balance card | ✅ Exists (needs bank details integration) |
+| `/api/v1/creators/me/overview` (alias `/dashboard`) | `GET` | **Single aggregated endpoint** for full dashboard render | ✅ Implemented |
+| `/api/v1/creators/me/dashboard/metrics` (alias `/me/metrics`) | `GET` | Summary KPI metrics (contributions, gross, net, fees) | ✅ Implemented |
+| `/api/v1/creators/me/dashboard/balance` (alias `/me/balance`) | `GET` | Real-time available, pending, withdrawn balances | ✅ Implemented |
+| `/api/v1/creators/me/dashboard/recent-contributions` (alias `/me/recent-contributions`) | `GET` | Recent gifts list with supporter & fabric badges | ✅ Implemented |
+| `/api/v1/creators/me/dashboard/earnings` (alias `/me/analytics/earnings`) | `GET` | Time-series bar chart data points | ✅ Implemented |
+| `/api/v1/creators/me/dashboard/contributions` | `GET` | Paginated contributions table with search/filters | ✅ Implemented |
+| `/api/v1/creators/me/share-link` | `GET` | QR Code and share modal data | ✅ Implemented |
+| `/api/v1/creators/me/payouts` | `POST` | Execute withdrawal from balance card | ✅ Implemented |
+

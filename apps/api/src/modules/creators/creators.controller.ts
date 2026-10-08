@@ -49,6 +49,9 @@ import {
   DashboardEarningsQueryDto,
   DashboardContributionsQueryDto,
   DashboardContributionsListResponseDto,
+  DashboardMetricsDto,
+  DashboardContributionDto,
+  DashboardRecentContributionsQueryDto,
 } from './dto/creator-dashboard.dto';
 
 @ApiTags('creators')
@@ -242,6 +245,111 @@ export class CreatorsController {
     return this.creatorsService.getDashboardContributions(userId, query);
   }
 
+  @Get('me/dashboard/metrics')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Get creator summary KPI metrics',
+    description:
+      'Returns key metrics (total contributions count, gross contribution amount before charges, net creator earnings after charges, platform fees).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Creator dashboard metrics returned successfully.',
+    type: DashboardMetricsDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid session.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator profile not found.',
+    type: ApiErrorResponseDto,
+  })
+  async getDashboardMetrics(
+    @CurrentUser('id') userId: string,
+  ): Promise<DashboardMetricsDto> {
+    return this.creatorsService.getDashboardMetrics(userId);
+  }
+
+  @Get('me/metrics')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary:
+      'Get creator summary KPI metrics (alias for /creators/me/dashboard/metrics)',
+    description: 'Alias for GET /creators/me/dashboard/metrics.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Creator dashboard metrics returned successfully.',
+    type: DashboardMetricsDto,
+  })
+  async getMetricsAlias(
+    @CurrentUser('id') userId: string,
+  ): Promise<DashboardMetricsDto> {
+    return this.creatorsService.getDashboardMetrics(userId);
+  }
+
+  @Get('me/dashboard/recent-contributions')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Get recent contributions list for creator dashboard card',
+    description:
+      'Fetches latest gifts received by the creator (default 5, max 20) with supporter details and fabric swatches.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Recent contributions returned successfully.',
+    type: [DashboardContributionDto],
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid session.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator profile not found.',
+    type: ApiErrorResponseDto,
+  })
+  async getDashboardRecentContributions(
+    @CurrentUser('id') userId: string,
+    @Query() query: DashboardRecentContributionsQueryDto,
+  ): Promise<DashboardContributionDto[]> {
+    return this.creatorsService.getDashboardRecentContributions(
+      userId,
+      query?.limit,
+    );
+  }
+
+  @Get('me/recent-contributions')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary:
+      'Get recent contributions (alias for /creators/me/dashboard/recent-contributions)',
+    description:
+      'Alias for GET /creators/me/dashboard/recent-contributions matching CREATOR_DASHBOARD_OVERVIEW_ENDPOINTS.md spec.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Recent contributions returned successfully.',
+    type: [DashboardContributionDto],
+  })
+  async getRecentContributionsAlias(
+    @CurrentUser('id') userId: string,
+    @Query() query: DashboardRecentContributionsQueryDto,
+  ): Promise<DashboardContributionDto[]> {
+    return this.creatorsService.getDashboardRecentContributions(
+      userId,
+      query?.limit,
+    );
+  }
+
   @Get('me/dashboard/balance')
   @ApiBearerAuth()
   @ApiCookieAuth('better-auth.session_token')
@@ -269,6 +377,47 @@ export class CreatorsController {
     @CurrentUser('id') userId: string,
   ): Promise<DashboardBalanceDto> {
     return this.creatorsService.getDashboardBalance(userId);
+  }
+
+  @Get('me/balance')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary:
+      'Get creator balance overview (alias for /creators/me/dashboard/balance)',
+    description:
+      'Alias for GET /creators/me/dashboard/balance matching CREATOR_DASHBOARD_OVERVIEW_ENDPOINTS.md spec.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Creator balance overview returned successfully.',
+    type: DashboardBalanceDto,
+  })
+  async getBalanceAlias(
+    @CurrentUser('id') userId: string,
+  ): Promise<DashboardBalanceDto> {
+    return this.creatorsService.getDashboardBalance(userId);
+  }
+
+  @Get('me/analytics/earnings')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary:
+      'Get creator earnings chart data (alias for /creators/me/dashboard/earnings)',
+    description:
+      'Alias for GET /creators/me/dashboard/earnings matching CREATOR_DASHBOARD_OVERVIEW_ENDPOINTS.md spec.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Earnings chart data returned successfully.',
+    type: DashboardEarningsChartDto,
+  })
+  async getEarningsAlias(
+    @CurrentUser('id') userId: string,
+    @Query() query: DashboardEarningsQueryDto,
+  ): Promise<DashboardEarningsChartDto> {
+    return this.creatorsService.getDashboardEarnings(userId, query);
   }
 
   @Put('me/onboarding')

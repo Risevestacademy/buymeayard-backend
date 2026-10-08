@@ -43,6 +43,8 @@ describe('Creators Endpoints (HTTP Integration)', () => {
     getDashboardBalance: jest.Mock;
     getDashboardEarnings: jest.Mock;
     getDashboardContributions: jest.Mock;
+    getDashboardMetrics: jest.Mock;
+    getDashboardRecentContributions: jest.Mock;
   };
 
   const mockUser = {
@@ -262,6 +264,20 @@ describe('Creators Endpoints (HTTP Integration)', () => {
         data: [],
         pagination: { total: 0, page: 1, limit: 10, totalPages: 1 },
       }),
+      getDashboardMetrics: jest.fn().mockResolvedValue({
+        totalContributions: 24,
+        totalContributionAmount: 12000000,
+        netEarnings: 11400000,
+        platformFees: 600000,
+        currency: 'NGN',
+      }),
+      getDashboardRecentContributions: jest.fn().mockResolvedValue([
+        {
+          id: 'sup-1',
+          supporter: { name: 'Ada Okafor', initials: 'AO' },
+          amount: 500000,
+        },
+      ]),
     };
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -606,6 +622,72 @@ describe('Creators Endpoints (HTTP Integration)', () => {
       );
       expect(response.body).toHaveProperty('availableBalance', 9800000);
       expect(response.body).toHaveProperty('canWithdraw', true);
+    });
+  });
+
+  describe('GET /creators/me/dashboard/metrics and /creators/me/metrics', () => {
+    it('should return 200 with creator summary KPI metrics', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/creators/me/dashboard/metrics')
+        .expect(200);
+
+      expect(creatorsService.getDashboardMetrics).toHaveBeenCalledWith(
+        mockUser.id,
+      );
+      expect(response.body).toHaveProperty('totalContributions', 24);
+      expect(response.body).toHaveProperty('totalContributionAmount', 12000000);
+      expect(response.body).toHaveProperty('netEarnings', 11400000);
+
+      const aliasResponse = await request(app.getHttpServer())
+        .get('/creators/me/metrics')
+        .expect(200);
+
+      expect(aliasResponse.body).toHaveProperty('totalContributions', 24);
+    });
+  });
+
+  describe('GET /creators/me/dashboard/recent-contributions and /creators/me/recent-contributions', () => {
+    it('should return 200 with recent contributions list', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/creators/me/dashboard/recent-contributions?limit=5')
+        .expect(200);
+
+      expect(
+        creatorsService.getDashboardRecentContributions,
+      ).toHaveBeenCalledWith(mockUser.id, 5);
+      expect(Array.isArray(response.body)).toBe(true);
+      expect(response.body[0]).toHaveProperty('id', 'sup-1');
+
+      const aliasResponse = await request(app.getHttpServer())
+        .get('/creators/me/recent-contributions?limit=5')
+        .expect(200);
+
+      expect(Array.isArray(aliasResponse.body)).toBe(true);
+    });
+  });
+
+  describe('GET /creators/me/balance and /creators/me/analytics/earnings aliases', () => {
+    it('should route /creators/me/balance to balance endpoint', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/creators/me/balance')
+        .expect(200);
+
+      expect(creatorsService.getDashboardBalance).toHaveBeenCalledWith(
+        mockUser.id,
+      );
+      expect(response.body).toHaveProperty('availableBalance', 9800000);
+    });
+
+    it('should route /creators/me/analytics/earnings to earnings endpoint', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/creators/me/analytics/earnings?period=30d')
+        .expect(200);
+
+      expect(creatorsService.getDashboardEarnings).toHaveBeenCalledWith(
+        mockUser.id,
+        expect.objectContaining({ period: '30d' }),
+      );
+      expect(response.body).toHaveProperty('totalGross', 12000000);
     });
   });
 });

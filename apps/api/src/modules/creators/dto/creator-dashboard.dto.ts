@@ -457,3 +457,18 @@ export class DashboardContributionsListResponseDto {
   })
   pagination!: DashboardContributionsPaginationDto;
 }
+
+export class DashboardRecentContributionsQueryDto {
+  @ApiPropertyOptional({
+    example: 5,
+    description:
+      'Number of recent contributions to return (default: 5, max: 20)',
+    default: 5,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(20)
+  limit?: number = 5;
+}
