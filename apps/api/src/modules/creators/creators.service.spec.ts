@@ -1181,4 +1181,70 @@ describe('CreatorsService', () => {
       expect(res.data[1].material?.name).toBe('Lace');
     });
   });
+
+  describe('getDashboardMetrics', () => {
+    it('should throw NotFoundException if creator profile not found', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(service.getDashboardMetrics('non-existent')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should return aggregated KPI metrics for creator', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.aggregate.mockResolvedValue({
+        _count: { id: 15 },
+        _sum: {
+          totalAmount: 7500000,
+          creatorAmount: 7125000,
+          platformFee: 375000,
+        },
+      });
+
+      const metrics = await service.getDashboardMetrics('u-1');
+      expect(metrics.totalContributions).toBe(15);
+      expect(metrics.totalContributionAmount).toBe(7500000);
+      expect(metrics.netEarnings).toBe(7125000);
+      expect(metrics.platformFees).toBe(375000);
+      expect(metrics.currency).toBe('NGN');
+    });
+  });
+
+  describe('getDashboardRecentContributions', () => {
+    it('should throw NotFoundException if creator profile not found', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(
+        service.getDashboardRecentContributions('non-existent'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return recent contributions list with limit', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.findMany.mockResolvedValue([
+        {
+          id: 's-1',
+          totalAmount: 500000,
+          creatorAmount: 475000,
+          currency: 'NGN',
+          message: 'Great work!',
+          isAnonymous: false,
+          createdAt: new Date('2026-10-06T12:00:00Z'),
+          supporter: { id: 'u-1', name: 'Ada Okafor', image: null },
+          items: [
+            {
+              quantity: 1,
+              materialNameSnapshot: 'Ankara',
+              creatorMaterial: { material: { color: '#FF0000' } },
+            },
+          ],
+        },
+      ]);
+
+      const list = await service.getDashboardRecentContributions('u-1', 5);
+      expect(list).toHaveLength(1);
+      expect(list[0].id).toBe('s-1');
+      expect(list[0].supporter.name).toBe('Ada Okafor');
+      expect(list[0].material?.name).toBe('Ankara');
+    });
+  });
 });

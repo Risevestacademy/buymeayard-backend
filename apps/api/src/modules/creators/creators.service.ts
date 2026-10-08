@@ -1306,7 +1306,7 @@ export class CreatorsService {
 
     const [metrics, balance, recentContributions, earningsChart] =
       await Promise.all([
-        this.getDashboardMetrics(creator.id),
+        this.calculateDashboardMetrics(creator.id),
         this.getDashboardBalanceForCreator(creator),
         this.getRecentContributions(creator.id, 5),
         this.buildEarningsChart(creator.id, period),
@@ -1493,7 +1493,43 @@ export class CreatorsService {
     };
   }
 
-  private async getDashboardMetrics(
+  async getDashboardMetrics(userId: string): Promise<DashboardMetricsDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    return this.calculateDashboardMetrics(creator.id);
+  }
+
+  async getDashboardRecentContributions(
+    userId: string,
+    limit = 5,
+  ): Promise<DashboardContributionDto[]> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    const clampedLimit = Math.min(20, Math.max(1, limit || 5));
+    return this.getRecentContributions(creator.id, clampedLimit);
+  }
+
+  private async calculateDashboardMetrics(
     creatorId: string,
   ): Promise<DashboardMetricsDto> {
     const agg = await this.prisma.support.aggregate({
