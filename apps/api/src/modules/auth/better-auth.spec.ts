@@ -145,6 +145,8 @@ describe('createBetterAuth', () => {
         userId: 'user-42',
         email: 'logged-in@example.com',
         ipAddress: '203.0.113.195',
+        userAgent: undefined,
+        sessionId: 'sess-123',
       });
     });
 

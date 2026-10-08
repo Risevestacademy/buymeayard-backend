@@ -26,13 +26,14 @@ model User {
   accounts      AuthAccount[]
   
   // Domain Relations
-  roles          UserRole[]
-  creatorProfile CreatorProfile?
-  supports       Support[]       @relation("SupporterSupports")
-  follows        Follow[]        @relation("SupporterFollows")
-  notifications  Notification[]
-  entitlements   PostEntitlement[]
-  reports        ContentReport[] @relation("ReporterReports")
+  roles                  UserRole[]
+  creatorProfile         CreatorProfile?
+  supports               Support[]               @relation("SupporterSupports")
+  follows                Follow[]                @relation("SupporterFollows")
+  notifications          Notification[]
+  notificationPreference NotificationPreference?
+  entitlements           PostEntitlement[]
+  reports                ContentReport[]         @relation("ReporterReports")
 
   @@map("users")
 }
@@ -481,18 +482,49 @@ model Follow {
 model Notification {
   id        String    @id @default(uuid())
   userId    String
+  category  String    @default("SYSTEM") // PAYOUT, CONTRIBUTION, SECURITY, KYC, SYSTEM
   type      String
   title     String
   body      String
   data      Json?
+  actionUrl String?
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
   @@map("notifications")
 }
+
+model NotificationPreference {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  // Support activity
+  emailOnContribution   Boolean  @default(true)
+  inAppOnContribution   Boolean  @default(true)
+  pushOnContribution   Boolean  @default(true)
+  // Payout updates (transactional)
+  emailOnPayout         Boolean  @default(true)
+  inAppOnPayout         Boolean  @default(true)
+  pushOnPayout         Boolean  @default(true)
+  // KYC & Security alerts
+  emailOnSecurityAlert  Boolean  @default(true)
+  inAppOnSecurityAlert  Boolean  @default(true)
+  pushOnSecurityAlert  Boolean  @default(true)
+  // Platform updates & creator tips
+  emailOnProductUpdates Boolean  @default(false)
+  emailOnCreatorTips    Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
 
 model KycSubmission {
   id                String    @id @default(uuid())

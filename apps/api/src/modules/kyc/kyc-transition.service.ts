@@ -264,10 +264,12 @@ export class KycTransitionService {
       await tx.notification.create({
         data: {
           userId: creator.userId,
+          category: 'KYC',
           type: 'KYC_UPDATE',
           title: notice.title,
           body: notice.body,
           data: { submissionId: updated.id, status: updated.status },
+          actionUrl: '/dashboard/settings',
         },
       });
     }

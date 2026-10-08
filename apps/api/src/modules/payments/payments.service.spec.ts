@@ -27,13 +27,16 @@ describe('PaymentsService.initializePayment contribution gate', () => {
         authorizationUrl: 'https://checkout',
       }),
     };
+    const eventEmitter = { emit: jest.fn() };
     return {
       prisma,
       provider,
+      eventEmitter,
       service: new PaymentsService(
         prisma as never,
         provider as never,
         {} as never,
+        eventEmitter as never,
       ),
     };
   }

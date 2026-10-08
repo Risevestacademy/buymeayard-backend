@@ -46,6 +46,7 @@ jobs:
 
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/buymeayard_test?schema=public
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/buymeayard_test?schema=public
       REDIS_URL: redis://localhost:6379
       BETTER_AUTH_SECRET: ci-test-secret-that-is-at-least-32-chars-long
       BETTER_AUTH_URL: http://localhost:3000

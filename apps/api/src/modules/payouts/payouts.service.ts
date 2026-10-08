@@ -16,11 +16,15 @@ import {
   PayoutStatus,
 } from '@buymeayard/types';
 
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { PAYOUT_EVENTS } from '../notifications/events/notification.events';
+
 @Injectable()
 export class PayoutsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledgerService: LedgerService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async requestPayout(creatorUserId: string, amount: number, currency = 'NGN') {
@@ -69,7 +73,7 @@ export class PayoutsService {
       });
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       // Serialize payouts per creator and re-check under the lock: the
       // creator may have been revoked/suspended, or a concurrent payout may
       // have reserved funds, since the checks above.
@@ -125,6 +129,19 @@ export class PayoutsService {
 
       return payout;
     });
+
+    this.eventEmitter.emit(PAYOUT_EVENTS.CREATED, {
+      payoutId: result.id,
+      creatorUserId,
+      amount: result.amount,
+      currency: result.currency,
+      bankName: defaultPayoutMethod.bankName,
+      accountNumberMasked: defaultPayoutMethod.accountIdentifier
+        ? `••••${defaultPayoutMethod.accountIdentifier.slice(-4)}`
+        : undefined,
+    });
+
+    return result;
   }
 
   /** Withdrawals need a verified identity and a creator in good standing. */

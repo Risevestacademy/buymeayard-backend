@@ -32,6 +32,7 @@ import { ModerationModule } from './modules/moderation/moderation.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { WaitlistModule } from './modules/waitlist/waitlist.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 // Common
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -81,6 +82,7 @@ import { AuditLogInterceptor } from './modules/admin/interceptors/audit-log.inte
     AdminModule,
     AnalyticsModule,
     WaitlistModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [
