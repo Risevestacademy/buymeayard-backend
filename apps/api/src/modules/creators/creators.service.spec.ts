@@ -1120,6 +1120,23 @@ describe('CreatorsService', () => {
       expect(chart.period).toBe('7d');
       expect(chart.dataPoints.length).toBe(7);
     });
+
+    it('should return earnings chart points for period 12m with only month tickers as labels', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.support.findMany.mockResolvedValue([]);
+
+      const chart = await service.getDashboardEarnings('u-1', {
+        period: '12m',
+      });
+      expect(chart.period).toBe('12m');
+      expect(chart.dataPoints.length).toBe(12);
+      for (const point of chart.dataPoints) {
+        expect(point.label).toMatch(/^[A-Z][a-z]{2}$/);
+      }
+    });
   });
 
   describe('getDashboardContributions', () => {
