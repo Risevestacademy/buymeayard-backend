@@ -145,3 +145,11 @@ export enum ModerationStatus {
 export enum Currency {
   NGN = 'NGN',
 }
+
+export enum NotificationCategory {
+  PAYOUT = 'PAYOUT',
+  CONTRIBUTION = 'CONTRIBUTION',
+  SECURITY = 'SECURITY',
+  KYC = 'KYC',
+  GENERAL = 'GENERAL',
+}

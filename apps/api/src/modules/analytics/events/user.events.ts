@@ -15,4 +15,6 @@ export interface UserLoginEvent {
   userId: string;
   email: string;
   ipAddress?: string;
+  userAgent?: string;
+  sessionId?: string;
 }

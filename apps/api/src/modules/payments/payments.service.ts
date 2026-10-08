@@ -13,6 +13,9 @@ import { LedgerService } from '../ledger/ledger.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { CreatorStatus, PaymentStatus, SupportStatus } from '@buymeayard/types';
 
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CONTRIBUTION_EVENTS } from '../notifications/events/notification.events';
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
@@ -22,6 +25,7 @@ export class PaymentsService {
     @Inject(PAYMENT_PROVIDER)
     private readonly paymentProvider: PaymentProvider,
     private readonly ledgerService: LedgerService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async initializePayment(supportId: string, email: string) {
@@ -144,7 +148,19 @@ export class PaymentsService {
             providerReference: reference,
           },
         },
-        include: { support: true },
+        include: {
+          support: {
+            include: {
+              creator: {
+                select: { userId: true },
+              },
+              supporter: {
+                select: { name: true, email: true },
+              },
+              items: true,
+            },
+          },
+        },
       });
 
       if (payment && payment.status !== PaymentStatus.SUCCESS) {
@@ -186,6 +202,34 @@ export class PaymentsService {
           payment.support.platformFee,
           payment.currency,
         );
+
+        // 5. Emit contribution received event for creator notifications (in-app & email)
+        const yards = payment.support.items.reduce(
+          (sum, item) => sum + item.quantity,
+          0,
+        );
+        const materialName =
+          payment.support.items
+            .map((i) => i.materialNameSnapshot)
+            .filter(Boolean)
+            .join(', ') || 'Fabric';
+        const supporterName = payment.support.isAnonymous
+          ? 'Anonymous'
+          : payment.support.supporter?.name || 'A supporter';
+        const supporterEmail = payment.support.isAnonymous
+          ? undefined
+          : payment.support.supporter?.email;
+
+        this.eventEmitter.emit(CONTRIBUTION_EVENTS.RECEIVED, {
+          supportId: payment.support.id,
+          creatorUserId: payment.support.creator.userId,
+          supporterName,
+          supporterEmail,
+          yards: yards > 0 ? yards : 1,
+          materialName,
+          amount: payment.support.creatorAmount,
+          message: payment.support.message,
+        });
       }
     }
 

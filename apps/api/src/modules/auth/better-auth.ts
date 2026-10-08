@@ -517,6 +517,8 @@ export function createBetterAuth(
                   userId: session.userId,
                   email: user?.email ?? '',
                   ipAddress: session.ipAddress ?? undefined,
+                  userAgent: session.userAgent ?? undefined,
+                  sessionId: session.id ?? undefined,
                 });
               } catch {
                 // Non-blocking for session creation

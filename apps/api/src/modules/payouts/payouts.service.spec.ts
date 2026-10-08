@@ -12,7 +12,14 @@ describe('PayoutsService.requestPayout', () => {
       id: 'creator-1',
       status: 'ACTIVE',
       kycStatus: 'VERIFIED',
-      payoutMethods: [{ id: 'pm-1', isDefault: true }],
+      payoutMethods: [
+        {
+          id: 'pm-1',
+          isDefault: true,
+          bankName: 'Access Bank',
+          accountIdentifier: '0123456789',
+        },
+      ],
       ...opts.creator,
     };
     const tx = {
@@ -30,7 +37,11 @@ describe('PayoutsService.requestPayout', () => {
           ),
         create: jest.fn(),
       },
-      payout: { create: jest.fn().mockResolvedValue({ id: 'payout-1' }) },
+      payout: {
+        create: jest.fn().mockImplementation((args) =>
+          Promise.resolve({ id: 'payout-1', ...args.data }),
+        ),
+      },
     };
     const prisma = {
       creatorProfile: { findUnique: jest.fn().mockResolvedValue(creator) },
@@ -42,21 +53,37 @@ describe('PayoutsService.requestPayout', () => {
         .fn()
         .mockResolvedValue(opts.precheckBalance ?? 100_000),
     };
+    const eventEmitter = { emit: jest.fn() };
     return {
       tx,
-      service: new PayoutsService(prisma as never, ledger as never),
+      eventEmitter,
+      service: new PayoutsService(
+        prisma as never,
+        ledger as never,
+        eventEmitter as never,
+      ),
     };
   }
 
-  it('reserves funds for a verified, active creator', async () => {
-    const { service, tx } = setup({});
-    await expect(service.requestPayout('user-1', 50_000)).resolves.toEqual({
-      id: 'payout-1',
-    });
+  it('reserves funds for a verified, active creator and emits event', async () => {
+    const { service, tx, eventEmitter } = setup({});
+    await expect(service.requestPayout('user-1', 50_000)).resolves.toEqual(
+      expect.objectContaining({
+        id: 'payout-1',
+      }),
+    );
     expect(tx.$queryRaw).toHaveBeenCalled(); // creator row locked
     expect(tx.ledgerEntry.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({ direction: 'DEBIT', amount: 50_000 }),
+      }),
+    );
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      'payout.created',
+      expect.objectContaining({
+        payoutId: 'payout-1',
+        creatorUserId: 'user-1',
+        amount: 50_000,
       }),
     );
   });
