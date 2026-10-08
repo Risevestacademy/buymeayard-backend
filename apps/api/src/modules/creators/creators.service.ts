@@ -1811,7 +1811,6 @@ export class CreatorsService {
         );
         const label = cur.toLocaleDateString('en-US', {
           month: 'short',
-          year: cur.getFullYear() !== now.getFullYear() ? '2-digit' : undefined,
         });
         buckets.push({
           key,
