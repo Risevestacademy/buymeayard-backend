@@ -211,27 +211,28 @@ model CreatorMaterial {
 
 model Support {
   id            String   @id @default(uuid())
-  supporterId   String
+  supporterId   String?
   creatorId     String
   subtotal      Int      // Minor units
   platformFee   Int      // Minor units
   creatorAmount Int      // Minor units
   totalAmount   Int      // Minor units (creatorAmount + platformFee)
   currency      String   @default("NGN")
+  guestName     String?
   message       String?
   isAnonymous   Boolean  @default(false)
   status        String   @default("CREATED") // CREATED, PAYMENT_PENDING, PAID, COMPLETED, PAYMENT_FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  supporter User           @relation("SupporterSupports", fields: [supporterId], references: [id], onDelete: Cascade)
+  supporter User?           @relation("SupporterSupports", fields: [supporterId], references: [id], onDelete: Cascade)
   creator   CreatorProfile @relation("CreatorSupports", fields: [creatorId], references: [id], onDelete: Cascade)
   items     SupportItem[]
   payment   Payment?
-
-  @@index([creatorId])
+  
   @@index([supporterId])
   @@index([createdAt])
+  @@index([creatorId, createdAt(sort: Desc), id(sort: Desc)])
   @@map("supports")
 }
 
@@ -241,7 +242,7 @@ model SupportItem {
   creatorMaterialId    String
   materialNameSnapshot String   // Historical snapshot of material name
   unitPrice            Int      // Historical price snapshot in minor units
-  quantity             Int      // Must be > 0
+  quantity             Decimal  @db.Decimal(10,2)     // Must be > 0
   totalPrice           Int      // unitPrice * quantity
   currency             String   @default("NGN")
   createdAt            DateTime @default(now())

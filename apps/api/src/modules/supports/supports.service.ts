@@ -8,6 +8,9 @@ import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { MoneyUtil } from '../../common/utils/money.util';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { CreateSupportDto } from './dto/create-support.dto';
+import { Prisma } from '@prisma/client';
+import { CreateSupportIntentDto } from '../creators/dto/create-support-intent.dto';
+
 
 @Injectable()
 export class SupportsService {
@@ -135,4 +138,59 @@ export class SupportsService {
 
     return support;
   }
+
+
+async createGuestIntent(creatorId: string, dto: CreateSupportIntentDto) {
+  const creatorMaterial = await this.prisma.creatorMaterial.findFirst({
+    where: {creatorId, status: 'ACTIVE' },
+    include: { material: true },
+  });
+
+  if(!creatorMaterial) {
+    throw new BadRequestException({
+      code: ErrorCodes.MATERIAL_NOT_FOUND,
+      message: 'This creator has no active materials available for support',
+    });
+  }
+
+  const amountMinor = MoneyUtil.toMinorUnits(dto.amount);
+
+  const feePercentage = 
+     this.configService.get<number>('PLATFORM_FEE_PERCENTAGE') || 10;
+     const { platformFee, creatorAmount } = MoneyUtil.calculateSplit(
+      amountMinor,
+      feePercentage,
+     );
+  const quantity = new Prisma.Decimal(amountMinor).div(creatorMaterial.price);
+
+  return this.prisma.support.create({
+    data: {
+      supporterId: null,
+      guestName: dto.name,
+      creatorId,
+      subtotal: amountMinor,
+      platformFee,
+      creatorAmount,
+      totalAmount: amountMinor,
+      currency: creatorMaterial.currency,
+      message: dto.message,
+      isAnonymous: dto.isAnonymous ?? false,
+      status: 'CREATED',
+      items: {
+        create: [
+          {
+            creatorMaterialId: creatorMaterial.id,
+            materialNameSnapshot: 
+                creatorMaterial.displayName || creatorMaterial.material.name,
+            unitPrice: creatorMaterial.price,
+            quantity,
+            totalPrice: amountMinor,
+            currency: creatorMaterial.currency,    
+          },
+        ],
+      },
+    },
+    include: { items: true },
+  });
+}
 }

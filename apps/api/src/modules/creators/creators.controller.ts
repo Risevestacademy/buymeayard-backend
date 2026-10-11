@@ -42,11 +42,16 @@ import { CheckSlugResponseDto } from './dto/check-slug.dto';
 import { CreatorShareLinkResponseDto } from './dto/share-link.dto';
 import { UpdateCreatorSettingsDto } from './dto/update-creator-settings.dto';
 import { UpdatePageStatusDto } from './dto/update-page-status.dto';
+import { CreateSupportIntentDto } from './dto/create-support-intent.dto';
+import { SupportsService } from '../supports/supports.service';
 
 @ApiTags('creators')
 @Controller('creators')
 export class CreatorsController {
-  constructor(private readonly creatorsService: CreatorsService) {}
+  constructor(
+    private readonly creatorsService: CreatorsService,
+    private readonly supportsService: SupportsService,
+  ) {}
 
   @Public()
   @Get()
@@ -579,4 +584,34 @@ export class CreatorsController {
   async getShareLinkBySlug(@Param('slug') slug: string) {
     return this.creatorsService.getShareLinkBySlug(slug);
   }
+
+  @Public()
+@Post(':slug/supports/intent')
+@ApiOperation({
+  summary: 'Create a guest support intent',
+  description:
+    'Public endpoint for a guest supporter to initiate a contribution to a creator. No authentication required.',
+})
+@ApiParam({
+  name: 'slug',
+  description: 'Creator slug handle (e.g. "adeola")',
+  example: 'adeola',
+})
+@ApiBody({ type: CreateSupportIntentDto })
+@ApiResponse({
+  status: 201,
+  description: 'Support intent created successfully.',
+})
+@ApiResponse({
+  status: 404,
+  description: 'Creator not found.',
+  type: ApiErrorResponseDto,
+})
+async createSupportIntent(
+  @Param('slug') slug: string,
+  @Body() dto: CreateSupportIntentDto,
+) {
+  const creator = await this.creatorsService.findBySlug(slug);
+  return this.supportsService.createGuestIntent(creator.id, dto);
+}
 }
