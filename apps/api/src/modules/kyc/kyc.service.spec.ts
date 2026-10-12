@@ -533,6 +533,53 @@ describe('KycService', () => {
     });
   });
 
+  describe('inactivity expiry', () => {
+    const stale = (submission: Record<string, unknown>) => {
+      submission.createdAt = new Date(Date.now() - 31 * 60_000);
+    };
+
+    it('expires a stale open submission and resets the creator', async () => {
+      const creator = prisma.addCreator();
+      await start(creator.userId);
+      stale(prisma.submissions[0]);
+
+      const res = await service.getMyKyc(creator.userId);
+
+      expect(provider.deleteSession).toHaveBeenCalledWith('sess-1');
+      expect(prisma.submissions[0].status).toBe(S.EXPIRED);
+      expect(res.kycStatus).toBe('NOT_SUBMITTED');
+      expect(res.canStartSession).toBe(true);
+      expect(res.latestSubmission?.status).toBe(S.EXPIRED);
+    });
+
+    it('leaves a fresh open submission pending', async () => {
+      const creator = prisma.addCreator();
+      await start(creator.userId);
+
+      const res = await service.getMyKyc(creator.userId);
+
+      expect(provider.deleteSession).not.toHaveBeenCalled();
+      expect(res.kycStatus).toBe('PENDING');
+      expect(prisma.submissions[0].status).toBe(S.CREATED);
+    });
+
+    it('starts a fresh session when the previous one is stale', async () => {
+      const creator = prisma.addCreator();
+      await start(creator.userId);
+      stale(prisma.submissions[0]);
+
+      const res = await start(creator.userId);
+
+      expect(res.resumed).toBe(false);
+      expect(provider.deleteSession).toHaveBeenCalledWith('sess-1');
+      expect(prisma.submissions.map((s) => s.status)).toEqual([
+        S.EXPIRED,
+        S.CREATED,
+      ]);
+      expect(creator.kycStatus).toBe('PENDING');
+    });
+  });
+
   describe('admin review', () => {
     async function inReview() {
       const creator = prisma.addCreator();

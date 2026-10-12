@@ -310,7 +310,8 @@ The cancel ordering was kept by design (see §6, with a test proving recovery).
 - **Not yet run against the live Didit sandbox.** Next step: run approved, declined and in-review sessions end to end, and capture one real signed webhook as a known-good test vector.
 - **Paper NIN slip support is unconfirmed.** Didit's docs list Nigerian ID cards; confirm the slip is accepted.
 - **`GET /creators/me/kyc` can take up to 10s if Didit is down** (the reconcile timeout).
-- **No scheduled reconciliation job or durable outbox** (QueuesModule is empty). Provider/local divergence after an admin decision is repaired by Didit's webhook, the creator's status check, or the admin detail view's self-heal. Follow-up: a durable outbox and retry worker for provider calls, so recovery doesn't depend on those triggers.
+- **No durable outbox yet** (QueuesModule is empty). Provider/local divergence after an admin decision is repaired by Didit's webhook, the creator's status check, the admin detail view's self-heal, or the KYC expiry sweep. Follow-up: a durable outbox and retry worker for provider calls, so recovery doesn't depend on those triggers.
+- **Abandoned sessions are expired after `KYC_SESSION_TTL_MINUTES`** (default 30). `GET /creators/me/kyc` and `POST /creators/me/kyc/session` expire a stale open submission lazily (returning the creator to their prior outcome), and `KycExpiryService` sweeps every 5 minutes as a backstop for creators who never return. The sweep runs on every API instance; the transition's `expectedFrom` guard makes concurrent sweeps safe.
 - **Emails aren't sent**; notifications are in-app only.
 - **Out of scope**: NIN/BVN registry lookup, bank-account name matching, admin "request resubmission", and NDPR erasure via Didit's delete endpoint.
 - **Existing issues noticed but not fixed here**:

@@ -3,6 +3,7 @@ import { InfrastructureKycModule } from '../../infrastructure/kyc/infrastructure
 import { KycService } from './kyc.service';
 import { KycAdminService } from './kyc-admin.service';
 import { KycTransitionService } from './kyc-transition.service';
+import { KycExpiryService } from './kyc-expiry.service';
 import { KycController } from './kyc.controller';
 import { KycAdminController } from './kyc-admin.controller';
 import { KycWebhookController } from './kyc-webhook.controller';
@@ -10,7 +11,12 @@ import { KycWebhookController } from './kyc-webhook.controller';
 @Module({
   imports: [InfrastructureKycModule],
   controllers: [KycController, KycAdminController, KycWebhookController],
-  providers: [KycService, KycAdminService, KycTransitionService],
+  providers: [
+    KycService,
+    KycAdminService,
+    KycTransitionService,
+    KycExpiryService,
+  ],
   exports: [KycService],
 })
 export class KycModule {}
