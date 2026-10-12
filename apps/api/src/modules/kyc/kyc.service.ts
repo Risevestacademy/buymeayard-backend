@@ -153,6 +153,12 @@ export class KycService {
       this.assertCanVerify(await this.getCreatorOrThrow(userId));
     }
 
+    // A session left idle past the TTL is treated as expired, so the user
+    // gets a fresh attempt instead of silently resuming a dead session.
+    if (latest && this.isStaleOpen(latest)) {
+      latest = await this.expireSubmission(latest);
+    }
+
     if (latest && OPEN_SUBMISSION_STATUSES.has(latest.status)) {
       if (this.sameDetails(latest.claimedDetails, claimed)) {
         return this.openSession(creator, claimed, headers, latest);
@@ -189,6 +195,20 @@ export class KycService {
         // Status reads must still work when the provider is down.
         this.logger.warn(
           `KYC reconcile failed for submission ${latest.id}: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+
+    // An attempt the user walked away from must not pin them at PENDING
+    // forever: past the inactivity window it is expired locally so they
+    // return to their prior outcome and can start over.
+    if (latest && this.isStaleOpen(latest)) {
+      try {
+        latest = await this.expireSubmission(latest);
+        creator = await this.getCreatorOrThrow(userId);
+      } catch (err) {
+        this.logger.warn(
+          `KYC expiry failed for submission ${latest.id}: ${err instanceof Error ? err.message : err}`,
         );
       }
     }
@@ -420,6 +440,36 @@ export class KycService {
     return outcome.submission;
   }
 
+  /**
+   * Ages out an unfinished attempt locally (no provider decision required) so
+   * the creator returns to their prior outcome and can start fresh. The
+   * provider session is dropped first, best-effort, mirroring cancellation:
+   * otherwise a later startSession could be handed the same reference and
+   * collide with the now-frozen row.
+   */
+  async expireSubmission(submission: KycSubmission): Promise<KycSubmission> {
+    if (submission.providerReference) {
+      await this.provider
+        .deleteSession(submission.providerReference)
+        .catch((err) => {
+          this.logger.warn(
+            `Failed to delete expired provider session ${submission.providerReference}: ${err instanceof Error ? err.message : err}`,
+          );
+        });
+    }
+    const outcome = await this.prisma.$transaction(
+      (tx) =>
+        this.transitions.transition(tx, {
+          submissionId: submission.id,
+          to: S.EXPIRED,
+          source: KycReviewSource.SYSTEM,
+          expectedFrom: [...OPEN_SUBMISSION_STATUSES] as S[],
+        }),
+      KYC_TRANSACTION_OPTIONS,
+    );
+    return outcome.submission;
+  }
+
   // ---------------------------------------------------------------------------
   // Internals
   // ---------------------------------------------------------------------------
@@ -527,6 +577,21 @@ export class KycService {
           if (existing.creatorId !== creator.id) {
             this.logger.error(
               `Provider session ${session.sessionId} belongs to another creator`,
+            );
+            throw new HttpException(
+              {
+                code: ErrorCodes.KYC_PROVIDER_ERROR,
+                message: 'Unable to start verification. Please try again.',
+              },
+              HttpStatus.BAD_GATEWAY,
+            );
+          }
+          // The provider handed back a reference we already finished (e.g. an
+          // expired session it had not yet dropped). Resuming it would
+          // resurrect a frozen state, so refuse and let the user retry.
+          if (!OPEN_SUBMISSION_STATUSES.has(existing.status)) {
+            this.logger.error(
+              `Provider session ${session.sessionId} matches finished submission ${existing.id} (${existing.status})`,
             );
             throw new HttpException(
               {
@@ -801,6 +866,21 @@ export class KycService {
     if (!submission.providerReference) return false;
     const last = submission.lastSyncedAt?.getTime() ?? 0;
     return Date.now() - last > RECONCILE_AFTER_MS;
+  }
+
+  /**
+   * An open submission older than the inactivity window. Age is measured from
+   * creation, not lastSyncedAt: every status read refreshes the latter, which
+   * would otherwise keep pushing the deadline out.
+   */
+  private isStaleOpen(submission: KycSubmission): boolean {
+    if (!OPEN_SUBMISSION_STATUSES.has(submission.status)) return false;
+    return submission.createdAt.getTime() + this.sessionTtlMs() <= Date.now();
+  }
+
+  private sessionTtlMs(): number {
+    const minutes = this.configService.get<number>('KYC_SESSION_TTL_MINUTES');
+    return (minutes && minutes > 0 ? minutes : 30) * 60_000;
   }
 
   private async getCreatorOrThrow(userId: string): Promise<CreatorWithUser> {

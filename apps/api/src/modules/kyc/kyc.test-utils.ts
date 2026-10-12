@@ -24,6 +24,7 @@ function matches(row: Row, where: Row = {}): boolean {
       if ('in' in cond) return (cond.in as unknown[]).includes(value);
       if ('not' in cond) return value !== cond.not;
       if ('gte' in cond) return value >= cond.gte;
+      if ('lt' in cond) return value < cond.lt;
     }
     return value === cond;
   });
@@ -56,9 +57,10 @@ export class FakePrisma {
   events: Row[] = [];
   audits: Row[] = [];
   notifications: Row[] = [];
-  // createdAt advances on every insert so ordering is deterministic. Starts
-  // an hour ago so rows fall inside windows computed from Date.now().
-  private clock = Date.now() - 60 * 60 * 1000;
+  // createdAt advances on every insert so ordering is deterministic. Starts a
+  // minute ago: inside Date.now()-relative windows, but recent enough that the
+  // KYC inactivity TTL (30 min) does not treat fresh rows as stale.
+  private clock = Date.now() - 60_000;
 
   private tick() {
     this.clock += 1000;

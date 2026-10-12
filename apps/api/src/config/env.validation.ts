@@ -63,6 +63,10 @@ export const envSchema = z.object({
   DIDIT_BASE_URL: z.string().url().default('https://verification.didit.me'),
   KYC_MOBILE_CALLBACK_URL: z.string().default('buymeayard://kyc/complete'),
   KYC_MAX_SESSIONS_PER_DAY: z.coerce.number().int().min(1).default(5),
+  // Unfinished sessions older than this are expired locally (returning the
+  // creator to their prior outcome) so an abandoned attempt can't pin them at
+  // PENDING forever.
+  KYC_SESSION_TTL_MINUTES: z.coerce.number().int().min(1).default(30),
   // Checks that must each be individually Approved before a provider
   // "Approved" is accepted; otherwise the case goes to admin review.
   KYC_REQUIRED_CHECKS: z
