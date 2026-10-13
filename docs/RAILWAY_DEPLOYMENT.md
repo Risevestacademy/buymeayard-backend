@@ -1,6 +1,6 @@
 # Deploying to Railway (Staging)
 
-This guide deploys the API from the **`dev`** branch to a Railway **staging** environment, with Railway Postgres and Redis. Every merge to `dev` redeploys automatically, after GitHub Actions CI passes.
+This guide deploys the API from the **`dev`** branch to a Railway **staging** environment, with Neon PostgreSQL and Upstash Redis. Every merge to `dev` redeploys automatically, after GitHub Actions CI passes.
 
 Config lives in [`railway.toml`](../railway.toml): Dockerfile build, `prisma migrate deploy` before each deploy, `/health` health check, restart on failure.
 
@@ -12,7 +12,7 @@ Config lives in [`railway.toml`](../railway.toml): Dockerfile build, `prisma mig
 
 - [ ] `railway.toml` is merged into `dev`.
 - [ ] A Railway account connected to GitHub, with access to the `buymeayard-backend` repo.
-- [ ] Accounts and keys: Paystack (test), Cloudinary, Brevo (or SMTP), Didit (sandbox workflow).
+- [ ] Accounts and keys: Neon, Upstash, Paystack (test), Cloudinary, Brevo (or SMTP), Didit (sandbox workflow).
 - [ ] Locally: `psql`/`pg_dump` (only if migrating existing data), and optionally the Railway CLI (`npm i -g @railway/cli`).
 
 ---
@@ -23,12 +23,31 @@ Config lives in [`railway.toml`](../railway.toml): Dockerfile build, `prisma mig
 2. Pick `buymeayard-backend`. Railway will start a first build. **Let it fail or cancel it.** There are no variables yet.
 3. Open the project **Settings**. Rename the default environment from `production` to **`staging`** (Project → Environments).
 
-## Part 3: Add the database and Redis
+## Part 3: Create the external data services
 
-1. In the project canvas click **+ New** → **Database** → **Add PostgreSQL**.
-2. Click **+ New** → **Database** → **Add Redis**.
+### Neon PostgreSQL
 
-You now have three boxes: your API service, `Postgres`, `Redis`.
+1. Create a project at https://console.neon.tech.
+2. Create a staging branch/database.
+3. Copy the unpooled/direct connection string from Neon for `DATABASE_URL`. This repository uses the same URL for the API and Prisma migrations, so using the direct connection avoids pooler issues during `prisma migrate deploy`.
+
+The connection string must include TLS, for example:
+
+```text
+postgresql://user:password@ep-example.region.aws.neon.tech/dbname?sslmode=require
+```
+
+### Upstash Redis
+
+1. Create a Redis database at https://console.upstash.com.
+2. Choose a region close to your Railway deployment.
+3. Copy the Redis REST/TLS connection details. For this Node Redis client, use the `rediss://` connection URL, not the REST URL.
+
+It will look similar to:
+
+```text
+rediss://default:password@region.upstash.io:6380
+```
 
 ## Part 4: Point the service at `dev`
 
@@ -47,9 +66,9 @@ API service → **Variables** → **Raw Editor**, and paste the block below, fil
 ```env
 NODE_ENV=production
 
-# Reference variables: Railway fills these from the plugins
-DATABASE_URL=${{Postgres.DATABASE_URL}}
-REDIS_URL=${{Redis.REDIS_URL}}
+# External managed services
+DATABASE_URL=postgresql://user:password@ep-example-pooler.region.aws.neon.tech/dbname?sslmode=require
+REDIS_URL=rediss://default:password@region.upstash.io:6380
 
 # Better Auth: `openssl rand -base64 48` for the secret
 BETTER_AUTH_SECRET=
@@ -183,7 +202,8 @@ If you restore data, skip Part 8 (the admin already exists).
 | Symptom | Cause / fix |
 | :--- | :--- |
 | `Config validation error: missing required production variables` | One of `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID`, `DIDIT_WEBHOOK_SECRET`, `CREATOR_FRONTEND_URL` is unset. Set it in Variables. |
-| Pre-deploy fails: `Can't reach database server` | `DATABASE_URL` isn't the reference `${{Postgres.DATABASE_URL}}`, or the Postgres service is still starting. Redeploy. |
+| Pre-deploy fails: `Can't reach database server` | Check that the Neon connection string is correct, includes `sslmode=require`, and allows external connections. |
+| Redis connection fails | Use Upstash's TLS `rediss://` URL and port `6380`, not the Upstash REST URL. |
 | Pre-deploy fails: `prisma: not found` / module not found | Prisma CLI missing from the image. Check that `apps/api/node_modules/prisma` exists in the runner stage (Dockerfile). |
 | Health check fails / "service unavailable" | App crashed on boot. Read the deploy logs; it's almost always a missing or invalid env var. |
 | Seed refuses to run | Needs `NODE_ENV=production` plus a non-default `ADMIN_PASSWORD` of 12+ characters. |

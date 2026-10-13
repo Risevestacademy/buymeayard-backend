@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import * as cookieParser from 'cookie-parser';
+import cookieParser = require('cookie-parser');
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 
@@ -33,10 +33,14 @@ async function bootstrap() {
       'https://buymeayard-main-dev.up.railway.app',
       'https://buymeayard-creator-dev.up.railway.app',
       'https://buymeayard-admin-dev.up.railway.app',
+      'https://buymeayard-backend-staging.up.railway.app',
       'bmay://',
       'bmay-dev://',
       'bmay-preview://',
       'buymeayard://',
+      ...(process.env.ADDITIONAL_TRUSTED_ORIGINS
+        ? process.env.ADDITIONAL_TRUSTED_ORIGINS.split(',').map((o) => o.trim())
+        : []),
     ],
     credentials: true,
   });
