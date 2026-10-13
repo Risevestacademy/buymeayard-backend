@@ -2,6 +2,8 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+// cookie-parser is CommonJS (`export =`) and esModuleInterop is off, so a default import would be undefined at runtime
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 import cookieParser = require('cookie-parser');
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
