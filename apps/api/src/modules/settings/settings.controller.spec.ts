@@ -16,6 +16,7 @@ describe('SettingsController', () => {
       deleteAccount: jest.fn(),
       getSecuritySettings: jest.fn(),
       disconnectProvider: jest.fn(),
+      setPassword: jest.fn(),
       listSessions: jest.fn(),
       revokeSession: jest.fn(),
       revokeOtherSessions: jest.fn(),

@@ -29,6 +29,8 @@ describe('SettingsService', () => {
       authAccount: {
         findMany: jest.fn(),
         delete: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
       },
       session: {
         findMany: jest.fn(),
@@ -51,6 +53,7 @@ describe('SettingsService', () => {
 
     authService = {
       signInEmail: jest.fn().mockResolvedValue({ ok: true }),
+      hashPassword: jest.fn().mockResolvedValue('hashed_pw'),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -151,7 +154,8 @@ describe('SettingsService', () => {
           kycSubmissions: [
             {
               status: 'REJECTED',
-              rejectionReason: 'ID was expired. Please provide a valid document.',
+              rejectionReason:
+                'ID was expired. Please provide a valid document.',
             },
           ],
         },
@@ -348,7 +352,9 @@ describe('SettingsService', () => {
       expect(res.passwordLastChangedAt).toEqual(updatedAt);
       expect(res.providers).toHaveLength(3);
 
-      const googleProvider = res.providers.find((p) => p.providerId === 'google');
+      const googleProvider = res.providers.find(
+        (p) => p.providerId === 'google',
+      );
       expect(googleProvider?.connected).toBe(true);
       expect(googleProvider?.canDisconnect).toBe(true); // User also has password
     });
@@ -365,7 +371,9 @@ describe('SettingsService', () => {
       expect(res.hasPassword).toBe(false);
       expect(res.passwordLastChangedAt).toBeNull();
 
-      const googleProvider = res.providers.find((p) => p.providerId === 'google');
+      const googleProvider = res.providers.find(
+        (p) => p.providerId === 'google',
+      );
       expect(googleProvider?.connected).toBe(true);
       expect(googleProvider?.canDisconnect).toBe(false); // Only 1 method
     });
@@ -629,6 +637,58 @@ describe('SettingsService', () => {
       });
       expect(res.emailOnContribution).toBe(false);
       expect(res.emailOnProductUpdates).toBe(true);
+    });
+  });
+
+  describe('setPassword', () => {
+    const dto = { newPassword: 'NewPassw0rd!' };
+
+    it('throws NotFoundException if user does not exist', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(service.setPassword('u1', dto)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('rejects when a password is already set', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        accounts: [{ id: 'a1', providerId: 'credential', password: 'x' }],
+      });
+      await expect(service.setPassword('u1', dto)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.authAccount.create).not.toHaveBeenCalled();
+    });
+
+    it('creates a credential account for OAuth-only users', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        accounts: [{ id: 'a1', providerId: 'google', password: null }],
+      });
+      const res = await service.setPassword('u1', dto);
+      expect(res).toEqual({ success: true });
+      expect(authService.hashPassword).toHaveBeenCalledWith(dto.newPassword);
+      expect(prisma.authAccount.create).toHaveBeenCalledWith({
+        data: {
+          userId: 'u1',
+          accountId: 'u1',
+          providerId: 'credential',
+          password: 'hashed_pw',
+        },
+      });
+    });
+
+    it('updates an existing credential account that has no password', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'u1',
+        accounts: [{ id: 'a2', providerId: 'credential', password: null }],
+      });
+      await service.setPassword('u1', dto);
+      expect(prisma.authAccount.update).toHaveBeenCalledWith({
+        where: { id: 'a2' },
+        data: { password: 'hashed_pw' },
+      });
     });
   });
 });

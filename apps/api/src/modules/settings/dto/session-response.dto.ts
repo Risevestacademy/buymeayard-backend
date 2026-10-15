@@ -27,7 +27,8 @@ export class SessionItemDto {
 
   @ApiProperty({
     example: true,
-    description: 'True if this is the active session making the current request',
+    description:
+      'True if this is the active session making the current request',
   })
   isCurrent!: boolean;
 
