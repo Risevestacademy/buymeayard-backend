@@ -24,7 +24,11 @@ import {
   DeleteAccountDto,
   DeleteAccountResponseDto,
 } from './dto/delete-account.dto';
-import { SettingsSecurityResponseDto } from './dto/settings-security.dto';
+import {
+  SettingsSecurityResponseDto,
+  SetPasswordDto,
+  SetPasswordResponseDto,
+} from './dto/settings-security.dto';
 import {
   SessionsListResponseDto,
   RevokeSessionsResponseDto,
@@ -104,6 +108,29 @@ export class SettingsController {
     @CurrentUser('id') userId: string,
   ): Promise<SettingsSecurityResponseDto> {
     return this.settingsService.getSecuritySettings(userId);
+  }
+
+  @Post('me/settings/security/password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Set a password for an OAuth-only account',
+    description:
+      'Adds email/password sign-in for users who originally signed up with Google or Apple. Rejects with PASSWORD_ALREADY_SET if a password exists.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Password set successfully',
+    type: SetPasswordResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Password already set or does not meet complexity rules.',
+  })
+  async setPassword(
+    @CurrentUser('id') userId: string,
+    @Body() dto: SetPasswordDto,
+  ): Promise<SetPasswordResponseDto> {
+    return this.settingsService.setPassword(userId, dto);
   }
 
   @Delete('me/settings/security/providers/:providerId')

@@ -19,6 +19,8 @@ import {
 import {
   SettingsSecurityResponseDto,
   SettingsAuthProviderDto,
+  SetPasswordDto,
+  SetPasswordResponseDto,
 } from './dto/settings-security.dto';
 import {
   SessionsListResponseDto,
@@ -45,7 +47,9 @@ export class SettingsService {
   /**
    * Retrieves aggregate account settings data for web and mobile.
    */
-  async getAccountSettings(userId: string): Promise<SettingsAccountResponseDto> {
+  async getAccountSettings(
+    userId: string,
+  ): Promise<SettingsAccountResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -111,7 +115,10 @@ export class SettingsService {
       kycVerifiedAt: Date | null;
       kycBlockedReason: string | null;
     },
-    latestSubmission: { status: string; rejectionReason?: string | null } | null,
+    latestSubmission: {
+      status: string;
+      rejectionReason?: string | null;
+    } | null,
   ): AccountKycCardDto {
     const status = creator.kycStatus;
 
@@ -226,7 +233,10 @@ export class SettingsService {
     }
 
     // Guard 1: In-flight withdrawals
-    if (user.creatorProfile?.payouts && user.creatorProfile.payouts.length > 0) {
+    if (
+      user.creatorProfile?.payouts &&
+      user.creatorProfile.payouts.length > 0
+    ) {
       throw new BadRequestException({
         code: ErrorCodes.PENDING_PAYOUTS_EXIST,
         message:
@@ -309,7 +319,9 @@ export class SettingsService {
   /**
    * Retrieves authentication providers, password status, and disconnect guards.
    */
-  async getSecuritySettings(userId: string): Promise<SettingsSecurityResponseDto> {
+  async getSecuritySettings(
+    userId: string,
+  ): Promise<SettingsSecurityResponseDto> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       include: { accounts: true },
@@ -473,7 +485,9 @@ export class SettingsService {
     });
 
     // Sort so current session appears first
-    mappedSessions.sort((a, b) => (b.isCurrent ? 1 : 0) - (a.isCurrent ? 1 : 0));
+    mappedSessions.sort(
+      (a, b) => (b.isCurrent ? 1 : 0) - (a.isCurrent ? 1 : 0),
+    );
 
     return {
       sessions: mappedSessions,
@@ -597,6 +611,58 @@ export class SettingsService {
   }
 
   /**
+   * Sets an email/password credential for a user who signed up via OAuth.
+   * Rejects if a password already exists (use change-password instead).
+   */
+  async setPassword(
+    userId: string,
+    dto: SetPasswordDto,
+  ): Promise<SetPasswordResponseDto> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { accounts: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException({
+        code: ErrorCodes.NOT_FOUND,
+        message: 'User not found',
+      });
+    }
+
+    const credentialAccount = user.accounts.find(
+      (a) => a.providerId === 'credential',
+    );
+    if (credentialAccount?.password) {
+      throw new BadRequestException({
+        code: ErrorCodes.PASSWORD_ALREADY_SET,
+        message:
+          'A password is already set for this account. Use change password instead.',
+      });
+    }
+
+    const hashed = await this.authService.hashPassword(dto.newPassword);
+
+    if (credentialAccount) {
+      await this.prisma.authAccount.update({
+        where: { id: credentialAccount.id },
+        data: { password: hashed },
+      });
+    } else {
+      await this.prisma.authAccount.create({
+        data: {
+          userId,
+          accountId: userId,
+          providerId: 'credential',
+          password: hashed,
+        },
+      });
+    }
+
+    return { success: true };
+  }
+
+  /**
    * Updates notification preference toggles for the user.
    */
   async updateNotificationPreferences(
@@ -648,5 +714,3 @@ export class SettingsService {
     };
   }
 }
-
-

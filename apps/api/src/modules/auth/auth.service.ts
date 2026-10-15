@@ -158,6 +158,15 @@ export class AuthService implements OnModuleInit {
     });
   }
 
+  /**
+   * Hashes a password with better-auth's configured hasher so it can be
+   * verified by the standard email/password sign-in flow.
+   */
+  async hashPassword(password: string): Promise<string> {
+    const ctx = await this.getAuth().$context;
+    return ctx.password.hash(password);
+  }
+
   async changePassword(params: {
     currentPassword: string;
     newPassword: string;
