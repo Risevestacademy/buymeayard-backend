@@ -2,9 +2,17 @@ import {
   Injectable,
   BadRequestException,
   ForbiddenException,
+  Inject,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Payout, Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import {
+  PAYMENT_PROVIDER,
+  PaymentProviderRejectedError,
+} from '../../infrastructure/payments/payment-provider.interface';
+import type { PaymentProvider } from '../../infrastructure/payments/payment-provider.interface';
 import { LedgerService } from '../ledger/ledger.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import {
@@ -17,48 +25,119 @@ import {
 } from '@buymeayard/types';
 
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { PAYOUT_EVENTS } from '../notifications/events/notification.events';
+import {
+  PAYOUT_EVENTS,
+  PayoutNotificationEvent,
+} from '../notifications/events/notification.events';
+import { PayoutMethodsService } from './payout-methods.service';
+import { MINIMUM_WITHDRAWAL, calculatePayoutFee } from './payout-fees';
+import {
+  ListPayoutsQueryDto,
+  PayoutDetailDto,
+  PayoutDisplayStatus,
+  PayoutDto,
+  PayoutListDto,
+  PayoutQuoteDto,
+  PayoutStatusFilter,
+} from './dto/payout.dto';
+
+/** Payouts that have left the balance but not yet reached a final state. */
+export const IN_FLIGHT_PAYOUT_STATUSES: string[] = [
+  PayoutStatus.REQUESTED,
+  PayoutStatus.PENDING,
+  PayoutStatus.PROCESSING,
+];
+
+const STATUS_FILTERS: Record<PayoutStatusFilter, string[] | null> = {
+  all: null,
+  successful: [PayoutStatus.SUCCESS],
+  failed: [PayoutStatus.FAILED, PayoutStatus.CANCELLED],
+  in_progress: IN_FLIGHT_PAYOUT_STATUSES,
+};
+
+const DEFAULT_FAILURE_REASON = 'Your bank declined the transfer.';
+
+export type TransferOutcome = 'SUCCESS' | 'FAILED' | 'REVERSED';
 
 @Injectable()
 export class PayoutsService {
+  private readonly logger = new Logger(PayoutsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly ledgerService: LedgerService,
+    private readonly payoutMethods: PayoutMethodsService,
+    @Inject(PAYMENT_PROVIDER)
+    private readonly paymentProvider: PaymentProvider,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async requestPayout(creatorUserId: string, amount: number, currency = 'NGN') {
+  async quote(creatorUserId: string, amount: number): Promise<PayoutQuoteDto> {
+    const creator = await this.getCreator(creatorUserId);
+    const account = await this.ledgerService.getOrCreateAccount(
+      AccountType.CREATOR,
+      creator.id,
+    );
+    const availableBalance = await this.ledgerService.getAccountBalance(
+      account.id,
+    );
+    const fee = amount > 0 ? calculatePayoutFee(amount) : 0;
+
+    let error: PayoutQuoteDto['error'] = null;
+    if (amount < MINIMUM_WITHDRAWAL) error = 'BELOW_MINIMUM';
+    else if (amount > availableBalance) error = 'EXCEEDS_BALANCE';
+
+    return {
+      amount,
+      fee,
+      netAmount: Math.max(amount - fee, 0),
+      minimumWithdrawal: MINIMUM_WITHDRAWAL,
+      availableBalance,
+      isValid: error === null,
+      error,
+    };
+  }
+
+  async requestPayout(
+    creatorUserId: string,
+    amount: number,
+    idempotencyKey?: string,
+  ): Promise<PayoutDetailDto> {
     if (!Number.isSafeInteger(amount) || amount <= 0) {
       throw new BadRequestException({
         code: ErrorCodes.INVALID_AMOUNT,
         message: 'Payout amount must be greater than 0',
       });
     }
-
-    const creator = await this.prisma.creatorProfile.findUnique({
-      where: { userId: creatorUserId },
-      include: { payoutMethods: true },
-    });
-
-    if (!creator) {
-      throw new NotFoundException({
-        code: ErrorCodes.CREATOR_NOT_FOUND,
-        message: 'Creator profile not found',
+    if (amount < MINIMUM_WITHDRAWAL) {
+      throw new BadRequestException({
+        code: ErrorCodes.BELOW_MINIMUM_WITHDRAWAL,
+        message: `You need at least ₦${(MINIMUM_WITHDRAWAL / 100).toLocaleString()} to withdraw`,
       });
+    }
+
+    const creator = await this.getCreator(creatorUserId);
+
+    if (idempotencyKey) {
+      const existing = await this.prisma.payout.findUnique({
+        where: {
+          creatorId_idempotencyKey: { creatorId: creator.id, idempotencyKey },
+        },
+      });
+      if (existing) return this.toDetailDto(existing);
     }
 
     this.assertCanWithdraw(creator);
 
-    const defaultPayoutMethod =
-      creator.payoutMethods.find((m) => m.isDefault) ||
-      creator.payoutMethods[0];
-    if (!defaultPayoutMethod) {
+    const method = await this.payoutMethods.getActiveMethod(creator.id);
+    if (!method?.recipientCode) {
       throw new BadRequestException({
         code: ErrorCodes.PAYOUT_METHOD_REQUIRED,
-        message: 'A valid payout method must be configured',
+        message: 'Add a verified bank account before withdrawing',
       });
     }
 
+    const currency = 'NGN';
     const account = await this.ledgerService.getOrCreateAccount(
       AccountType.CREATOR,
       creator.id,
@@ -73,75 +152,321 @@ export class PayoutsService {
       });
     }
 
-    const result = await this.prisma.$transaction(async (tx) => {
-      // Serialize payouts per creator and re-check under the lock: the
-      // creator may have been revoked/suspended, or a concurrent payout may
-      // have reserved funds, since the checks above.
-      await tx.$queryRaw`SELECT id FROM "creator_profiles" WHERE id = ${creator.id} FOR UPDATE`;
-      const locked = await tx.creatorProfile.findUniqueOrThrow({
-        where: { id: creator.id },
-        select: { status: true, kycStatus: true },
-      });
-      this.assertCanWithdraw(locked);
+    const fee = calculatePayoutFee(amount);
 
-      const entries = await tx.ledgerEntry.findMany({
-        where: { accountId: account.id },
-        select: { direction: true, amount: true },
+    let payout: Payout;
+    try {
+      payout = await this.prisma.$transaction(async (tx) => {
+        // Serialize payouts per creator and re-check under the lock: the
+        // creator may have been revoked/suspended, or a concurrent payout may
+        // have reserved funds, since the checks above.
+        await tx.$queryRaw`SELECT id FROM "creator_profiles" WHERE id = ${creator.id} FOR UPDATE`;
+        const locked = await tx.creatorProfile.findUniqueOrThrow({
+          where: { id: creator.id },
+          select: { status: true, kycStatus: true },
+        });
+        this.assertCanWithdraw(locked);
+
+        const entries = await tx.ledgerEntry.findMany({
+          where: { accountId: account.id },
+          select: { direction: true, amount: true },
+        });
+        const lockedBalance = entries.reduce(
+          (sum, e) =>
+            e.direction === LedgerDirection.CREDIT
+              ? sum + e.amount
+              : sum - e.amount,
+          0,
+        );
+        if (lockedBalance < amount) {
+          throw new BadRequestException({
+            code: ErrorCodes.INSUFFICIENT_FUNDS,
+            message: `Requested payout (${amount}) exceeds available balance (${lockedBalance})`,
+          });
+        }
+
+        const reference = await this.nextReference(tx);
+
+        // 1. Create payout record with a snapshot of the destination account
+        const created = await tx.payout.create({
+          data: {
+            creatorId: creator.id,
+            accountId: account.id,
+            payoutMethodId: method.id,
+            reference,
+            // Paystack only accepts lowercase transfer references
+            providerReference: reference.toLowerCase(),
+            idempotencyKey,
+            amount,
+            fee,
+            netAmount: amount - fee,
+            currency,
+            status: PayoutStatus.REQUESTED,
+            bankName: method.bankName,
+            bankCode: method.bankCode,
+            accountName: method.accountName,
+            accountNumberLast4: method.accountIdentifier.slice(-4),
+            requestedAt: new Date(),
+          },
+        });
+
+        // 2. Reserve funds immediately in ledger to prevent double-spending
+        await tx.ledgerEntry.create({
+          data: {
+            accountId: account.id,
+            transactionId: created.id,
+            entryType: LedgerEntryType.PAYOUT_RESERVATION,
+            direction: LedgerDirection.DEBIT,
+            amount,
+            currency,
+            reference: `PAYOUT_RESERVE_${created.id}`,
+          },
+        });
+
+        return created;
       });
-      const lockedBalance = entries.reduce(
-        (sum, e) =>
-          e.direction === LedgerDirection.CREDIT
-            ? sum + e.amount
-            : sum - e.amount,
-        0,
-      );
-      if (lockedBalance < amount) {
-        throw new BadRequestException({
-          code: ErrorCodes.INSUFFICIENT_FUNDS,
-          message: `Requested payout (${amount}) exceeds available balance (${lockedBalance})`,
+    } catch (error) {
+      // A concurrent request with the same idempotency key won the race
+      if (
+        idempotencyKey &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const existing = await this.prisma.payout.findUniqueOrThrow({
+          where: {
+            creatorId_idempotencyKey: { creatorId: creator.id, idempotencyKey },
+          },
+        });
+        return this.toDetailDto(existing);
+      }
+      throw error;
+    }
+
+    const updated = await this.startTransfer(payout, method.recipientCode);
+    return this.toDetailDto(updated);
+  }
+
+  async listPayouts(
+    creatorUserId: string,
+    query: ListPayoutsQueryDto,
+  ): Promise<PayoutListDto> {
+    const creator = await this.getCreator(creatorUserId);
+    const statuses = STATUS_FILTERS[query.status];
+    const where: Prisma.PayoutWhereInput = {
+      creatorId: creator.id,
+      ...(statuses && { status: { in: statuses } }),
+    };
+
+    const [total, payouts] = await Promise.all([
+      this.prisma.payout.count({ where }),
+      this.prisma.payout.findMany({
+        where,
+        orderBy: { requestedAt: query.sort === 'oldest' ? 'asc' : 'desc' },
+        skip: (query.page - 1) * query.limit,
+        take: query.limit,
+      }),
+    ]);
+
+    return {
+      items: payouts.map((p) => this.toDto(p)),
+      pagination: {
+        page: query.page,
+        limit: query.limit,
+        total,
+        totalPages: Math.ceil(total / query.limit) || 1,
+      },
+    };
+  }
+
+  async getPayout(
+    creatorUserId: string,
+    payoutId: string,
+  ): Promise<PayoutDetailDto> {
+    const creator = await this.getCreator(creatorUserId);
+    const payout = await this.prisma.payout.findFirst({
+      where: { id: payoutId, creatorId: creator.id },
+    });
+    if (!payout) {
+      throw new NotFoundException({
+        code: ErrorCodes.PAYOUT_NOT_FOUND,
+        message: 'Payout not found',
+      });
+    }
+    return this.toDetailDto(payout);
+  }
+
+  /**
+   * Moves a payout to its final state. Failed and reversed transfers return
+   * the full amount (fee included) to the balance. Returns false when the
+   * payout was already in that state, so callers can skip side effects.
+   */
+  async applyTransferOutcome(
+    payoutId: string,
+    outcome: TransferOutcome,
+    failureReason?: string,
+  ): Promise<boolean> {
+    // A transfer Paystack reported as successful can still be reversed later
+    const fromStatuses =
+      outcome === 'REVERSED'
+        ? [...IN_FLIGHT_PAYOUT_STATUSES, PayoutStatus.SUCCESS]
+        : IN_FLIGHT_PAYOUT_STATUSES;
+    const status =
+      outcome === 'SUCCESS' ? PayoutStatus.SUCCESS : PayoutStatus.FAILED;
+
+    const payout = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.payout.updateMany({
+        where: { id: payoutId, status: { in: fromStatuses } },
+        data: {
+          status,
+          processedAt: new Date(),
+          failureReason:
+            status === PayoutStatus.FAILED
+              ? failureReason || DEFAULT_FAILURE_REASON
+              : null,
+        },
+      });
+      if (claimed.count === 0) return null;
+
+      const updated = await tx.payout.findUniqueOrThrow({
+        where: { id: payoutId },
+      });
+      if (status === PayoutStatus.FAILED) {
+        await tx.ledgerEntry.create({
+          data: {
+            accountId: updated.accountId,
+            transactionId: updated.id,
+            entryType: LedgerEntryType.PAYOUT_REVERSED,
+            direction: LedgerDirection.CREDIT,
+            amount: updated.amount,
+            currency: updated.currency,
+            reference: `PAYOUT_REVERSE_${updated.id}`,
+          },
         });
       }
-
-      // 1. Create payout record
-      const payout = await tx.payout.create({
-        data: {
-          creatorId: creator.id,
-          accountId: account.id,
-          amount,
-          currency,
-          status: PayoutStatus.REQUESTED,
-          requestedAt: new Date(),
-        },
-      });
-
-      // 2. Reserve funds immediately in ledger to prevent double-spending
-      await tx.ledgerEntry.create({
-        data: {
-          accountId: account.id,
-          transactionId: payout.id,
-          entryType: LedgerEntryType.PAYOUT_RESERVATION,
-          direction: LedgerDirection.DEBIT,
-          amount,
-          currency,
-          reference: `PAYOUT_RESERVE_${payout.id}`,
-        },
-      });
-
-      return payout;
+      return updated;
     });
 
-    this.eventEmitter.emit(PAYOUT_EVENTS.CREATED, {
-      payoutId: result.id,
-      creatorUserId,
-      amount: result.amount,
-      currency: result.currency,
-      bankName: defaultPayoutMethod.bankName,
-      accountNumberMasked: defaultPayoutMethod.accountIdentifier
-        ? `••••${defaultPayoutMethod.accountIdentifier.slice(-4)}`
+    if (!payout) return false;
+
+    await this.emitPayoutEvent(
+      status === PayoutStatus.SUCCESS
+        ? PAYOUT_EVENTS.SUCCESS
+        : PAYOUT_EVENTS.FAILED,
+      payout,
+    );
+    return true;
+  }
+
+  /** Finds the payout a Paystack transfer reference belongs to. */
+  async findByProviderReference(reference: string): Promise<Payout | null> {
+    return this.prisma.payout.findFirst({
+      where: { providerReference: reference.toLowerCase() },
+    });
+  }
+
+  async emitPayoutEvent(
+    event: (typeof PAYOUT_EVENTS)[keyof typeof PAYOUT_EVENTS],
+    payout: Payout,
+  ) {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { id: payout.creatorId },
+      select: { userId: true },
+    });
+    if (!creator) return;
+
+    const payload: PayoutNotificationEvent = {
+      payoutId: payout.id,
+      creatorUserId: creator.userId,
+      amount: payout.amount,
+      fee: payout.fee,
+      netAmount: payout.netAmount,
+      currency: payout.currency,
+      reference: payout.reference ?? undefined,
+      bankName: payout.bankName ?? undefined,
+      accountNumberMasked: payout.accountNumberLast4
+        ? `••••${payout.accountNumberLast4}`
         : undefined,
-    });
+      failureReason: payout.failureReason ?? undefined,
+    };
+    this.eventEmitter.emit(event, payload);
+  }
 
-    return result;
+  /**
+   * Sends the transfer to Paystack. A definite rejection fails the payout and
+   * restores the balance; an unknown outcome (network error) leaves it
+   * PENDING for the reconciler to settle.
+   */
+  private async startTransfer(
+    payout: Payout,
+    recipientCode: string,
+  ): Promise<Payout> {
+    try {
+      const result = await this.paymentProvider.initiateTransfer({
+        amount: payout.netAmount,
+        recipientCode,
+        reference: payout.providerReference!,
+        reason: `Buy Me a Yard payout ${payout.reference}`,
+      });
+
+      if (result.status === 'SUCCESS' || result.status === 'FAILED') {
+        await this.applyTransferOutcome(payout.id, result.status);
+      } else {
+        await this.prisma.payout.updateMany({
+          where: { id: payout.id, status: PayoutStatus.REQUESTED },
+          data: {
+            status: PayoutStatus.PROCESSING,
+            providerTransferCode: result.transferCode,
+          },
+        });
+      }
+    } catch (error) {
+      if (error instanceof PaymentProviderRejectedError) {
+        this.logger.warn(
+          `Transfer for payout ${payout.id} rejected: ${error.message}`,
+        );
+        await this.applyTransferOutcome(
+          payout.id,
+          'FAILED',
+          'The transfer could not be started.',
+        );
+      } else {
+        this.logger.error(
+          `Transfer for payout ${payout.id} has an unknown outcome`,
+          error,
+        );
+        await this.prisma.payout.updateMany({
+          where: { id: payout.id, status: PayoutStatus.REQUESTED },
+          data: { status: PayoutStatus.PENDING },
+        });
+      }
+    }
+
+    return this.prisma.payout.findUniqueOrThrow({ where: { id: payout.id } });
+  }
+
+  /** PYT-YYYYMMDD-0041: the date in Lagos time plus a global sequence. */
+  private async nextReference(tx: Prisma.TransactionClient): Promise<string> {
+    const [{ nextval }] = await tx.$queryRaw<
+      { nextval: bigint }[]
+    >`SELECT nextval('payout_reference_seq')`;
+    const date = new Date()
+      .toLocaleDateString('en-CA', { timeZone: 'Africa/Lagos' })
+      .replace(/-/g, '');
+    return `PYT-${date}-${nextval.toString().padStart(4, '0')}`;
+  }
+
+  private async getCreator(creatorUserId: string) {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId: creatorUserId },
+      select: { id: true, status: true, kycStatus: true },
+    });
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+    return creator;
   }
 
   /** Withdrawals need a verified identity and a creator in good standing. */
@@ -160,28 +485,45 @@ export class PayoutsService {
     }
   }
 
-  async getCreatorBalance(creatorUserId: string) {
-    const creator = await this.prisma.creatorProfile.findUnique({
-      where: { userId: creatorUserId },
-    });
-    if (!creator) {
-      throw new NotFoundException({
-        code: ErrorCodes.CREATOR_NOT_FOUND,
-        message: 'Creator not found',
-      });
-    }
-
-    const account = await this.ledgerService.getOrCreateAccount(
-      AccountType.CREATOR,
-      creator.id,
-    );
-    const availableBalance = await this.ledgerService.getAccountBalance(
-      account.id,
-    );
-
+  private toDto(payout: Payout): PayoutDto {
     return {
-      availableBalance,
-      currency: account.currency,
+      id: payout.id,
+      reference: payout.reference,
+      status: toDisplayStatus(payout.status),
+      amount: payout.amount,
+      fee: payout.fee,
+      netAmount: payout.netAmount,
+      currency: payout.currency,
+      destination: {
+        bankName: payout.bankName,
+        accountName: payout.accountName,
+        accountNumberLast4: payout.accountNumberLast4,
+      },
+      requestedAt: payout.requestedAt,
+      processedAt: payout.processedAt,
     };
   }
+
+  private toDetailDto(payout: Payout): PayoutDetailDto {
+    const failed =
+      toDisplayStatus(payout.status) === PayoutDisplayStatus.FAILED;
+    return {
+      ...this.toDto(payout),
+      breakdown: {
+        amountRequested: payout.amount,
+        transferred: failed ? 0 : payout.netAmount,
+        feeCharged: failed ? 0 : payout.fee,
+        returnedToBalance: failed ? payout.amount : 0,
+      },
+      failureReason: payout.failureReason,
+    };
+  }
+}
+
+export function toDisplayStatus(status: string): PayoutDisplayStatus {
+  if (status === PayoutStatus.SUCCESS) return PayoutDisplayStatus.SUCCESSFUL;
+  if (status === PayoutStatus.FAILED || status === PayoutStatus.CANCELLED) {
+    return PayoutDisplayStatus.FAILED;
+  }
+  return PayoutDisplayStatus.IN_PROGRESS;
 }

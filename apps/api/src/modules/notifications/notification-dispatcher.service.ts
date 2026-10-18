@@ -111,11 +111,12 @@ export class NotificationDispatcherService {
   }
 
   /**
-   * 1. PAYOUT NOTIFICATIONS (CREATED, PROCESSING, SUCCESS, FAILED)
+   * 1. PAYOUT NOTIFICATIONS (SUCCESS, FAILED, DELAYED)
+   * Copy follows the "Payout notifications" design. Each one opens its payout.
    */
   async dispatchPayoutNotification(
     event: PayoutNotificationEvent,
-    stage: 'CREATED' | 'PROCESSING' | 'SUCCESS' | 'FAILED',
+    stage: 'SUCCESS' | 'FAILED' | 'DELAYED',
   ) {
     const user = await this.prisma.user.findUnique({
       where: { id: event.creatorUserId },
@@ -124,67 +125,47 @@ export class NotificationDispatcherService {
     if (!user) return;
 
     const prefs = await this.getPreferences(user.id);
-    const formattedAmount = (event.amount / 100).toLocaleString();
-    const bankLabel = event.bankName
-      ? `${event.bankName} (${event.accountNumberMasked || '••••'})`
-      : 'your registered bank account';
+    const naira = (kobo: number) => `₦${(kobo / 100).toLocaleString()}`;
+    const amount = naira(event.amount);
+    const netAmount = naira(event.netAmount ?? event.amount);
+    const bankAccount = event.bankName
+      ? `${event.bankName} account (${event.accountNumberMasked || '••••'})`
+      : 'bank account';
+    const actionUrl = `/dashboard/payouts?payoutId=${event.payoutId}`;
 
     let title = '';
     let body = '';
     let type = '';
-    let emailSubject = '';
-    let emailHtml = '';
+    let emailRows: [string, string][] = [];
+    let emailNote = '';
 
     switch (stage) {
-      case 'CREATED':
-        type = 'PAYOUT_CREATED';
-        title = 'Withdrawal submitted';
-        body = `₦${formattedAmount} withdrawal requested to ${bankLabel}. It typically arrives in 1-2 business days.`;
-        emailSubject = 'Withdrawal Submitted - Buy Me a Yard';
-        emailHtml = `
-          <h2>Withdrawal Request Received</h2>
-          <p>Hi ${user.name || 'there'},</p>
-          <p>Your withdrawal request for <strong>₦${formattedAmount}</strong> to ${bankLabel} has been submitted.</p>
-          <p>We'll notify you as soon as the funds land in your account.</p>
-        `;
-        break;
-
-      case 'PROCESSING':
-        type = 'PAYOUT_PROCESSING';
-        title = 'Payout in progress';
-        body = `Your withdrawal of ₦${formattedAmount} is being processed by the bank.`;
-        emailSubject = 'Payout Processing - Buy Me a Yard';
-        emailHtml = `
-          <h2>Payout Processing</h2>
-          <p>Hi ${user.name || 'there'},</p>
-          <p>Your withdrawal of <strong>₦${formattedAmount}</strong> is currently being processed by the bank.</p>
-        `;
-        break;
-
       case 'SUCCESS':
         type = 'PAYOUT_COMPLETED';
         title = 'Money landed';
-        body = `₦${formattedAmount} has been deposited into your ${bankLabel}.`;
-        emailSubject = 'Money Landed! Withdrawal Successful - Buy Me a Yard';
-        emailHtml = `
-          <h2>Money Landed!</h2>
-          <p>Hi ${user.name || 'there'},</p>
-          <p>Great news! <strong>₦${formattedAmount}</strong> has been successfully deposited into your ${bankLabel}.</p>
-        `;
+        body = `${netAmount} has been sent to your ${bankAccount}.`;
+        emailRows = [
+          ['Amount withdrawn', amount],
+          ['Processing fee', naira(event.fee ?? 0)],
+          ['Net received', netAmount],
+        ];
         break;
 
       case 'FAILED':
         type = 'PAYOUT_FAILED';
-        title = 'Withdrawal failed';
-        body = `Your withdrawal of ₦${formattedAmount} could not be completed. Your funds have been returned to your balance.`;
-        emailSubject = 'Withdrawal Did Not Go Through - Buy Me a Yard';
-        emailHtml = `
-          <h2>Withdrawal Did Not Go Through</h2>
-          <p>Hi ${user.name || 'there'},</p>
-          <p>Your withdrawal of ₦${formattedAmount} could not be processed.</p>
-          <p><strong>Your funds have been safely returned to your available balance.</strong></p>
-          <p>${event.failureReason ? `Reason: ${event.failureReason}` : 'Please review your bank details and try again.'}</p>
-        `;
+        title = 'Withdrawal didn’t go through';
+        body = `Your ${amount} withdrawal failed. The full amount has been returned to your available balance.`;
+        emailRows = [['Amount restored', amount]];
+        emailNote =
+          'Review your bank details and available balance before retrying.';
+        break;
+
+      case 'DELAYED':
+        type = 'PAYOUT_DELAYED';
+        title = 'Payout is taking longer than usual';
+        body = `Your ${netAmount} transfer is awaiting confirmation from your bank. There’s no need to submit it again.`;
+        emailNote =
+          'If it has not arrived after 2 hours, contact support with the reference below.';
         break;
     }
 
@@ -199,27 +180,44 @@ export class NotificationDispatcherService {
           body,
           data: {
             payoutId: event.payoutId,
+            reference: event.reference,
             amount: event.amount,
+            netAmount: event.netAmount,
             bankName: event.bankName,
             accountNumberMasked: event.accountNumberMasked,
           },
-          actionUrl: '/dashboard/payouts',
+          actionUrl,
         },
       });
     }
 
     // Email Notification
     if (prefs.emailOnPayout !== false && user.email) {
-      await this.sendEmail(user.email, emailSubject, emailHtml);
+      const firstName = user.name?.split(' ')[0] || 'there';
+      const rows = emailRows
+        .map(
+          ([label, value]) =>
+            `<tr><td style="padding:4px 16px 4px 0;color:#6b7280;">${label}</td><td style="padding:4px 0;"><strong>${value}</strong></td></tr>`,
+        )
+        .join('');
+      const emailHtml = `
+        <p>Hi ${firstName},</p>
+        <h2>${title}</h2>
+        <p>${body}</p>
+        ${rows ? `<table>${rows}</table>` : ''}
+        ${emailNote ? `<p>${emailNote}</p>` : ''}
+        ${event.reference ? `<p>Reference: ${event.reference}</p>` : ''}
+        <p><a href="${this.frontendUrl}${actionUrl}">View payout details</a></p>
+        <p style="color:#6b7280;">Buy Me a Yard · An update about your payout.</p>
+      `;
+      await this.sendEmail(user.email, title, emailHtml);
     }
   }
 
   /**
    * 2. CONTRIBUTION NOTIFICATIONS (received by creator)
    */
-  async dispatchContributionNotification(
-    event: ContributionNotificationEvent,
-  ) {
+  async dispatchContributionNotification(event: ContributionNotificationEvent) {
     const user = await this.prisma.user.findUnique({
       where: { id: event.creatorUserId },
       select: { id: true, email: true, name: true },
@@ -304,7 +302,8 @@ export class NotificationDispatcherService {
 
     // Urgent Security Alert Email
     if (prefs.emailOnSecurityAlert !== false && event.email) {
-      const emailSubject = '⚠️ New sign-in detected on your Buy Me a Yard account';
+      const emailSubject =
+        '⚠️ New sign-in detected on your Buy Me a Yard account';
       const emailHtml = `
         <h2>New Sign-in Detected</h2>
         <p>We detected a new sign-in to your account:</p>

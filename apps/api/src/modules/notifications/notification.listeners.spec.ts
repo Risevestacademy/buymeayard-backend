@@ -39,22 +39,6 @@ describe('NotificationListeners', () => {
       currency: 'NGN',
     };
 
-    it('handles payout.created', async () => {
-      await listeners.handlePayoutCreated(payoutEvent);
-      expect(dispatcher.dispatchPayoutNotification).toHaveBeenCalledWith(
-        payoutEvent,
-        'CREATED',
-      );
-    });
-
-    it('handles payout.processing', async () => {
-      await listeners.handlePayoutProcessing(payoutEvent);
-      expect(dispatcher.dispatchPayoutNotification).toHaveBeenCalledWith(
-        payoutEvent,
-        'PROCESSING',
-      );
-    });
-
     it('handles payout.success', async () => {
       await listeners.handlePayoutSuccess(payoutEvent);
       expect(dispatcher.dispatchPayoutNotification).toHaveBeenCalledWith(
@@ -68,6 +52,14 @@ describe('NotificationListeners', () => {
       expect(dispatcher.dispatchPayoutNotification).toHaveBeenCalledWith(
         payoutEvent,
         'FAILED',
+      );
+    });
+
+    it('handles payout.delayed', async () => {
+      await listeners.handlePayoutDelayed(payoutEvent);
+      expect(dispatcher.dispatchPayoutNotification).toHaveBeenCalledWith(
+        payoutEvent,
+        'DELAYED',
       );
     });
   });
@@ -107,7 +99,9 @@ describe('NotificationListeners', () => {
         sessionId: 'sess-first',
       });
 
-      expect(dispatcher.dispatchSecurityAlertNotification).not.toHaveBeenCalled();
+      expect(
+        dispatcher.dispatchSecurityAlertNotification,
+      ).not.toHaveBeenCalled();
     });
 
     it('does not alert if signing in from a known device/browser family', async () => {
@@ -127,7 +121,9 @@ describe('NotificationListeners', () => {
         sessionId: 'sess-new',
       });
 
-      expect(dispatcher.dispatchSecurityAlertNotification).not.toHaveBeenCalled();
+      expect(
+        dispatcher.dispatchSecurityAlertNotification,
+      ).not.toHaveBeenCalled();
     });
 
     it('dispatches security alert when a genuinely new device/browser signs in', async () => {

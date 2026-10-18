@@ -43,6 +43,7 @@ export const envSchema = z.object({
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
   EMAIL_FROM: z.string().default('BuyMeAYard <buymeayard@gmail.com>'),
+  SUPPORT_EMAIL: z.string().email().default('buymeayard@gmail.com'),
 
   CLOUDINARY_CLOUD_NAME: z.string().optional(),
   CLOUDINARY_API_KEY: z.string().optional(),

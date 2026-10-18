@@ -245,6 +245,28 @@ describe('CreatorsService', () => {
       expect(result?.slug).toBe('adeola');
     });
 
+    it('flags a connected bank account without exposing the accounts', () => {
+      const formatted = service.formatCreatorProfile({
+        id: 'c-1',
+        slug: 'ayoloco',
+        kycStatus: 'VERIFIED',
+        materials: [],
+        payoutMethods: [{ id: 'pm-1' }],
+      });
+      expect(formatted.isKycCompleted).toBe(true);
+      expect(formatted.isBankAccountConnected).toBe(true);
+      expect(formatted).not.toHaveProperty('payoutMethods');
+    });
+
+    it('omits the bank flag when payout accounts were not loaded (public profile)', () => {
+      const formatted = service.formatCreatorProfile({
+        id: 'c-1',
+        slug: 'ayoloco',
+        materials: [],
+      });
+      expect(formatted).not.toHaveProperty('isBankAccountConnected');
+    });
+
     it('should format creator profile with only creatorName and clean slug', () => {
       const formatted = service.formatCreatorProfile({
         user: { name: 'Adeola Johnson' },
@@ -967,6 +989,18 @@ describe('CreatorsService', () => {
     });
   });
 
+  const activePayoutMethod = {
+    id: 'pm-1',
+    status: 'ACTIVE',
+    isDefault: true,
+    bankName: 'Guaranty Trust Bank',
+    bankCode: '058',
+    accountName: 'FISAYO ROTIBI',
+    accountIdentifier: '0123454589',
+    recipientCode: 'RCP_1',
+    verifiedAt: new Date(),
+  };
+
   describe('getDashboardOverview', () => {
     it('should throw NotFoundException if creator profile not found', async () => {
       prisma.creatorProfile.findUnique.mockResolvedValue(null);
@@ -985,23 +1019,29 @@ describe('CreatorsService', () => {
         status: 'ACTIVE',
         kycStatus: 'VERIFIED',
         isPublished: true,
-        payoutMethods: [{ id: 'pm-1' }],
+        payoutMethods: [activePayoutMethod],
       };
 
       prisma.creatorProfile.findUnique.mockResolvedValue(mockCreator);
 
-      prisma.support.aggregate.mockResolvedValue({
-        _count: { id: 24 },
-        _sum: {
-          totalAmount: 12000000,
-          creatorAmount: 11400000,
-          platformFee: 600000,
-        },
-      });
+      prisma.support.aggregate.mockImplementation((args: any) =>
+        Promise.resolve(
+          args.where?.payment
+            ? { _sum: { creatorAmount: 1600000 } } // contributions still processing
+            : {
+                _count: { id: 24 },
+                _sum: {
+                  totalAmount: 12000000,
+                  creatorAmount: 11400000,
+                  platformFee: 600000,
+                },
+              },
+        ),
+      );
 
-      prisma.payout.aggregate
-        .mockResolvedValueOnce({ _sum: { amount: 1600000 } }) // pending
-        .mockResolvedValueOnce({ _sum: { amount: 2000000 } }); // withdrawn
+      prisma.payout.aggregate.mockResolvedValue({
+        _sum: { netAmount: 2000000 }, // withdrawn
+      });
 
       prisma.support.findMany.mockResolvedValue([
         {
@@ -1068,36 +1108,70 @@ describe('CreatorsService', () => {
       );
     });
 
-    it('should compute canWithdraw as false if KYC is not verified', async () => {
-      prisma.creatorProfile.findUnique.mockResolvedValue({
-        id: 'c-1',
-        userId: 'u-1',
-        status: 'ACTIVE',
-        kycStatus: 'PENDING',
-        payoutMethods: [{ id: 'pm-1' }],
-      });
-      prisma.payout.aggregate
-        .mockResolvedValueOnce({ _sum: { amount: 0 } })
-        .mockResolvedValueOnce({ _sum: { amount: 0 } });
-
-      const balance = await service.getDashboardBalance('u-1');
-      expect(balance.canWithdraw).toBe(false);
-    });
-
-    it('should compute canWithdraw as false if no payout method is added', async () => {
+    function mockBalance(creator: Record<string, unknown>) {
       prisma.creatorProfile.findUnique.mockResolvedValue({
         id: 'c-1',
         userId: 'u-1',
         status: 'ACTIVE',
         kycStatus: 'VERIFIED',
-        payoutMethods: [],
+        payoutMethods: [activePayoutMethod],
+        ...creator,
       });
-      prisma.payout.aggregate
-        .mockResolvedValueOnce({ _sum: { amount: 0 } })
-        .mockResolvedValueOnce({ _sum: { amount: 0 } });
+      prisma.support.aggregate.mockResolvedValue({
+        _sum: { creatorAmount: 0 },
+      });
+      prisma.payout.aggregate.mockResolvedValue({ _sum: { netAmount: 0 } });
+    }
+
+    it('should compute canWithdraw as false if KYC is not verified', async () => {
+      mockBalance({ kycStatus: 'PENDING' });
 
       const balance = await service.getDashboardBalance('u-1');
       expect(balance.canWithdraw).toBe(false);
+      expect(balance.setupStep).toBe('VERIFY_IDENTITY');
+    });
+
+    it('should compute canWithdraw as false if no payout method is added', async () => {
+      mockBalance({ payoutMethods: [] });
+
+      const balance = await service.getDashboardBalance('u-1');
+      expect(balance.canWithdraw).toBe(false);
+      expect(balance.setupStep).toBe('CONNECT_BANK');
+      expect(balance.payoutMethod).toBeNull();
+    });
+
+    it('ignores replaced payout accounts', async () => {
+      mockBalance({
+        payoutMethods: [{ ...activePayoutMethod, status: 'INACTIVE' }],
+      });
+
+      const balance = await service.getDashboardBalance('u-1');
+      expect(balance.hasPayoutMethod).toBe(false);
+    });
+
+    it('blocks withdrawal below the ₦1,000 minimum', async () => {
+      mockBalance({});
+      ledgerService.getAccountBalance.mockResolvedValueOnce(75000);
+
+      const balance = await service.getDashboardBalance('u-1');
+      expect(balance.canWithdraw).toBe(false);
+      expect(balance.minimumWithdrawal).toBe(100000);
+    });
+
+    it('returns the payout account card when ready', async () => {
+      mockBalance({});
+
+      const balance = await service.getDashboardBalance('u-1');
+      expect(balance.canWithdraw).toBe(true);
+      expect(balance.setupStep).toBe('READY');
+      expect(balance.payoutMethod).toEqual({
+        id: 'pm-1',
+        bankName: 'Guaranty Trust Bank',
+        bankCode: '058',
+        accountName: 'FISAYO ROTIBI',
+        accountNumberLast4: '4589',
+        verified: true,
+      });
     });
   });
 

@@ -35,6 +35,10 @@ export class UsersService {
             status: true,
             kycStatus: true,
             kycBlockedReason: true,
+            payoutMethods: {
+              where: { status: 'ACTIVE' },
+              select: { id: true },
+            },
           },
         },
       },
@@ -61,6 +65,9 @@ export class UsersService {
       roles: user.roles.map((r) => r.role.name),
       isOnboardingCompleted: isCompleted,
       isProfileSetupCompleted: isCompleted,
+      isKycCompleted: user.creatorProfile?.kycStatus === 'VERIFIED',
+      isBankAccountConnected:
+        (user.creatorProfile?.payoutMethods.length ?? 0) > 0,
       creatorProfile: user.creatorProfile
         ? {
             id: user.creatorProfile.id,

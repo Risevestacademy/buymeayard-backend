@@ -34,6 +34,7 @@ describe('UsersService', () => {
           status: 'ACTIVE',
           kycStatus: 'VERIFIED',
           kycBlockedReason: null,
+          payoutMethods: [{ id: 'pm-1' }],
         },
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -46,6 +47,9 @@ describe('UsersService', () => {
       expect(result.roles).toEqual(['CREATOR']);
       expect(result.isOnboardingCompleted).toBe(true);
       expect(result.isProfileSetupCompleted).toBe(true);
+      expect(result.isKycCompleted).toBe(true);
+      expect(result.isBankAccountConnected).toBe(true);
+      expect(result.creatorProfile).not.toHaveProperty('payoutMethods');
       expect(result.creatorProfile?.slug).toBe('adeola');
       expect(result.creatorProfile?.creatorName).toBe('Ade');
       expect(result.creatorProfile?.kycBlockedReason).toBeNull();
@@ -69,6 +73,7 @@ describe('UsersService', () => {
           status: 'PROFILE_CREATED',
           kycStatus: 'REJECTED',
           kycBlockedReason: 'Document mismatch with submitted identity',
+          payoutMethods: [],
         },
         createdAt: new Date(),
         updatedAt: new Date(),

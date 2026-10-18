@@ -12,25 +12,26 @@ generator client {
 // --------------------------------------------------------
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  emailVerified Boolean   @default(false)
+  id            String   @id @default(uuid())
+  email         String   @unique
+  emailVerified Boolean  @default(false)
   name          String?
   image         String?
-  status        String    @default("ACTIVE") // ACTIVE, SUSPENDED, BANNED, DEACTIVATED
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  status        String   @default("ACTIVE") // ACTIVE, SUSPENDED, BANNED, DEACTIVATED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Better Auth Relations
-  sessions      Session[]
-  accounts      AuthAccount[]
-  
+  sessions Session[]
+  accounts AuthAccount[]
+
   // Domain Relations
   roles                  UserRole[]
   creatorProfile         CreatorProfile?
   supports               Support[]               @relation("SupporterSupports")
   follows                Follow[]                @relation("SupporterFollows")
   notifications          Notification[]
+  supportTickets         SupportTicket[]
   notificationPreference NotificationPreference?
   entitlements           PostEntitlement[]
   reports                ContentReport[]         @relation("ReporterReports")
@@ -217,10 +218,10 @@ model Support {
   id            String   @id @default(uuid())
   supporterId   String
   creatorId     String
-  subtotal      Int      // Minor units
-  platformFee   Int      // Minor units
-  creatorAmount Int      // Minor units
-  totalAmount   Int      // Minor units (creatorAmount + platformFee)
+  subtotal      Int // Minor units
+  platformFee   Int // Minor units
+  creatorAmount Int // Minor units
+  totalAmount   Int // Minor units (creatorAmount + platformFee)
   currency      String   @default("NGN")
   message       String?
   isAnonymous   Boolean  @default(false)
@@ -228,10 +229,11 @@ model Support {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  supporter User           @relation("SupporterSupports", fields: [supporterId], references: [id], onDelete: Cascade)
-  creator   CreatorProfile @relation("CreatorSupports", fields: [creatorId], references: [id], onDelete: Cascade)
+  supporter User            @relation("SupporterSupports", fields: [supporterId], references: [id], onDelete: Cascade)
+  creator   CreatorProfile  @relation("CreatorSupports", fields: [creatorId], references: [id], onDelete: Cascade)
   items     SupportItem[]
   payment   Payment?
+  tickets   SupportTicket[]
 
   @@index([creatorId])
   @@index([supporterId])
@@ -282,7 +284,8 @@ model Payment {
 
 model PaymentEvent {
   id              String   @id @default(uuid())
-  paymentId       String
+  paymentId       String? // Set for charge events
+  payoutId        String? // Set for transfer events
   provider        String   @default("PAYSTACK")
   eventType       String
   providerEventId String
@@ -290,7 +293,8 @@ model PaymentEvent {
   processedAt     DateTime @default(now())
   createdAt       DateTime @default(now())
 
-  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  payout  Payout?  @relation(fields: [payoutId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerEventId])
   @@map("payment_events")
@@ -353,44 +357,85 @@ model LedgerEntry {
 }
 
 model Payout {
-  id                String    @id @default(uuid())
-  creatorId         String
-  accountId         String
-  amount            Int       // Minor units
-  currency          String    @default("NGN")
-  status            String    @default("REQUESTED") // REQUESTED, PENDING, PROCESSING, SUCCESS, FAILED, CANCELLED
-  provider          String    @default("PAYSTACK")
-  providerReference String?
-  requestedAt       DateTime  @default(now())
-  processedAt       DateTime?
-  failureReason     String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                   String    @id @default(uuid())
+  creatorId            String
+  accountId            String
+  payoutMethodId       String?
+  reference            String?   @unique // Creator-facing, e.g. PYT-20250925-0041
+  idempotencyKey       String?
+  amount               Int // Minor units, debited from the balance
+  fee                  Int       @default(0) // Minor units, deducted from amount
+  netAmount            Int       @default(0) // Minor units, sent to the bank (amount - fee)
+  currency             String    @default("NGN")
+  status               String    @default("REQUESTED") // REQUESTED, PENDING, PROCESSING, SUCCESS, FAILED, CANCELLED
+  provider             String    @default("PAYSTACK")
+  providerReference    String?
+  providerTransferCode String?
+  // Destination snapshot: a submitted withdrawal keeps going to the account chosen at request time
+  bankName             String?
+  bankCode             String?
+  accountName          String?
+  accountNumberLast4   String?
+  requestedAt          DateTime  @default(now())
+  processedAt          DateTime? // Set when the payout reaches SUCCESS or FAILED
+  delayNotifiedAt      DateTime?
+  failureReason        String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  account Account        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  creator      CreatorProfile  @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  account      Account         @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  payoutMethod PayoutMethod?   @relation(fields: [payoutMethodId], references: [id], onDelete: SetNull)
+  events       PaymentEvent[]
+  tickets      SupportTicket[]
 
-  @@index([creatorId])
+  @@unique([creatorId, idempotencyKey])
+  @@index([creatorId, requestedAt])
   @@index([status])
   @@map("payouts")
 }
 
 model PayoutMethod {
-  id                String   @id @default(uuid())
+  id                String    @id @default(uuid())
   creatorId         String
-  type              String   @default("BANK_ACCOUNT")
-  provider          String   @default("PAYSTACK")
-  accountIdentifier String   // Bank account number or recipient code
+  type              String    @default("BANK_ACCOUNT")
+  provider          String    @default("PAYSTACK")
+  accountIdentifier String // Bank account number or recipient code
   accountName       String
   bankName          String
-  status            String   @default("ACTIVE")
-  isDefault         Boolean  @default(false)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  bankCode          String?
+  recipientCode     String? // Paystack transfer recipient
+  status            String    @default("ACTIVE") // ACTIVE, INACTIVE (replaced by a newer account)
+  isDefault         Boolean   @default(false)
+  verifiedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  payouts Payout[]
 
   @@map("payout_methods")
+}
+
+model SupportTicket {
+  id        String   @id @default(uuid())
+  userId    String
+  payoutId  String?
+  supportId String? // Contribution the message is about
+  message   String
+  context   Json? // Snapshot of the payout/contribution details sent with the message
+  status    String   @default("OPEN") // OPEN, RESOLVED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payout  Payout?  @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+  support Support? @relation(fields: [supportId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([payoutId])
+  @@index([supportId])
+  @@map("support_tickets")
 }
 
 // --------------------------------------------------------
