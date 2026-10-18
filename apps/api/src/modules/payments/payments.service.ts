@@ -3,6 +3,7 @@ import {
   Inject,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
@@ -10,7 +11,10 @@ import { PAYMENT_PROVIDER } from '../../infrastructure/payments/payment-provider
 import type { PaymentProvider } from '../../infrastructure/payments/payment-provider.interface';
 import { LedgerService } from '../ledger/ledger.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
-import { PaymentStatus, SupportStatus } from '@buymeayard/types';
+import { CreatorStatus, PaymentStatus, SupportStatus } from '@buymeayard/types';
+
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CONTRIBUTION_EVENTS } from '../notifications/events/notification.events';
 
 @Injectable()
 export class PaymentsService {
@@ -21,18 +25,28 @@ export class PaymentsService {
     @Inject(PAYMENT_PROVIDER)
     private readonly paymentProvider: PaymentProvider,
     private readonly ledgerService: LedgerService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async initializePayment(supportId: string, email: string) {
     const support = await this.prisma.support.findUnique({
       where: { id: supportId },
-      include: { supporter: true },
+      include: { supporter: true, creator: { select: { status: true } } },
     });
 
     if (!support) {
       throw new NotFoundException({
         code: ErrorCodes.NOT_FOUND,
         message: 'Support transaction not found',
+      });
+    }
+
+    // Re-check at checkout: the creator may have lost verification since the
+    // support was created. Already-captured payments are never blocked.
+    if (support.creator.status !== CreatorStatus.ACTIVE) {
+      throw new ForbiddenException({
+        code: ErrorCodes.CREATOR_NOT_ACTIVE,
+        message: 'This creator is not accepting contributions yet',
       });
     }
 
@@ -134,7 +148,19 @@ export class PaymentsService {
             providerReference: reference,
           },
         },
-        include: { support: true },
+        include: {
+          support: {
+            include: {
+              creator: {
+                select: { userId: true },
+              },
+              supporter: {
+                select: { name: true, email: true },
+              },
+              items: true,
+            },
+          },
+        },
       });
 
       if (payment && payment.status !== PaymentStatus.SUCCESS) {
@@ -176,6 +202,34 @@ export class PaymentsService {
           payment.support.platformFee,
           payment.currency,
         );
+
+        // 5. Emit contribution received event for creator notifications (in-app & email)
+        const yards = payment.support.items.reduce(
+          (sum, item) => sum + item.quantity,
+          0,
+        );
+        const materialName =
+          payment.support.items
+            .map((i) => i.materialNameSnapshot)
+            .filter(Boolean)
+            .join(', ') || 'Fabric';
+        const supporterName = payment.support.isAnonymous
+          ? 'Anonymous'
+          : payment.support.supporter?.name || 'A supporter';
+        const supporterEmail = payment.support.isAnonymous
+          ? undefined
+          : payment.support.supporter?.email;
+
+        this.eventEmitter.emit(CONTRIBUTION_EVENTS.RECEIVED, {
+          supportId: payment.support.id,
+          creatorUserId: payment.support.creator.userId,
+          supporterName,
+          supporterEmail,
+          yards: yards > 0 ? yards : 1,
+          materialName,
+          amount: payment.support.creatorAmount,
+          message: payment.support.message,
+        });
       }
     }
 

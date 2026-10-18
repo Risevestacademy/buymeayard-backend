@@ -12,7 +12,8 @@ export class CreateMaterialDto {
 
   @ApiPropertyOptional({
     example: 'velvet-lace',
-    description: 'Unique URL-friendly slug. Auto-generated from name if omitted.',
+    description:
+      'Unique URL-friendly slug. Auto-generated from name if omitted.',
   })
   @IsOptional()
   @IsString()
@@ -35,7 +36,8 @@ export class CreateMaterialDto {
   imageUrl?: string;
 
   @ApiPropertyOptional({
-    example: 'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill/materials/ankara-sm',
+    example:
+      'https://res.cloudinary.com/buymeayard/image/upload/w_80,h_80,c_fill/materials/ankara-sm',
     description: 'Small thumbnail URL for fabric cards/grids',
   })
   @IsOptional()
@@ -43,7 +45,8 @@ export class CreateMaterialDto {
   thumbnailSmallUrl?: string;
 
   @ApiPropertyOptional({
-    example: 'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill/materials/ankara-lg',
+    example:
+      'https://res.cloudinary.com/buymeayard/image/upload/w_400,h_400,c_fill/materials/ankara-lg',
     description: 'Large thumbnail URL for detail preview',
   })
   @IsOptional()
@@ -58,4 +61,3 @@ export class CreateMaterialDto {
   @IsString()
   color?: string;
 }
-

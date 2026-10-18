@@ -33,6 +33,7 @@ describe('UsersService', () => {
           creatorName: 'Ade',
           status: 'ACTIVE',
           kycStatus: 'VERIFIED',
+          kycBlockedReason: null,
         },
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -47,8 +48,39 @@ describe('UsersService', () => {
       expect(result.isProfileSetupCompleted).toBe(true);
       expect(result.creatorProfile?.slug).toBe('adeola');
       expect(result.creatorProfile?.creatorName).toBe('Ade');
+      expect(result.creatorProfile?.kycBlockedReason).toBeNull();
       expect((result.creatorProfile as any)?.username).toBeUndefined();
       expect((result.creatorProfile as any)?.personalizedLink).toBeUndefined();
+    });
+
+    it('should return kycBlockedReason when creator KYC has been blocked', async () => {
+      const mockUser = {
+        id: 'user-2',
+        email: 'blocked@example.com',
+        name: 'Blocked User',
+        image: null,
+        emailVerified: true,
+        status: 'ACTIVE',
+        roles: [{ role: { name: 'CREATOR' } }],
+        creatorProfile: {
+          id: 'creator-2',
+          slug: 'blockeduser',
+          creatorName: 'Blocked User',
+          status: 'PROFILE_CREATED',
+          kycStatus: 'REJECTED',
+          kycBlockedReason: 'Document mismatch with submitted identity',
+        },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      (prismaService.user!.findUnique as jest.Mock).mockResolvedValue(mockUser);
+
+      const result = await usersService.findByIdWithRoles('user-2');
+      expect(result.creatorProfile?.kycStatus).toBe('REJECTED');
+      expect(result.creatorProfile?.kycBlockedReason).toBe(
+        'Document mismatch with submitted identity',
+      );
     });
 
     it('should throw NotFoundException if user does not exist', async () => {

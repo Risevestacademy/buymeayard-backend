@@ -80,22 +80,43 @@ export class AuthService implements OnModuleInit {
     errorCallbackURL?: string;
     newUserCallbackURL?: string;
     headers?: Headers;
-  }): Promise<{ url: string; redirect: boolean }> {
+  }): Promise<{ url: string; redirect: boolean; headers?: Headers }> {
     const defaultCallback =
       this.configService.get<string>('BETTER_AUTH_URL') ||
       'http://localhost:3000';
 
+    const callbackURL = params.callbackURL || defaultCallback;
+    const errorCallbackURL = params.errorCallbackURL || callbackURL;
+
     const res = await (this.getAuth().api as any).signInSocial({
       body: {
         provider: params.provider,
-        callbackURL: params.callbackURL || defaultCallback,
-        errorCallbackURL: params.errorCallbackURL,
+        callbackURL,
+        errorCallbackURL,
         newUserCallbackURL: params.newUserCallbackURL,
       },
       ...(params.headers ? { headers: params.headers } : {}),
+      asResponse: true,
     });
 
-    return res as { url: string; redirect: boolean };
+    if (res instanceof Response) {
+      const data = (await res.json().catch(() => ({}))) as {
+        url?: string;
+        redirect?: boolean;
+      };
+      const location = res.headers.get('location') || data.url || '';
+      return {
+        url: location,
+        redirect: data.redirect ?? true,
+        headers: res.headers,
+      };
+    }
+
+    return {
+      url: res?.url,
+      redirect: res?.redirect ?? true,
+      headers: res?.headers,
+    };
   }
 
   async signOut(params?: { headers?: Headers }): Promise<globalThis.Response> {
@@ -135,6 +156,15 @@ export class AuthService implements OnModuleInit {
       },
       asResponse: true,
     });
+  }
+
+  /**
+   * Hashes a password with better-auth's configured hasher so it can be
+   * verified by the standard email/password sign-in flow.
+   */
+  async hashPassword(password: string): Promise<string> {
+    const ctx = await this.getAuth().$context;
+    return ctx.password.hash(password);
   }
 
   async changePassword(params: {
@@ -211,5 +241,28 @@ export class AuthService implements OnModuleInit {
       isOnboardingCompleted: isCompleted,
       isProfileSetupCompleted: isCompleted,
     };
+  }
+
+  /**
+   * Look up an active session and user by session token.
+   */
+  async getSessionByToken(token: string) {
+    return this.prisma.session.findUnique({
+      where: { token },
+      include: {
+        user: true,
+      },
+    });
+  }
+
+  /**
+   * Invalidate / delete a session by session token.
+   */
+  async revokeSessionByToken(token: string) {
+    return this.prisma.session
+      .delete({
+        where: { token },
+      })
+      .catch(() => null);
   }
 }

@@ -11,6 +11,7 @@ jest.mock('./better-auth', () => ({
 
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { toNodeHandler } from 'better-auth/node';
 
 describe('AuthController', () => {
   let controller: AuthController;
@@ -29,6 +30,8 @@ describe('AuthController', () => {
     userHasRole: jest.Mock;
     getIsOnboarded: jest.Mock;
     getUserAuthFlags: jest.Mock;
+    revokeSessionByToken: jest.Mock;
+    getSessionByToken: jest.Mock;
   };
 
   const createMockReqRes = (headers: Record<string, string> = {}) => {
@@ -75,6 +78,8 @@ describe('AuthController', () => {
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
       }),
+      revokeSessionByToken: jest.fn().mockResolvedValue(null),
+      getSessionByToken: jest.fn().mockResolvedValue(null),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -171,6 +176,30 @@ describe('AuthController', () => {
         HttpException,
       );
     });
+
+    it('should reject mobile registration requests with 403 Forbidden and REGISTRATION_WEB_ONLY', async () => {
+      const dto = {
+        email: 'mobile@example.com',
+        password: 'Password123!',
+        name: 'Mobile User',
+      };
+      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
+
+      await expect(controller.register(dto, req, res)).rejects.toThrow(
+        HttpException,
+      );
+
+      try {
+        await controller.register(dto, req, res);
+      } catch (err: any) {
+        expect(err.getStatus()).toBe(HttpStatus.FORBIDDEN);
+        expect(err.getResponse()).toMatchObject({
+          code: 'REGISTRATION_WEB_ONLY',
+        });
+      }
+
+      expect(authService.signUpEmail).not.toHaveBeenCalled();
+    });
   });
 
   // --------------------------------------------------------
@@ -230,6 +259,34 @@ describe('AuthController', () => {
         'authorization',
         expect.stringContaining('Bearer'),
       );
+    });
+
+    it('should reject non-creator mobile logins with 403 Forbidden and MOBILE_ACCESS_DENIED and revoke session', async () => {
+      const dto = { email: 'supporter@example.com', password: 'Password123!' };
+      const { req, res } = createMockReqRes({ 'x-client-type': 'mobile' });
+
+      authService.signInEmail.mockImplementation(() =>
+        createSuccessResponse({
+          user: { id: 'u1' },
+          token: 'token456',
+        }),
+      );
+      authService.userHasRole.mockResolvedValue(false);
+
+      await expect(controller.login(dto, req, res)).rejects.toThrow(
+        HttpException,
+      );
+
+      try {
+        await controller.login(dto, req, res);
+      } catch (err: any) {
+        expect(err.getStatus()).toBe(HttpStatus.FORBIDDEN);
+        expect(err.getResponse()).toMatchObject({
+          code: 'MOBILE_ACCESS_DENIED',
+        });
+      }
+
+      expect(authService.revokeSessionByToken).toHaveBeenCalledWith('token456');
     });
   });
 
@@ -479,7 +536,7 @@ describe('AuthController', () => {
       expect(authService.signInSocial).toHaveBeenCalledWith({
         provider: 'google',
         callbackURL: 'buymeayard://oauth-callback',
-        errorCallbackURL: undefined,
+        errorCallbackURL: 'buymeayard://oauth-callback',
         newUserCallbackURL: undefined,
         headers: expect.any(Headers),
       });
@@ -501,7 +558,7 @@ describe('AuthController', () => {
       expect(authService.signInSocial).toHaveBeenCalledWith({
         provider: 'apple',
         callbackURL: 'buymeayard://oauth-callback',
-        errorCallbackURL: undefined,
+        errorCallbackURL: 'buymeayard://oauth-callback',
         newUserCallbackURL: undefined,
         headers: expect.any(Headers),
       });
@@ -552,6 +609,143 @@ describe('AuthController', () => {
         url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
         redirect: true,
       });
+    });
+
+    it('should forward Set-Cookie headers from authService on redirect', async () => {
+      const { req, res } = createMockReqRes();
+      res.redirect = jest.fn();
+      res.setHeader = jest.fn();
+      const headers = new Headers();
+      headers.set(
+        'set-cookie',
+        'better-auth.state=secret_state; Path=/; HttpOnly',
+      );
+      authService.signInSocial.mockResolvedValue({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+        headers,
+      });
+
+      await controller.directSocialRedirect(
+        'google',
+        'http://localhost:3000/dashboard',
+        undefined,
+        req,
+        res,
+      );
+
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'set-cookie',
+        expect.arrayContaining([
+          expect.stringContaining('better-auth.state=secret_state'),
+        ]),
+      );
+      expect(res.redirect).toHaveBeenCalledWith(
+        'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+      );
+    });
+
+    it('should pass errorCallbackURL query param to authService.signInSocial', async () => {
+      const { req, res } = createMockReqRes();
+      res.redirect = jest.fn();
+      authService.signInSocial.mockResolvedValue({
+        url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=123',
+        redirect: true,
+      });
+
+      await controller.directSocialRedirect(
+        'google',
+        'http://localhost:3000/dashboard',
+        undefined,
+        req,
+        res,
+        'http://localhost:3000/auth/error',
+      );
+
+      expect(authService.signInSocial).toHaveBeenCalledWith({
+        provider: 'google',
+        callbackURL: 'http://localhost:3000/dashboard',
+        errorCallbackURL: 'http://localhost:3000/auth/error',
+        headers: expect.any(Headers),
+      });
+    });
+  });
+
+  describe('handleBetterAuth', () => {
+    it('should append token to redirect Location when redirecting to mobile callback deep link', async () => {
+      const mockHandler = jest.fn((req, res) => {
+        res.setHeader('location', 'bmay-dev://oauth-callback');
+        res.setHeader('set-cookie', [
+          'better-auth.session_token=test-session-token-999; Path=/; HttpOnly',
+        ]);
+        res.writeHead(302);
+      });
+      (toNodeHandler as jest.Mock).mockReturnValue(mockHandler);
+
+      const originalWriteHead = jest.fn();
+      const headers: Record<string, any> = {};
+      const res: any = {
+        setHeader: jest.fn((k, v) => {
+          headers[k.toLowerCase()] = v;
+        }),
+        getHeader: jest.fn((k) => headers[k.toLowerCase()]),
+        writeHead: originalWriteHead,
+      };
+      const req: any = { headers: {} };
+
+      await controller.handleBetterAuth(req, res);
+
+      expect(headers['location']).toBe(
+        'bmay-dev://oauth-callback?token=test-session-token-999',
+      );
+      expect(originalWriteHead).toHaveBeenCalledWith(302);
+    });
+
+    it('should not alter web redirects', async () => {
+      const mockHandler = jest.fn((req, res) => {
+        res.setHeader('location', 'http://localhost:3000/dashboard');
+        res.setHeader('set-cookie', [
+          'better-auth.session_token=test-session-token-999; Path=/; HttpOnly',
+        ]);
+        res.writeHead(302);
+      });
+      (toNodeHandler as jest.Mock).mockReturnValue(mockHandler);
+
+      const headers: Record<string, any> = {};
+      const res: any = {
+        setHeader: jest.fn((k, v) => {
+          headers[k.toLowerCase()] = v;
+        }),
+        getHeader: jest.fn((k) => headers[k.toLowerCase()]),
+        writeHead: jest.fn(),
+      };
+      const req: any = { headers: {} };
+
+      await controller.handleBetterAuth(req, res);
+
+      expect(headers['location']).toBe('http://localhost:3000/dashboard');
+    });
+
+    it('should suppress set-cookie on mobile requests', async () => {
+      const mockHandler = jest.fn((req, res) => {
+        res.setHeader('set-cookie', ['cookie=123']);
+        res.writeHead(200);
+      });
+      (toNodeHandler as jest.Mock).mockReturnValue(mockHandler);
+
+      const capturedHeaders: string[] = [];
+      const res: any = {
+        setHeader: jest.fn((k) => {
+          capturedHeaders.push(k.toLowerCase());
+        }),
+        getHeader: jest.fn(),
+        writeHead: jest.fn(),
+      };
+      const req: any = { headers: { 'x-client-type': 'mobile' } };
+
+      await controller.handleBetterAuth(req, res);
+
+      expect(capturedHeaders).not.toContain('set-cookie');
     });
   });
 });

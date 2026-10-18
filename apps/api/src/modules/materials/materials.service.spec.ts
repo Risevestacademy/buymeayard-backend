@@ -180,7 +180,9 @@ describe('MaterialsService', () => {
       expect(result.yards).toBe(50);
       expect(result.totalAmount).toBe(50000);
       expect(result.totalAmountMinor).toBe(5000000);
-      expect(result.summary).toContain('50 yards of material equals 50,000 NGN');
+      expect(result.summary).toContain(
+        '50 yards of material equals 50,000 NGN',
+      );
     });
 
     it('should default to 1 yard when no arguments provided', async () => {
@@ -296,5 +298,3 @@ describe('MaterialsService', () => {
     });
   });
 });
-
-

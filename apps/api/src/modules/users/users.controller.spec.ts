@@ -50,6 +50,7 @@ describe('UsersController', () => {
           slug: 'alice',
           status: 'PROFILE_CREATED',
           kycStatus: 'NOT_SUBMITTED',
+          kycBlockedReason: null,
         },
       };
       usersService.findByIdWithRoles.mockResolvedValue(mockProfile);

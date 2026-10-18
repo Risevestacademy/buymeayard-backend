@@ -42,6 +42,9 @@ import { ErrorCodes } from '../../common/errors/error-codes';
 import {
   isMobileRequest,
   extractSessionToken,
+  extractSessionTokenFromCookie,
+  isMobileRedirectUrl,
+  appendTokenToUrl,
 } from '../../common/utils/client-detection.util';
 
 @ApiTags('auth')
@@ -80,6 +83,17 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    if (isMobileRequest(req.headers)) {
+      throw new HttpException(
+        {
+          code: ErrorCodes.REGISTRATION_WEB_ONLY,
+          message:
+            'Account registration is only available on web. Please visit our website to create an account.',
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
     const webRes = await this.authService.signUpEmail({
       ...dto,
       headers: fromNodeHeaders(req.headers),
@@ -121,11 +135,33 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const isMobile = isMobileRequest(req.headers);
     const webRes = await this.authService.signInEmail({
       ...dto,
       headers: fromNodeHeaders(req.headers),
     });
     const body = await this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
+
+    if (isMobile && body && typeof body === 'object' && body.user?.id) {
+      const isCreator = await this.authService.userHasRole(
+        body.user.id,
+        'CREATOR',
+      );
+      if (!isCreator) {
+        if (body.token) {
+          await this.authService.revokeSessionByToken(body.token);
+        }
+        throw new HttpException(
+          {
+            code: ErrorCodes.MOBILE_ACCESS_DENIED,
+            message:
+              'The mobile app is only available for creators. Please use the web platform or apply to become a creator.',
+          },
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    }
+
     if (body && typeof body === 'object' && body.user?.id) {
       const authFlags = await this.authService.getUserAuthFlags(body.user.id);
       Object.assign(body, authFlags);
@@ -156,18 +192,34 @@ export class AuthController {
   async socialSignIn(
     @Body() dto: SocialSignInDto,
     @Req() req: Request,
+    @Res({ passthrough: true }) res?: Response,
   ): Promise<SocialSignInResponseDto> {
     const isMobile = isMobileRequest(req.headers);
     const callbackURL =
       dto.callbackURL || (isMobile ? 'buymeayard://oauth-callback' : undefined);
+    const errorCallbackURL = dto.errorCallbackURL || callbackURL;
 
     const result = await this.authService.signInSocial({
       provider: dto.provider,
       callbackURL,
-      errorCallbackURL: dto.errorCallbackURL,
+      errorCallbackURL,
       newUserCallbackURL: dto.newUserCallbackURL,
       headers: fromNodeHeaders(req.headers),
     });
+
+    if (res && result.headers) {
+      if (typeof (result.headers as any).getSetCookie === 'function') {
+        const setCookies = (result.headers as any).getSetCookie();
+        if (Array.isArray(setCookies) && setCookies.length > 0) {
+          res.setHeader('set-cookie', setCookies);
+        }
+      } else {
+        const setCookie = result.headers.get('set-cookie');
+        if (setCookie) {
+          res.setHeader('set-cookie', setCookie);
+        }
+      }
+    }
 
     return {
       url: result.url,
@@ -196,6 +248,13 @@ export class AuthController {
     example: 'buymeayard://oauth-callback',
   })
   @ApiQuery({
+    name: 'errorCallbackURL',
+    required: false,
+    description:
+      'Where to redirect if an OAuth error occurs (e.g. user denied consent, state mismatch)',
+    example: 'buymeayard://oauth-callback',
+  })
+  @ApiQuery({
     name: 'redirect',
     required: false,
     type: Boolean,
@@ -216,16 +275,37 @@ export class AuthController {
     @Query('redirect') redirectParam: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
+    @Query('errorCallbackURL') errorCallbackURL?: string,
   ) {
     const isMobile = isMobileRequest(req.headers);
     const effectiveCallback =
       callbackURL || (isMobile ? 'buymeayard://oauth-callback' : undefined);
+    const effectiveErrorCallback =
+      errorCallbackURL ||
+      (req.query?.errorCallbackURL as string | undefined) ||
+      effectiveCallback;
 
     const result = await this.authService.signInSocial({
       provider,
       callbackURL: effectiveCallback,
+      errorCallbackURL: effectiveErrorCallback,
       headers: fromNodeHeaders(req.headers),
     });
+
+    // Forward Set-Cookie headers from Better Auth (state cookie, etc.)
+    if (result.headers) {
+      if (typeof (result.headers as any).getSetCookie === 'function') {
+        const setCookies = (result.headers as any).getSetCookie();
+        if (Array.isArray(setCookies) && setCookies.length > 0) {
+          res.setHeader('set-cookie', setCookies);
+        }
+      } else {
+        const setCookie = result.headers.get('set-cookie');
+        if (setCookie) {
+          res.setHeader('set-cookie', setCookie);
+        }
+      }
+    }
 
     const wantsJson =
       redirectParam === 'false' ||
@@ -431,16 +511,76 @@ export class AuthController {
   @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Better Auth native SDK handler endpoint' })
   async handleBetterAuth(@Req() req: Request, @Res() res: Response) {
-    // If mobile request header is present, suppress Set-Cookie from native handler
-    if (isMobileRequest(req.headers)) {
-      const originalSetHeader = res.setHeader.bind(res);
-      res.setHeader = function (name: string, value: any) {
-        if (name.toLowerCase() === 'set-cookie') {
+    const isMobileReq = isMobileRequest(req.headers);
+    let capturedSetCookie: any;
+
+    const originalSetHeader = res.setHeader.bind(res);
+    const originalWriteHead = res.writeHead.bind(res);
+
+    res.setHeader = function (name: string, value: any) {
+      if (name.toLowerCase() === 'set-cookie') {
+        capturedSetCookie = value;
+        if (isMobileReq) {
           return res;
         }
-        return originalSetHeader(name, value);
-      };
-    }
+      }
+      return originalSetHeader(name, value);
+    };
+
+    res.writeHead = function (statusCode: any, ...rest: any[]) {
+      let headersObj: Record<string, any> | undefined;
+      if (rest.length > 0) {
+        const lastArg = rest[rest.length - 1];
+        if (
+          typeof lastArg === 'object' &&
+          lastArg !== null &&
+          !Array.isArray(lastArg)
+        ) {
+          headersObj = lastArg;
+        }
+      }
+
+      const location =
+        headersObj?.location ||
+        headersObj?.Location ||
+        res.getHeader('location');
+
+      if (
+        typeof location === 'string' &&
+        isMobileRedirectUrl(location, req.headers)
+      ) {
+        const cookieVal =
+          capturedSetCookie ||
+          headersObj?.['set-cookie'] ||
+          headersObj?.['Set-Cookie'] ||
+          res.getHeader('set-cookie');
+
+        const token =
+          extractSessionTokenFromCookie(cookieVal) ||
+          (res.getHeader('set-auth-token') as string | undefined) ||
+          headersObj?.['set-auth-token'];
+
+        if (typeof res.removeHeader === 'function') {
+          res.removeHeader('set-cookie');
+        }
+        if (headersObj) {
+          delete headersObj['set-cookie'];
+          delete headersObj['Set-Cookie'];
+        }
+
+        if (token) {
+          const updatedLocation = appendTokenToUrl(location, token);
+          if (headersObj) {
+            if ('location' in headersObj) headersObj.location = updatedLocation;
+            if ('Location' in headersObj) headersObj.Location = updatedLocation;
+          }
+          originalSetHeader('location', updatedLocation);
+        }
+      }
+
+      return (originalWriteHead as any)(statusCode, ...rest);
+    };
+
     return toNodeHandler(this.authService.getAuth())(req, res);
   }
 

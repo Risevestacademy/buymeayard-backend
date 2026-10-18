@@ -26,13 +26,14 @@ model User {
   accounts      AuthAccount[]
   
   // Domain Relations
-  roles          UserRole[]
-  creatorProfile CreatorProfile?
-  supports       Support[]       @relation("SupporterSupports")
-  follows        Follow[]        @relation("SupporterFollows")
-  notifications  Notification[]
-  entitlements   PostEntitlement[]
-  reports        ContentReport[] @relation("ReporterReports")
+  roles                  UserRole[]
+  creatorProfile         CreatorProfile?
+  supports               Support[]               @relation("SupporterSupports")
+  follows                Follow[]                @relation("SupporterFollows")
+  notifications          Notification[]
+  notificationPreference NotificationPreference?
+  entitlements           PostEntitlement[]
+  reports                ContentReport[]         @relation("ReporterReports")
 
   @@map("users")
 }
@@ -112,20 +113,23 @@ model UserRole {
 // --------------------------------------------------------
 
 model CreatorProfile {
-  id               String              @id @default(uuid())
-  userId           String              @unique
-  creatorName      String?
-  slug             String              @unique
-  bio                   String?
-  avatarUrl             String?
-  themeMaterialId       String?             // Selected appearance fabric theme ID (Appearance: Choose your theme)
-  thankYouMessage       String?             // Shown after payment and in receipt email
-  showSupportersOnPage  Boolean             @default(true) // Display supporter count and public contributions
-  isPublished           Boolean             @default(false) // Must pass completeness check to publish
-  status                String              @default("REGISTERED") // REGISTERED, PROFILE_CREATED, KYC_PENDING, VERIFIED, ACTIVE, SUSPENDED, BANNED, DEACTIVATED
-  kycStatus             String              @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  id                   String              @id @default(uuid())
+  userId               String              @unique
+  creatorName          String?
+  slug                 String              @unique
+  bio                  String?
+  avatarUrl            String?
+  themeMaterialId      String?             // Selected appearance fabric theme ID (Appearance: Choose your theme)
+  thankYouMessage      String?             // Shown after payment and in receipt email
+  showSupportersOnPage Boolean             @default(true) // Display supporter count and public contributions
+  isPublished          Boolean             @default(false) // Must pass completeness check to publish
+  status               String              @default("REGISTERED") // REGISTERED, PROFILE_CREATED, KYC_PENDING, VERIFIED, ACTIVE, SUSPENDED, BANNED, DEACTIVATED
+  kycStatus            String              @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW, EXPIRED
+  kycVerifiedAt        DateTime?
+  kycBlockedAt         DateTime?           // Set when an admin revokes verification; blocks re-verification until lifted
+  kycBlockedReason     String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
 
   user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   themeMaterial  Material?           @relation("CreatorThemeMaterial", fields: [themeMaterialId], references: [id], onDelete: SetNull)
@@ -479,25 +483,67 @@ model Follow {
 model Notification {
   id        String    @id @default(uuid())
   userId    String
+  category  String    @default("SYSTEM") // PAYOUT, CONTRIBUTION, SECURITY, KYC, SYSTEM
   type      String
   title     String
   body      String
   data      Json?
+  actionUrl String?
   readAt    DateTime?
   createdAt DateTime  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
   @@map("notifications")
 }
+
+model NotificationPreference {
+  id                    String   @id @default(uuid())
+  userId                String   @unique
+  // Support activity
+  emailOnContribution   Boolean  @default(true)
+  inAppOnContribution   Boolean  @default(true)
+  pushOnContribution   Boolean  @default(true)
+  // Payout updates (transactional)
+  emailOnPayout         Boolean  @default(true)
+  inAppOnPayout         Boolean  @default(true)
+  pushOnPayout         Boolean  @default(true)
+  // KYC & Security alerts
+  emailOnSecurityAlert  Boolean  @default(true)
+  inAppOnSecurityAlert  Boolean  @default(true)
+  pushOnSecurityAlert  Boolean  @default(true)
+  // Platform updates & creator tips
+  emailOnProductUpdates Boolean  @default(false)
+  emailOnCreatorTips    Boolean  @default(false)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notification_preferences")
+}
+
 
 model KycSubmission {
   id                String    @id @default(uuid())
   creatorId         String
-  provider          String    @default("DEFAULT")
-  providerReference String?
-  status            String    @default("PENDING") // PENDING, VERIFIED, REJECTED, NEEDS_REVIEW
+  provider          String    @default("DIDIT")
+  providerReference String?   // Provider session ID (Didit session_id)
+  providerStatus    String?   // Raw provider status label, e.g. "In Review"
+  status            String    @default("CREATED") // CREATED, IN_PROGRESS, NEEDS_REVIEW, VERIFIED, REJECTED, RESUBMISSION_REQUIRED, ABANDONED, EXPIRED, KYC_EXPIRED, CANCELLED
+  workflowId        String?
+  environment       String?   // live, sandbox
+  claimedDetails    Json?     // Details entered by the creator before capture
+  decisionSummary   Json?     // Minimized provider decision (no images or URLs)
+  rejectionReason   String?   // User-safe explanation
+  providerUpdatedAt DateTime? // Provider timestamp of the last applied event (out-of-order guard)
+  lastSyncedAt      DateTime?
+  completedAt       DateTime?
+  reviewedById      String?
+  reviewNote        String?
   submittedAt       DateTime  @default(now())
   reviewedAt        DateTime?
   metadata          Json?
@@ -505,8 +551,29 @@ model KycSubmission {
   updatedAt         DateTime  @updatedAt
 
   creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  events  KycEvent[]
 
+  @@unique([provider, providerReference])
+  @@index([creatorId, createdAt])
+  @@index([status])
   @@map("kyc_submissions")
+}
+
+model KycEvent {
+  id              String   @id @default(uuid())
+  submissionId    String?
+  provider        String   @default("DIDIT")
+  providerEventId String
+  eventType       String
+  providerStatus  String?
+  payload         Json     // Redacted envelope (no decision media or PII)
+  createdAt       DateTime @default(now())
+
+  submission KycSubmission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
+
+  @@unique([provider, providerEventId])
+  @@index([submissionId])
+  @@map("kyc_events")
 }
 
 model ContentReport {
@@ -542,4 +609,19 @@ model AuditLog {
   @@index([resourceType, resourceId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// --------------------------------------------------------
+// WAITLIST
+// --------------------------------------------------------
+
+model WaitlistEntry {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([createdAt])
+  @@map("waitlist_entries")
 }

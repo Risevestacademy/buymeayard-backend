@@ -80,7 +80,10 @@ describe('MaterialsController', () => {
 
     const res = await controller.calculate('50000', undefined);
     expect(res.calculatedYards).toBe(50);
-    expect((mockService as any).calculate).toHaveBeenCalledWith(50000, undefined);
+    expect((mockService as any).calculate).toHaveBeenCalledWith(
+      50000,
+      undefined,
+    );
   });
 
   it('should create material', async () => {

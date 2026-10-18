@@ -293,23 +293,11 @@ The CI environment spins up **PostgreSQL 16** and **Redis 7** as service contain
 
 The workflow is defined in [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
-### Manual Deployment to Render
+### Deployment to Railway (staging)
 
-To deploy the API to Render without using a Blueprint (which requires a payment method):
+The API deploys to Railway from the `dev` branch using the repo `Dockerfile` and [`railway.toml`](railway.toml). Migrations run automatically before each deploy and `/health` gates traffic.
 
-1. Go to the [Render Dashboard](https://dashboard.render.com).
-2. Click **New** → **Web Service**.
-3. Connect this GitHub repository and configure:
-   - **Branch**: `main`
-   - **Runtime**: `Docker` (Auto-detected from `Dockerfile`)
-   - **Instance Type**: `Free`
-4. In the **Environment Variables** section, add the required variables:
-   - `DATABASE_URL` (Use Neon or Supabase)
-   - `REDIS_URL` (Use Upstash)
-   - `NODE_ENV=production`
-   - `PORT=3000`
-   - Your secret keys (Paystack, Cloudinary, Better Auth)
-5. Render will automatically build and deploy new commits pushed to the `main` branch.
+See the step-by-step guide: [`docs/RAILWAY_DEPLOYMENT.md`](docs/RAILWAY_DEPLOYMENT.md).
 
 ---
 
@@ -354,7 +342,9 @@ docker run -p 3000:3000 \
 | Document | Location |
 | :--- | :--- |
 | **Database Schema** | [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) — Full ER diagram, table dictionaries, and financial invariants |
+| **End-to-End Testing (Postman)** | [`docs/TESTING_GUIDE.md`](docs/TESTING_GUIDE.md) — Step-by-step workflow test with the collection in [`docs/postman/`](docs/postman/) |
 | **API Reference (Swagger)** | [http://localhost:3000/api/docs](http://localhost:3000/api/docs) — Interactive API documentation (run `pnpm dev` first) |
+| **Railway Deployment** | [`docs/RAILWAY_DEPLOYMENT.md`](docs/RAILWAY_DEPLOYMENT.md) — Staging deploy guide |
 | **CI Pipeline** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — Lint → Test → Build |
 | **Production Dockerfile** | [`Dockerfile`](Dockerfile) — Multi-stage Docker build |
 
