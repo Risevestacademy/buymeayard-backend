@@ -1,3 +1,4 @@
+import { ErrorResponseDto } from '../../common/dto/error-response.dto';
 import {
   Controller,
   Get,
@@ -49,7 +50,11 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Mark specific notification as read' })
   @ApiParam({ name: 'id', description: 'Notification ID' })
   @ApiResponse({ status: 200, description: 'Notification marked as read' })
-  @ApiResponse({ status: 404, description: 'Notification not found' })
+  @ApiResponse({
+    status: 404,
+    description: 'Notification not found',
+    type: ErrorResponseDto,
+  })
   async markRead(@CurrentUser('id') userId: string, @Param('id') id: string) {
     return this.notificationsService.markAsRead(userId, id);
   }
@@ -66,8 +71,15 @@ export class NotificationsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Dismiss or delete notification' })
   @ApiParam({ name: 'id', description: 'Notification ID' })
-  @ApiResponse({ status: 200, description: 'Notification deleted successfully' })
-  @ApiResponse({ status: 404, description: 'Notification not found' })
+  @ApiResponse({
+    status: 200,
+    description: 'Notification deleted successfully',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Notification not found',
+    type: ErrorResponseDto,
+  })
   async deleteNotification(
     @CurrentUser('id') userId: string,
     @Param('id') id: string,

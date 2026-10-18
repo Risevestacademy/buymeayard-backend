@@ -1,3 +1,4 @@
+import { ErrorResponseDto } from '../../common/dto/error-response.dto';
 import {
   Body,
   Controller,
@@ -30,6 +31,7 @@ export class WaitlistController {
   @ApiResponse({
     status: 400,
     description: 'Invalid email address provided',
+    type: ErrorResponseDto,
   })
   async joinWaitlist(@Body() dto: JoinWaitlistDto) {
     return this.waitlistService.joinWaitlist(dto);
