@@ -16,7 +16,20 @@ export class PaymentsController {
 
   @Public()
   @Post('webhooks/paystack')
-  @ApiOperation({ summary: 'Handle Paystack webhook events' })
+  @ApiOperation({
+    summary:
+      'Handle Paystack webhook events (called by Paystack, not the apps)',
+    description: `Configure in Paystack: *Settings → API Keys & Webhooks → Webhook URL* = \`https://<api-domain>/webhooks/paystack\` (no \`/api/v1\`).
+
+The \`x-paystack-signature\` header must be the HMAC-SHA512 of the raw body using \`PAYSTACK_WEBHOOK_SECRET\`, which must equal the Paystack secret key.
+
+Handled events:
+- \`charge.success\`: a contribution was paid. Credits the creator's balance.
+- \`transfer.success\`: a payout reached the bank. "Money landed" notification.
+- \`transfer.failed\` / \`transfer.reversed\`: the payout failed. The full amount goes back to the balance, plus a "Withdrawal didn’t go through" notification.
+
+Repeated deliveries of the same event are ignored (\`{ status: "already_processed" }\`).`,
+  })
   async handlePaystackWebhook(
     @Headers('x-paystack-signature') signature: string,
     @Body() payload: any,

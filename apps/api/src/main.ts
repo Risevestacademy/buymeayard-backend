@@ -72,6 +72,14 @@ async function bootstrap() {
     .setVersion('1.0')
     .addBearerAuth()
     .addCookieAuth('better-auth.session_token')
+    .addTag(
+      'payouts',
+      'Bank account, withdrawals and payout history. Amounts are in kobo (₦1 = 100). Success responses are wrapped as `{ data, meta }`; errors as `{ error: { code, message } }`. Full guide: docs/PAYOUTS_INTEGRATION.md',
+    )
+    .addTag(
+      'support-tickets',
+      'Contact support messages, optionally about a payout or contribution',
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);

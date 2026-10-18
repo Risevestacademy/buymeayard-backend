@@ -31,30 +31,30 @@ export class NotificationListeners {
   ) {}
 
   /**
-   * Payout Processing Lifecycle Listeners
+   * Payout Status Listeners
    */
-  @OnEvent(PAYOUT_EVENTS.CREATED)
-  async handlePayoutCreated(event: PayoutNotificationEvent) {
-    this.logger.log(`Handling payout.created for creator: ${event.creatorUserId}`);
-    await this.dispatcher.dispatchPayoutNotification(event, 'CREATED');
-  }
-
-  @OnEvent(PAYOUT_EVENTS.PROCESSING)
-  async handlePayoutProcessing(event: PayoutNotificationEvent) {
-    this.logger.log(`Handling payout.processing for creator: ${event.creatorUserId}`);
-    await this.dispatcher.dispatchPayoutNotification(event, 'PROCESSING');
-  }
-
   @OnEvent(PAYOUT_EVENTS.SUCCESS)
   async handlePayoutSuccess(event: PayoutNotificationEvent) {
-    this.logger.log(`Handling payout.success for creator: ${event.creatorUserId}`);
+    this.logger.log(
+      `Handling payout.success for creator: ${event.creatorUserId}`,
+    );
     await this.dispatcher.dispatchPayoutNotification(event, 'SUCCESS');
   }
 
   @OnEvent(PAYOUT_EVENTS.FAILED)
   async handlePayoutFailed(event: PayoutNotificationEvent) {
-    this.logger.log(`Handling payout.failed for creator: ${event.creatorUserId}`);
+    this.logger.log(
+      `Handling payout.failed for creator: ${event.creatorUserId}`,
+    );
     await this.dispatcher.dispatchPayoutNotification(event, 'FAILED');
+  }
+
+  @OnEvent(PAYOUT_EVENTS.DELAYED)
+  async handlePayoutDelayed(event: PayoutNotificationEvent) {
+    this.logger.log(
+      `Handling payout.delayed for creator: ${event.creatorUserId}`,
+    );
+    await this.dispatcher.dispatchPayoutNotification(event, 'DELAYED');
   }
 
   /**

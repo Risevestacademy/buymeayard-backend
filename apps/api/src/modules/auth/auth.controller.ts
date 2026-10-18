@@ -1,3 +1,4 @@
+import { ErrorResponseDto } from '../../common/dto/error-response.dto';
 import {
   Controller,
   Post,
@@ -73,10 +74,12 @@ export class AuthController {
   @SwaggerResponse({
     status: 400,
     description: 'Invalid input data or validation error.',
+    type: ErrorResponseDto,
   })
   @SwaggerResponse({
     status: 409,
     description: 'User with this email already exists.',
+    type: ErrorResponseDto,
   })
   async register(
     @Body() dto: RegisterDto,
@@ -129,6 +132,7 @@ export class AuthController {
   @SwaggerResponse({
     status: 400,
     description: 'Invalid credentials or validation error.',
+    type: ErrorResponseDto,
   })
   async login(
     @Body() dto: LoginDto,
@@ -188,6 +192,7 @@ export class AuthController {
   @SwaggerResponse({
     status: 400,
     description: 'Invalid provider or parameters.',
+    type: ErrorResponseDto,
   })
   async socialSignIn(
     @Body() dto: SocialSignInDto,
@@ -334,7 +339,11 @@ export class AuthController {
     status: 200,
     description: 'User successfully logged out.',
   })
-  @SwaggerResponse({ status: 401, description: 'No active session found.' })
+  @SwaggerResponse({
+    status: 401,
+    description: 'No active session found.',
+    type: ErrorResponseDto,
+  })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const webRes = await this.authService.signOut({
       headers: fromNodeHeaders(req.headers),
@@ -354,6 +363,7 @@ export class AuthController {
   @SwaggerResponse({
     status: 401,
     description: 'Unauthorized. No active session.',
+    type: ErrorResponseDto,
   })
   async getSession(@Req() req: Request) {
     return this.authService.getSessionFromNodeHeaders(req.headers);
@@ -374,6 +384,7 @@ export class AuthController {
   @SwaggerResponse({
     status: 400,
     description: 'Validation error for the email.',
+    type: ErrorResponseDto,
   })
   async forgotPassword(
     @Body() dto: ForgotPasswordDto,
@@ -402,6 +413,7 @@ export class AuthController {
   @SwaggerResponse({
     status: 400,
     description: 'Invalid or expired reset token, or weak password.',
+    type: ErrorResponseDto,
   })
   async resetPassword(
     @Body() dto: ResetPasswordDto,
@@ -431,10 +443,12 @@ export class AuthController {
     status: 400,
     description:
       'Current password does not match (PASSWORD_MISMATCH) or new password is too weak.',
+    type: ErrorResponseDto,
   })
   @SwaggerResponse({
     status: 401,
     description: 'Unauthorized. Active session required.',
+    type: ErrorResponseDto,
   })
   async changePassword(
     @Body() dto: ChangePasswordDto,
@@ -461,6 +475,7 @@ export class AuthController {
   @SwaggerResponse({
     status: 400,
     description: 'Invalid or expired verification token.',
+    type: ErrorResponseDto,
   })
   async verifyEmail(
     @Body() dto: VerifyEmailDto,
@@ -488,11 +503,13 @@ export class AuthController {
   @SwaggerResponse({
     status: 401,
     description: 'Unauthorized. Active session required.',
+    type: ErrorResponseDto,
   })
   @SwaggerResponse({
     status: 429,
     description:
       'Too many requests. Please wait before requesting another email.',
+    type: ErrorResponseDto,
   })
   async sendVerificationEmail(
     @Req() req: Request,

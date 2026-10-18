@@ -6,6 +6,7 @@ import { AppController } from './app.controller';
 import { LoggerModule } from 'nestjs-pino';
 import { TerminusModule } from '@nestjs/terminus';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 
 // Infrastructure
 import { DatabaseModule } from './infrastructure/database/database.module';
@@ -33,6 +34,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { WaitlistModule } from './modules/waitlist/waitlist.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { SupportTicketsModule } from './modules/support-tickets/support-tickets.module';
 
 // Common
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -43,6 +45,7 @@ import { AuditLogInterceptor } from './modules/admin/interceptors/audit-log.inte
 @Module({
   imports: [
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       validate: validateEnv,
@@ -83,6 +86,7 @@ import { AuditLogInterceptor } from './modules/admin/interceptors/audit-log.inte
     AnalyticsModule,
     WaitlistModule,
     SettingsModule,
+    SupportTicketsModule,
   ],
   controllers: [AppController],
   providers: [

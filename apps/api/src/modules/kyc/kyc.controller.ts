@@ -1,3 +1,4 @@
+import { ErrorResponseDto } from '../../common/dto/error-response.dto';
 import {
   Body,
   Controller,
@@ -83,14 +84,27 @@ export class KycController {
     description: 'Session created or resumed.',
     type: StartKycSessionResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Invalid details.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid details.',
+    type: ErrorResponseDto,
+  })
   @ApiResponse({
     status: 409,
     description:
       'KYC_ALREADY_VERIFIED, KYC_UNDER_REVIEW or KYC_SESSION_IN_PROGRESS.',
+    type: ErrorResponseDto,
   })
-  @ApiResponse({ status: 429, description: 'KYC_ATTEMPT_LIMIT_REACHED.' })
-  @ApiResponse({ status: 502, description: 'KYC_PROVIDER_ERROR.' })
+  @ApiResponse({
+    status: 429,
+    description: 'KYC_ATTEMPT_LIMIT_REACHED.',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 502,
+    description: 'KYC_PROVIDER_ERROR.',
+    type: ErrorResponseDto,
+  })
   async startSession(
     @CurrentUser('id') userId: string,
     @Body() dto: StartKycSessionDto = {},
