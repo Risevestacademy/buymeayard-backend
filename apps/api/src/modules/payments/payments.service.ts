@@ -15,6 +15,7 @@ import { CreatorStatus, PaymentStatus, SupportStatus } from '@buymeayard/types';
 
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CONTRIBUTION_EVENTS } from '../notifications/events/notification.events';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class PaymentsService {
@@ -205,9 +206,9 @@ export class PaymentsService {
 
         // 5. Emit contribution received event for creator notifications (in-app & email)
         const yards = payment.support.items.reduce(
-          (sum, item) => sum + item.quantity,
-          0,
-        );
+          (sum, item) => sum.add(item.quantity),
+          new Prisma.Decimal(0)
+        ).toNumber();
         const materialName =
           payment.support.items
             .map((i) => i.materialNameSnapshot)
