@@ -1462,8 +1462,8 @@ export class CreatorsService {
               firstItem.creatorMaterial?.material?.imageUrl ||
               null,
             quantity: support.items
-            .reduce((acc, it) => acc.add(it.quantity), new Prisma.Decimal(0))
-            .toNumber(),
+              .reduce((acc, it) => acc.add(it.quantity), new Prisma.Decimal(0))
+              .toNumber(),
           }
         : null;
 
@@ -1663,7 +1663,9 @@ export class CreatorsService {
               firstItem.creatorMaterial?.material?.thumbnailSmallUrl ||
               firstItem.creatorMaterial?.material?.imageUrl ||
               null,
-            quantity: support.items.reduce((acc, it) => acc.add(it.quantity), new Prisma.Decimal(0)).toNumber(),
+            quantity: support.items
+              .reduce((acc, it) => acc.add(it.quantity), new Prisma.Decimal(0))
+              .toNumber(),
           }
         : null;
 

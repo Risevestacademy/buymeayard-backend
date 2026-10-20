@@ -13,11 +13,24 @@ import { CreateSupportDto } from './dto/create-support.dto';
 import { Prisma } from '@prisma/client';
 import { CreateSupportIntentDto } from '../creators/dto/create-support-intent.dto';
 import { SupportStatus } from '@buymeayard/types';
-import { SupportWallQueryDto, SupportWallResponseDto } from './dto/support-wall.dto';
-import { decodeWallCursor, buildCursorWhere, toCursorPage} from './utils/wall-cursor.util';
-import { SUPPORT_WALL_SELECT, toSupportWallItem } from './mappers/support-wall.mapper';
+import {
+  SupportWallQueryDto,
+  SupportWallResponseDto,
+} from './dto/support-wall.dto';
+import {
+  decodeWallCursor,
+  buildCursorWhere,
+  toCursorPage,
+} from './utils/wall-cursor.util';
+import {
+  SUPPORT_WALL_SELECT,
+  toSupportWallItem,
+} from './mappers/support-wall.mapper';
 import { CreatorSupportListResponseDto } from './dto/creator-support.dto';
-import {CREATOR_SUPPORT_SELECT, toCreatorSupportItem} from './mappers/creator-support.mapper'
+import {
+  CREATOR_SUPPORT_SELECT,
+  toCreatorSupportItem,
+} from './mappers/creator-support.mapper';
 // const SUPPORT_WALL_DEFAULT_LIMIT = 20;
 // const PUBLIC_WALL_STATUSES = [SupportStatus.PAID, SupportStatus.COMPLETED];
 
@@ -159,131 +172,129 @@ export class SupportsService {
     return support;
   }
 
-
-async createGuestIntent(creatorId: string, dto: CreateSupportIntentDto) {
-  const creatorMaterial = await this.prisma.creatorMaterial.findFirst({
-    where: {creatorId, status: 'ACTIVE' },
-    include: { material: true },
-  });
-
-  if(!creatorMaterial) {
-    throw new BadRequestException({
-      code: ErrorCodes.MATERIAL_NOT_FOUND,
-      message: 'This creator has no active materials available for support',
+  async createGuestIntent(creatorId: string, dto: CreateSupportIntentDto) {
+    const creatorMaterial = await this.prisma.creatorMaterial.findFirst({
+      where: { creatorId, status: 'ACTIVE' },
+      include: { material: true },
     });
-  }
 
-  const amountMinor = MoneyUtil.toMinorUnits(dto.amount);
+    if (!creatorMaterial) {
+      throw new BadRequestException({
+        code: ErrorCodes.MATERIAL_NOT_FOUND,
+        message: 'This creator has no active materials available for support',
+      });
+    }
 
-  const feePercentage = 
-     this.configService.get<number>('PLATFORM_FEE_PERCENTAGE') || 10;
-     const { platformFee, creatorAmount } = MoneyUtil.calculateSplit(
+    const amountMinor = MoneyUtil.toMinorUnits(dto.amount);
+
+    const feePercentage =
+      this.configService.get<number>('PLATFORM_FEE_PERCENTAGE') || 10;
+    const { platformFee, creatorAmount } = MoneyUtil.calculateSplit(
       amountMinor,
       feePercentage,
-     );
-  const quantity = new Prisma.Decimal(amountMinor).div(creatorMaterial.price);
+    );
+    const quantity = new Prisma.Decimal(amountMinor).div(creatorMaterial.price);
 
-  return this.prisma.support.create({
-    data: {
-      supporterId: null,
-      guestName: dto.name,
-      creatorId,
-      subtotal: amountMinor,
-      platformFee,
-      creatorAmount,
-      totalAmount: amountMinor,
-      currency: creatorMaterial.currency,
-      message: dto.message,
-      isAnonymous: dto.isAnonymous ?? false,
-      status: 'CREATED',
-      items: {
-        create: [
-          {
-            creatorMaterialId: creatorMaterial.id,
-            materialNameSnapshot: 
+    return this.prisma.support.create({
+      data: {
+        supporterId: null,
+        guestName: dto.name,
+        creatorId,
+        subtotal: amountMinor,
+        platformFee,
+        creatorAmount,
+        totalAmount: amountMinor,
+        currency: creatorMaterial.currency,
+        message: dto.message,
+        isAnonymous: dto.isAnonymous ?? false,
+        status: 'CREATED',
+        items: {
+          create: [
+            {
+              creatorMaterialId: creatorMaterial.id,
+              materialNameSnapshot:
                 creatorMaterial.displayName || creatorMaterial.material.name,
-            unitPrice: creatorMaterial.price,
-            quantity,
-            totalPrice: amountMinor,
-            currency: creatorMaterial.currency,    
-          },
-        ],
+              unitPrice: creatorMaterial.price,
+              quantity,
+              totalPrice: amountMinor,
+              currency: creatorMaterial.currency,
+            },
+          ],
+        },
       },
-    },
-    include: { items: true },
-  });
-}
-
-async getPublicWall(
-  slug: string,
-  query: SupportWallQueryDto,
-): Promise<SupportWallResponseDto> {
-  const creator = await this.prisma.creatorProfile.findUnique({
-    where: { slug },
-    select: { id: true, isPublished: true, showSupportersOnPage: true },
-  });
-
-  if (!creator || !creator.isPublished) {
-    throw new NotFoundException({
-      code: ErrorCodes.CREATOR_NOT_FOUND,
-      message: 'Creator not found',
+      include: { items: true },
     });
   }
 
-  if (!creator.showSupportersOnPage) {
-    return { items: [], nextCursor: null };
-  }
-
-  const limit = query.limit ?? SUPPORT_PAGE_DEFAULT_LIMIT;
-  const cursor = query.cursor ? decodeWallCursor(query.cursor) : null;
-
-  const rows = await this.prisma.support.findMany({
-    where: {
-      creatorId: creator.id,
-      status: { in: RECEIVED_SUPPORT_STATUSES },
-      ...buildCursorWhere(cursor),
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    take: limit + 1,
-    select: SUPPORT_WALL_SELECT,
-  });
-
-  return toCursorPage(rows, limit, toSupportWallItem);
-}
-
-
-async getCreatorSupports(
-  userId: string,
-  query: SupportWallQueryDto,
-): Promise<CreatorSupportListResponseDto> {
-  // The creator comes from the logged-in session, never from the request,
-  // so one creator can never read another creator's gifts.
-  const creator = await this.prisma.creatorProfile.findUnique({
-    where: { userId },
-    select: { id: true },
-  });
-
-  if (!creator) {
-    throw new NotFoundException({
-      code: ErrorCodes.CREATOR_NOT_FOUND,
-      message: 'Creator profile not found',
+  async getPublicWall(
+    slug: string,
+    query: SupportWallQueryDto,
+  ): Promise<SupportWallResponseDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { slug },
+      select: { id: true, isPublished: true, showSupportersOnPage: true },
     });
+
+    if (!creator || !creator.isPublished) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator not found',
+      });
+    }
+
+    if (!creator.showSupportersOnPage) {
+      return { items: [], nextCursor: null };
+    }
+
+    const limit = query.limit ?? SUPPORT_PAGE_DEFAULT_LIMIT;
+    const cursor = query.cursor ? decodeWallCursor(query.cursor) : null;
+
+    const rows = await this.prisma.support.findMany({
+      where: {
+        creatorId: creator.id,
+        status: { in: RECEIVED_SUPPORT_STATUSES },
+        ...buildCursorWhere(cursor),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      select: SUPPORT_WALL_SELECT,
+    });
+
+    return toCursorPage(rows, limit, toSupportWallItem);
   }
 
-  const limit = query.limit ?? SUPPORT_PAGE_DEFAULT_LIMIT;
-  const cursor = query.cursor ? decodeWallCursor(query.cursor) : null;
+  async getCreatorSupports(
+    userId: string,
+    query: SupportWallQueryDto,
+  ): Promise<CreatorSupportListResponseDto> {
+    // The creator comes from the logged-in session, never from the request,
+    // so one creator can never read another creator's gifts.
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
 
-  const rows = await this.prisma.support.findMany({
-    where: {
-      creatorId: creator.id,
-      status: { in: RECEIVED_SUPPORT_STATUSES },
-      ...buildCursorWhere(cursor),
-    },
-    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-    take: limit + 1,
-    select: CREATOR_SUPPORT_SELECT,
-  });
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
 
-  return toCursorPage(rows, limit, toCreatorSupportItem);
-}
+    const limit = query.limit ?? SUPPORT_PAGE_DEFAULT_LIMIT;
+    const cursor = query.cursor ? decodeWallCursor(query.cursor) : null;
+
+    const rows = await this.prisma.support.findMany({
+      where: {
+        creatorId: creator.id,
+        status: { in: RECEIVED_SUPPORT_STATUSES },
+        ...buildCursorWhere(cursor),
+      },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      select: CREATOR_SUPPORT_SELECT,
+    });
+
+    return toCursorPage(rows, limit, toCreatorSupportItem);
+  }
 }

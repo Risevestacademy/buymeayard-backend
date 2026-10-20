@@ -205,10 +205,9 @@ export class PaymentsService {
         );
 
         // 5. Emit contribution received event for creator notifications (in-app & email)
-        const yards = payment.support.items.reduce(
-          (sum, item) => sum.add(item.quantity),
-          new Prisma.Decimal(0)
-        ).toNumber();
+        const yards = payment.support.items
+          .reduce((sum, item) => sum.add(item.quantity), new Prisma.Decimal(0))
+          .toNumber();
         const materialName =
           payment.support.items
             .map((i) => i.materialNameSnapshot)

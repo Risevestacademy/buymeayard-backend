@@ -14,7 +14,9 @@ export const SUPPORT_WALL_SELECT = {
   items: { select: { materialNameSnapshot: true }, take: 1 }, // single-material model
 } satisfies Prisma.SupportSelect;
 
-type SupportWallRow = Prisma.SupportGetPayload<{ select: typeof SUPPORT_WALL_SELECT }>;
+type SupportWallRow = Prisma.SupportGetPayload<{
+  select: typeof SUPPORT_WALL_SELECT;
+}>;
 
 // function resolveDisplayName(row: SupportWallRow): string {
 //   if (row.isAnonymous) return ANONYMOUS_LABEL;

@@ -16,7 +16,9 @@ export const CREATOR_SUPPORT_SELECT = {
     select: {
       materialNameSnapshot: true,
       creatorMaterial: {
-        select: { material: { select: { thumbnailSmallUrl: true, imageUrl: true } } },
+        select: {
+          material: { select: { thumbnailSmallUrl: true, imageUrl: true } },
+        },
       },
     },
   },
@@ -26,7 +28,9 @@ type CreatorSupportRow = Prisma.SupportGetPayload<{
   select: typeof CREATOR_SUPPORT_SELECT;
 }>;
 
-export function toCreatorSupportItem(row: CreatorSupportRow): CreatorSupportItemDto {
+export function toCreatorSupportItem(
+  row: CreatorSupportRow,
+): CreatorSupportItemDto {
   const item = row.items[0];
   const material = item?.creatorMaterial.material;
 
@@ -34,7 +38,8 @@ export function toCreatorSupportItem(row: CreatorSupportRow): CreatorSupportItem
     id: row.id,
     displayName: resolveDisplayName(row),
     materialName: item?.materialNameSnapshot ?? null,
-    materialThumbnailUrl: material?.thumbnailSmallUrl ?? material?.imageUrl ?? null,
+    materialThumbnailUrl:
+      material?.thumbnailSmallUrl ?? material?.imageUrl ?? null,
     // The message is addressed to the creator, so they always see it.
     message: row.message || null,
     amount: row.totalAmount,

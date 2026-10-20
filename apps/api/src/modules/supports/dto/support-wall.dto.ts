@@ -1,9 +1,18 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class SupportWallQueryDto {
-  @ApiPropertyOptional({ description: "The previous page's nextCursor, passed back unchanged" })
+  @ApiPropertyOptional({
+    description: "The previous page's nextCursor, passed back unchanged",
+  })
   @IsOptional()
   @IsString()
   @MaxLength(200)
@@ -36,6 +45,10 @@ export class SupportWallResponseDto {
   @ApiProperty({ type: [SupportWallItemDto] })
   items!: SupportWallItemDto[];
 
-  @ApiProperty({ nullable: true, type: String, description: 'Null when there are no more pages' })
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description: 'Null when there are no more pages',
+  })
   nextCursor!: string | null;
 }

@@ -16,10 +16,16 @@ export class CreatorSupportItemDto {
   @ApiProperty({ nullable: true, type: String })
   message!: string | null;
 
-  @ApiProperty({ example: 500000, description: 'What the supporter paid, in kobo' })
+  @ApiProperty({
+    example: 500000,
+    description: 'What the supporter paid, in kobo',
+  })
   amount!: number;
 
-  @ApiProperty({ example: 450000, description: 'What the creator keeps after the platform fee, in kobo' })
+  @ApiProperty({
+    example: 450000,
+    description: 'What the creator keeps after the platform fee, in kobo',
+  })
   netAmount!: number;
 
   @ApiProperty()

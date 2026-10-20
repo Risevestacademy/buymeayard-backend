@@ -44,7 +44,10 @@ import { UpdateCreatorSettingsDto } from './dto/update-creator-settings.dto';
 import { UpdatePageStatusDto } from './dto/update-page-status.dto';
 import { CreateSupportIntentDto } from './dto/create-support-intent.dto';
 import { SupportsService } from '../supports/supports.service';
-import {SupportWallQueryDto, SupportWallItemDto, SupportWallResponseDto} from '../supports/dto/support-wall.dto';
+import {
+  SupportWallQueryDto,
+  SupportWallResponseDto,
+} from '../supports/dto/support-wall.dto';
 import { CreatorSupportListResponseDto } from '../supports/dto/creator-support.dto';
 import { UpdateThankYouMessageDto } from './dto/update-thank-you-message.dto';
 import {
@@ -531,33 +534,51 @@ export class CreatorsController {
   }
 
   @Put('me/thank-you-message')
-@ApiBearerAuth()
-@ApiCookieAuth('better-auth.session_token')
-@ApiOperation({
-  summary: 'Set or clear the creator thank-you message',
-  description:
-    'Replaces the thank-you message shown to supporters after payment. Send null or blank text to clear it, which falls back to the platform default. The thankYouMessage key is required.',
-})
-@ApiBody({
-  type: UpdateThankYouMessageDto,
-  examples: {
-    set: { summary: 'Set a message', value: { thankYouMessage: 'Thank you for the yard! 🙏' } },
-    clear: { summary: 'Clear it (use the default)', value: { thankYouMessage: null } },
-  },
-})
-@ApiResponse({ status: 200, type: CreatorProfileDataDto })
-@ApiResponse({ status: 400, description: 'Missing key, not a string, or over 500 characters.', type: ApiErrorResponseDto })
-@ApiResponse({ status: 401, description: 'Unauthorized.', type: ApiErrorResponseDto })
-@ApiResponse({ status: 404, description: 'Creator profile not found.', type: ApiErrorResponseDto })
-async updateThankYouMessage(
-  @CurrentUser('id') userId: string,
-  @Body() dto: UpdateThankYouMessageDto,
-) {
-  const profile = await this.creatorsService.updateCreatorSettings(userId, {
-    thankYouMessage: dto.thankYouMessage ?? '',
-  });
-  return this.creatorsService.formatCreatorProfile(profile);
-}
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Set or clear the creator thank-you message',
+    description:
+      'Replaces the thank-you message shown to supporters after payment. Send null or blank text to clear it, which falls back to the platform default. The thankYouMessage key is required.',
+  })
+  @ApiBody({
+    type: UpdateThankYouMessageDto,
+    examples: {
+      set: {
+        summary: 'Set a message',
+        value: { thankYouMessage: 'Thank you for the yard! 🙏' },
+      },
+      clear: {
+        summary: 'Clear it (use the default)',
+        value: { thankYouMessage: null },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, type: CreatorProfileDataDto })
+  @ApiResponse({
+    status: 400,
+    description: 'Missing key, not a string, or over 500 characters.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator profile not found.',
+    type: ApiErrorResponseDto,
+  })
+  async updateThankYouMessage(
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdateThankYouMessageDto,
+  ) {
+    const profile = await this.creatorsService.updateCreatorSettings(userId, {
+      thankYouMessage: dto.thankYouMessage ?? '',
+    });
+    return this.creatorsService.formatCreatorProfile(profile);
+  }
 
   @Post('me/avatar')
   @ApiBearerAuth()
@@ -858,22 +879,30 @@ async updateThankYouMessage(
   }
 
   @Get('me/supports')
-@ApiBearerAuth()
-@ApiCookieAuth('better-auth.session_token')
-@ApiOperation({
-  summary: "List the logged-in creator's received contributions",
-  description:
-    'Paginated, newest first. Only paid gifts. Gifts the supporter marked anonymous show as "Anonymous".',
-})
-@ApiResponse({ status: 200, type: CreatorSupportListResponseDto })
-@ApiResponse({ status: 401, description: 'Unauthorized.', type: ApiErrorResponseDto })
-@ApiResponse({ status: 404, description: 'Creator profile not found.', type: ApiErrorResponseDto })
-async getMySupports(
-  @CurrentUser('id') userId: string,
-  @Query() query: SupportWallQueryDto,
-) {
-  return this.supportsService.getCreatorSupports(userId, query);
-}
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: "List the logged-in creator's received contributions",
+    description:
+      'Paginated, newest first. Only paid gifts. Gifts the supporter marked anonymous show as "Anonymous".',
+  })
+  @ApiResponse({ status: 200, type: CreatorSupportListResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized.',
+    type: ApiErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator profile not found.',
+    type: ApiErrorResponseDto,
+  })
+  async getMySupports(
+    @CurrentUser('id') userId: string,
+    @Query() query: SupportWallQueryDto,
+  ) {
+    return this.supportsService.getCreatorSupports(userId, query);
+  }
 
   @Public()
   @Get('check-slug')
@@ -957,49 +986,53 @@ async getMySupports(
   }
 
   @Public()
-@Post(':slug/supports/intent')
-@ApiOperation({
-  summary: 'Create a guest support intent',
-  description:
-    'Public endpoint for a guest supporter to initiate a contribution to a creator. No authentication required.',
-})
-@ApiParam({
-  name: 'slug',
-  description: 'Creator slug handle (e.g. "adeola")',
-  example: 'adeola',
-})
-@ApiBody({ type: CreateSupportIntentDto })
-@ApiResponse({
-  status: 201,
-  description: 'Support intent created successfully.',
-})
-@ApiResponse({
-  status: 404,
-  description: 'Creator not found.',
-  type: ApiErrorResponseDto,
-})
-async createSupportIntent(
-  @Param('slug') slug: string,
-  @Body() dto: CreateSupportIntentDto,
-) {
-  const creator = await this.creatorsService.findBySlug(slug);
-  return this.supportsService.createGuestIntent(creator.id, dto);
-}
+  @Post(':slug/supports/intent')
+  @ApiOperation({
+    summary: 'Create a guest support intent',
+    description:
+      'Public endpoint for a guest supporter to initiate a contribution to a creator. No authentication required.',
+  })
+  @ApiParam({
+    name: 'slug',
+    description: 'Creator slug handle (e.g. "adeola")',
+    example: 'adeola',
+  })
+  @ApiBody({ type: CreateSupportIntentDto })
+  @ApiResponse({
+    status: 201,
+    description: 'Support intent created successfully.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator not found.',
+    type: ApiErrorResponseDto,
+  })
+  async createSupportIntent(
+    @Param('slug') slug: string,
+    @Body() dto: CreateSupportIntentDto,
+  ) {
+    const creator = await this.creatorsService.findBySlug(slug);
+    return this.supportsService.createGuestIntent(creator.id, dto);
+  }
 
-@Public()
-@Get(':slug/supports')
-@ApiOperation({
-  summary: 'Get the public supporter wall',
-  description:
-    'Paginated feed of paid gifts, newest first. Anonymous gifts hide the name and message. Returns an empty list if the creator turned the wall off.',
-})
-@ApiParam({ name: 'slug', example: 'adeola' })
-@ApiResponse({ status: 200, type: SupportWallResponseDto })
-@ApiResponse({ status: 404, description: 'Creator not found.', type: ApiErrorResponseDto })
-async getSupporterWall(
-  @Param('slug') slug: string,
-  @Query() query: SupportWallQueryDto,
-) {
-  return this.supportsService.getPublicWall(slug, query);
-}
+  @Public()
+  @Get(':slug/supports')
+  @ApiOperation({
+    summary: 'Get the public supporter wall',
+    description:
+      'Paginated feed of paid gifts, newest first. Anonymous gifts hide the name and message. Returns an empty list if the creator turned the wall off.',
+  })
+  @ApiParam({ name: 'slug', example: 'adeola' })
+  @ApiResponse({ status: 200, type: SupportWallResponseDto })
+  @ApiResponse({
+    status: 404,
+    description: 'Creator not found.',
+    type: ApiErrorResponseDto,
+  })
+  async getSupporterWall(
+    @Param('slug') slug: string,
+    @Query() query: SupportWallQueryDto,
+  ) {
+    return this.supportsService.getPublicWall(slug, query);
+  }
 }

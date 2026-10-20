@@ -1,4 +1,4 @@
-import {Prisma} from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
 import { ErrorCodes } from '../../../common/errors/error-codes';
 
@@ -14,7 +14,9 @@ export function encodeWallCursor(row: WallCursor): string {
 
 export function decodeWallCursor(raw: string): WallCursor {
   try {
-    const { t, id } = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+    const { t, id } = JSON.parse(
+      Buffer.from(raw, 'base64url').toString('utf8'),
+    );
     const createdAt = new Date(t);
     if (typeof id !== 'string' || Number.isNaN(createdAt.getTime())) {
       throw new Error('malformed');
@@ -28,7 +30,9 @@ export function decodeWallCursor(raw: string): WallCursor {
   }
 }
 
-export function buildCursorWhere(cursor: WallCursor | null): Prisma.SupportWhereInput {
+export function buildCursorWhere(
+  cursor: WallCursor | null,
+): Prisma.SupportWhereInput {
   if (!cursor) return {};
   return {
     OR: [
