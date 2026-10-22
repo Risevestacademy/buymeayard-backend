@@ -18,6 +18,7 @@ All endpoints need the usual authenticated creator session (cookie on web, Beare
 {
   "kycStatus": "NOT_SUBMITTED",
   "creatorStatus": "PROFILE_CREATED",
+  "isKycCompleted": false,
   "contributionsEnabled": false,
   "canStartSession": true,
   "prefill": { "firstName": "Mariam", "lastName": "Omiteru" },
@@ -38,7 +39,9 @@ Choose the screen from `kycStatus`:
 
 When `canStartSession` is `false` and `kycStatus` is `REJECTED`, the account is blocked by an admin. Show "contact support" instead of "try again".
 
-Use `prefill` for the legal name on Step 1. Use `contributionsEnabled` for the dashboard's "Contributions" card and `creatorStatus` for "Profile status" (`ACTIVE` = published).
+Use `prefill` for the legal name on Step 1. Use `isKycCompleted` (`kycStatus === "VERIFIED"`) for "identity verified" badges, `contributionsEnabled` for the dashboard's "Contributions" card and `creatorStatus` for "Profile status" (`ACTIVE` = published).
+
+Reading the status can also sync it: if an attempt is still open and Didit hasn't been checked for more than 60 seconds, the backend asks Didit for the current decision before responding. If Didit is down, the call still returns the stored status (it can take up to ~10s in that case). Responses are `Cache-Control: no-store`.
 
 ## 2. Start verification
 
@@ -58,9 +61,14 @@ Mobile must send the header `x-client-type: mobile`, so the flow returns to the 
 }
 ```
 
-- `dateOfBirth`: `YYYY-MM-DD`. The creator must be 18 or older. The Figma picker shows DD/MM/YYYY, so convert before sending.
-- `country`: only `NGA` for now.
-- `documentType`: `NATIONAL_ID` (NIN card or slip), `PASSPORT`, `DRIVERS_LICENCE` or `VOTERS_CARD`.
+**Every field is optional.** Send the details you collected, or send `{}` to let Didit's hosted UI handle document choice and data extraction. Whatever you send is passed to Didit as the *expected* details, and Didit flags a mismatch with the document. That is why the Step 1–2 screens are worth keeping: a typo-free legal name and date of birth reduce rejections.
+
+- `firstName`, `lastName`: 1–100 characters, letters plus `'`, `.`, `-` and spaces.
+- `dateOfBirth`: `YYYY-MM-DD`. The Figma picker shows DD/MM/YYYY, so convert before sending. **If sent**, the creator must be at least 18 (and not in the future), otherwise `400 VALIDATION_ERROR`. If omitted, the backend does not check age itself; Didit's workflow does, and a failure comes back as a rejection.
+- `country`: only `NGA` for now. Any other value is a `400`.
+- `documentType`: `NATIONAL_ID` (NIN card or slip), `PASSPORT`, `DRIVERS_LICENCE` or `VOTERS_CARD`. Didit receives `NATIONAL_ID` and `VOTERS_CARD` as an ID card.
+
+Sending the same details again resumes the open session (see §3). Sending *different* details replaces the session only if the creator hasn't started capture yet.
 
 Response:
 
@@ -103,6 +111,8 @@ Fallbacks: redirect to `verificationUrl` (it returns to `<creator-portal>/kyc/co
 
 **Resuming:** calling `POST /session` again with the **same details** returns the unfinished session (`resumed: true`) and doesn't use up an attempt. Use this when a creator leaves mid-flow and comes back.
 
+**Expiry:** an attempt that isn't finished 30 minutes after it was created is expired and the creator returns to their previous outcome (for example `NOT_SUBMITTED` or `REJECTED`), after which they can start again. It counts toward the daily limit (5 attempts per 24 hours).
+
 ## 4. After the SDK closes
 
 **Don't trust the status reported by the SDK or the callback URL.** The backend is the source of truth. Poll `GET /api/v1/creators/me/kyc` every ~3 seconds for up to ~60 seconds, until `kycStatus` is no longer `PENDING`. If it's still pending after that, show "Verification in progress" and tell the creator we'll notify them. An in-app notification of type `KYC_UPDATE` arrives at `GET /api/v1/me/notifications` when the result lands.
@@ -141,7 +151,7 @@ Requires the `ADMIN` or `SUPER_ADMIN` role.
 }
 ```
 
-`decisionSummary.missingRequiredChecks` lists any check that held a Didit "Approved" back for review.
+`decisionSummary.missingRequiredChecks` lists any check that held a Didit "Approved" back for review. A Didit "Approved" is only accepted automatically when ID verification, liveness and face match are each individually approved (`KYC_REQUIRED_CHECKS`). Otherwise the case lands in this queue instead of verifying the creator.
 
 - `409 KYC_INVALID_TRANSITION` means the case changed in the meantime: refresh and try again.
 - `409 KYC_BLOCKED` on approve means the creator is blocked: unblock them first.
@@ -150,3 +160,23 @@ Requires the `ADMIN` or `SUPER_ADMIN` role.
 ## 7. Testing
 
 Use the Didit **sandbox** application's keys in development. The Didit Console can send test webhooks (approved, declined, in review), so you can see each screen without doing a real ID capture.
+
+**Sandbox only works with `NODE_ENV=development`.** When `NODE_ENV=production` (which includes our staging deployment), the backend deliberately ignores webhooks whose `environment` is `sandbox`. Use a live Didit application there, or expect results to arrive only through the status poll (§4).
+
+Didit can only reach `/webhooks/didit` on a public URL. On a local machine, use a tunnel (`cloudflared tunnel --url http://localhost:3000` or `ngrok http 3000`), or leave `DIDIT_WEBHOOK_SECRET` empty and rely on `GET /creators/me/kyc` pulling the result once an attempt is more than 60 seconds old.
+
+## 8. Troubleshooting: verification never completes
+
+Check the creator's status with `GET /creators/me/kyc`, then match it to the cause:
+
+| Symptom | Likely cause | What to check |
+|---|---|---|
+| Stays `PENDING` after capture | The webhook isn't arriving, or is being ignored | Didit Console → Webhooks → delivery log. A `401` means the wrong `DIDIT_WEBHOOK_SECRET`, or a clock more than 5 minutes off. A `404` means the URL has `/api/v1` in it; it must be `/webhooks/didit`. A `200` with `ignored: "sandbox_event"` means a sandbox application is talking to a `NODE_ENV=production` backend |
+| Stays `PENDING`, webhook shows `200` but `ignored: "unknown_session"` | The Didit workflow ID doesn't match `DIDIT_WORKFLOW_ID`, or the session wasn't created by this backend | Compare the workflow in the Console with the env var |
+| Goes to `NEEDS_REVIEW` even though Didit says "Approved" | A required check isn't individually approved (for example Face Match isn't in the workflow) | The admin detail view's `decisionSummary.missingRequiredChecks`. Fix the workflow in the Console or narrow `KYC_REQUIRED_CHECKS` |
+| `REJECTED` right after capture | Didit declined it | `latestSubmission.rejectionReason` for the creator-safe reason, and the admin detail view's `providerDecision.warnings` for the raw risk codes |
+| `POST /session` returns `503 KYC_UNAVAILABLE` | Didit says the account is out of credits (live applications only) | Look for `DIDIT OUT OF CREDITS` in the API logs and top up |
+| `POST /session` returns `502/503 KYC_PROVIDER_ERROR` | Bad or missing `DIDIT_API_KEY` / `DIDIT_WORKFLOW_ID`, or Didit is unreachable | API logs: `Didit POST /v3/session/ returned <status>` |
+| Returns to `NOT_SUBMITTED` | The attempt sat unfinished for 30 minutes and expired | Start a new session |
+
+Every webhook the backend accepts is stored in `kyc_events` with a redacted payload, and every status change is in `audit_logs` (`KYC_SUBMISSION_STATUS_CHANGED`, with the `source`: `WEBHOOK`, `RECONCILE`, `ADMIN` or `SYSTEM`). A submission with a `RECONCILE` change but no webhook event means webhooks aren't getting through.
