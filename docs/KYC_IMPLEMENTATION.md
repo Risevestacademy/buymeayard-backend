@@ -19,7 +19,7 @@ Now creators verify with Didit. Approval publishes the creator (`ACTIVE`), which
 | Provider | **Didit**, behind a provider-agnostic `KycProvider` interface (same pattern as `PaymentProvider`) | Free tier: 500 checks/month each for document OCR, passive liveness and face match |
 | Checks | Document OCR + passive liveness + face match | All free. NIN/BVN registry lookup is paid ($0.20/$0.35), so it's out of scope: the NIN is read from the document but not checked against NIMC |
 | Integration style | **Didit SDK sessions** (web `@didit-protocol/sdk-web`, mobile `@didit-protocol/sdk-react-native`), not standalone APIs | Standalone APIs have no free tier, accept uploaded images (easy to spoof), route ID images through our servers, and lose Didit's decision engine, review queue and webhooks |
-| UI | Our screens for details, review and results; Didit's themed UI for capture only | Keeps our design while capture stays live and anti-spoofed. What the creator types is sent as `expected_details`, so Didit flags mismatches |
+| UI | Our screens for details, review and results; Didit's themed UI for capture only | Keeps our design while capture stays live and anti-spoofed. What the creator types (all optional) is sent as `expected_details`, so Didit flags mismatches. Sending nothing is also valid ("zero-input"; see `846931f`) |
 | What KYC gates | Contributions, public listing, payouts | Matches the Figma: "verification is required before you can publish your page and receive contributions" |
 | Approval | Auto-publishes (creator → `ACTIVE`) | Product decision |
 | Review | Didit decides automatically; "In Review" cases go to our admin queue with approve / reject / revoke | Humans only handle borderline cases |
@@ -137,7 +137,7 @@ Every change writes, in one transaction: the submission, the creator, `audit_log
 
 **Start / resume** (`startSession`):
 
-1. Checks: the creator exists, isn't suspended, **isn't blocked**, isn't already verified or in review, and is aged 18+.
+1. Checks: the creator exists, isn't suspended, **isn't blocked**, and isn't already verified or in review. Every request field is optional (an empty body is valid and lets Didit's hosted UI do document choice and extraction). Only the fields that are sent are validated: `dateOfBirth` must be a real past date and the creator at least 18, and `country` must be `NGA`. When no date of birth is sent, age is left to the Didit workflow.
 2. If an attempt is open, the service first **asks Didit for its real status**. A lost webhook could mean it's already in progress, approved or declined.
 3. Same details: Didit's create call returns the same session (it's idempotent per creator), so the creator resumes without using an attempt. If Didit instead returns a *new* session, the old one finished in the meantime. We sync it, and if that verified the creator, we delete the new session and return 409.
 4. Changed details: a session the user hasn't started is deleted and marked `CANCELLED`. Mid-capture returns `409 KYC_SESSION_IN_PROGRESS`.
@@ -244,7 +244,7 @@ Two webhooks for one session can arrive together, and users double-tap buttons.
 
 Locally, the app runs with `NODE_ENV=development` and a **live** application's key, using the free workflow (ID Verification + Passive Liveness + Face Match).
 
-- **Real documents and selfies, real quota.** Each completed attempt uses one of each free check. Sessions that are never started cost nothing. Live sessions accept `environment: "live"` webhooks; sandbox events are only rejected in production.
+- **Real documents and selfies, real quota.** Each completed attempt uses one of each free check. Sessions that are never started cost nothing. Live sessions accept `environment: "live"` webhooks; sandbox webhooks are dropped whenever `NODE_ENV=production` (`handleWebhook` returns `ignored: "sandbox_event"` with a 200, so Didit sees a success and does not retry). That includes staging, which runs in production mode: a staging backend paired with a **sandbox** Didit application never receives results by webhook and only catches up through the 60-second status reconcile.
 - **Webhooks need a public URL.** Run `cloudflared tunnel --url http://localhost:3000` (or `ngrok http 3000`) and set the destination to `https://<tunnel>/webhooks/didit`. Without a tunnel, leave `DIDIT_WEBHOOK_SECRET` empty: `GET /creators/me/kyc` pulls the result from Didit once a pending attempt is more than 60s old.
 - **Exercising the admin review queue on live.** Borderline results are hard to produce on purpose. Instead, temporarily switch Face Match off in the workflow and complete a verification. Didit approves it, and our policy holds it as `NEEDS_REVIEW` because Face Match is missing. Approve or reject it via `/admin/kyc`, then switch Face Match back on.
 
@@ -308,6 +308,8 @@ The cancel ordering was kept by design (see §6, with a test proving recovery).
 ## 12. Known limitations & follow-ups
 
 - **Not yet run against the live Didit sandbox.** Next step: run approved, declined and in-review sessions end to end, and capture one real signed webhook as a known-good test vector.
+- **Sandbox webhooks are discarded in production mode.** This is intentional (it stops test events from verifying real creators), but it conflicts with the staging setup in [RAILWAY_DEPLOYMENT.md](./RAILWAY_DEPLOYMENT.md), which uses `NODE_ENV=production`. Either use a live Didit application on staging, or add an explicit setting (for example `KYC_ACCEPT_SANDBOX_WEBHOOKS`) so staging can opt in.
+- **A webhook without a `decision` object can park an approval in review.** If a `status.updated` event arrives as "Approved" but carries no per-check results and the submission has no stored summary, every required check counts as missing and the case goes to `NEEDS_REVIEW`. The next status read re-pulls the full decision and verifies it, but until then the creator waits. Confirm what Didit actually sends by capturing one real webhook (see the first item).
 - **Paper NIN slip support is unconfirmed.** Didit's docs list Nigerian ID cards; confirm the slip is accepted.
 - **`GET /creators/me/kyc` can take up to 10s if Didit is down** (the reconcile timeout).
 - **No durable outbox yet** (QueuesModule is empty). Provider/local divergence after an admin decision is repaired by Didit's webhook, the creator's status check, the admin detail view's self-heal, or the KYC expiry sweep. Follow-up: a durable outbox and retry worker for provider calls, so recovery doesn't depend on those triggers.

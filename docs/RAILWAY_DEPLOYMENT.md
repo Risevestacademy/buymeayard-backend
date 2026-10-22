@@ -4,7 +4,7 @@ This guide deploys the API from the **`dev`** branch to a Railway **staging** en
 
 Config lives in [`railway.toml`](../railway.toml): Dockerfile build, `prisma migrate deploy` before each deploy, `/health` health check, restart on failure.
 
-> **Staging uses `NODE_ENV=production`.** The env schema only accepts `development | production | test`. Production mode enforces required secrets and a strong admin password, which is what we want on staging. Use **test/sandbox** keys for Paystack and Didit so no real money moves.
+> **Staging uses `NODE_ENV=production`.** The env schema only accepts `development | production | test`. Production mode enforces required secrets and a strong admin password, which is what we want on staging. Use **test** keys for Paystack so no real money moves. For Didit, use a **live** application, not a sandbox one: in production mode the backend ignores Didit webhooks marked `sandbox`, so sandbox verifications would never complete (live sessions use free monthly checks, see [KYC_IMPLEMENTATION.md](./KYC_IMPLEMENTATION.md)).
 
 ---
 
@@ -12,7 +12,7 @@ Config lives in [`railway.toml`](../railway.toml): Dockerfile build, `prisma mig
 
 - [ ] `railway.toml` is merged into `dev`.
 - [ ] A Railway account connected to GitHub, with access to the `buymeayard-backend` repo.
-- [ ] Accounts and keys: Neon, Upstash, Paystack (test), Cloudinary, Brevo (or SMTP), Didit (sandbox workflow).
+- [ ] Accounts and keys: Neon, Upstash, Paystack (test), Cloudinary, Brevo (or SMTP), Didit (live application and workflow).
 - [ ] Locally: `psql`/`pg_dump` (only if migrating existing data), and optionally the Railway CLI (`npm i -g @railway/cli`).
 
 ---
@@ -92,7 +92,7 @@ CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
 
-# Didit (sandbox), all three REQUIRED when NODE_ENV=production
+# Didit (live application), all three REQUIRED when NODE_ENV=production
 DIDIT_API_KEY=
 DIDIT_WORKFLOW_ID=
 DIDIT_WEBHOOK_SECRET=
@@ -209,6 +209,7 @@ If you restore data, skip Part 8 (the admin already exists).
 | Seed refuses to run | Needs `NODE_ENV=production` plus a non-default `ADMIN_PASSWORD` of 12+ characters. |
 | Login cookies not sticking from the frontend | Check `BETTER_AUTH_URL` matches the public domain, and that CORS and trusted origins allow the frontend origin. |
 | Webhooks return 401/400 | Wrong secret, or the URL has `/api/v1` in it. Use `/webhooks/...`. |
+| Didit webhooks return 200 but KYC never completes | The backend drops Didit webhooks whose `environment` is `sandbox` when `NODE_ENV=production`, and staging runs in production mode. Use a **live** Didit application's key, workflow and webhook secret on staging, or the creator only advances when they open their status (a pull every 60s). See [KYC_INTEGRATION.md §8](./KYC_INTEGRATION.md). |
 
 ## Notes
 
