@@ -1,3 +1,4 @@
+import { ErrorResponseDto } from '../../common/dto/error-response.dto';
 import {
   Controller,
   Get,
@@ -81,6 +82,7 @@ export class SettingsController {
     status: 400,
     description:
       'Cannot delete account due to unwithdrawn balance, pending withdrawals, or incorrect password.',
+    type: ErrorResponseDto,
   })
   async deleteAccount(
     @CurrentUser('id') userId: string,
@@ -125,6 +127,7 @@ export class SettingsController {
   @ApiResponse({
     status: 400,
     description: 'Password already set or does not meet complexity rules.',
+    type: ErrorResponseDto,
   })
   async setPassword(
     @CurrentUser('id') userId: string,
@@ -152,6 +155,7 @@ export class SettingsController {
   @ApiResponse({
     status: 400,
     description: 'Cannot disconnect the only remaining login method.',
+    type: ErrorResponseDto,
   })
   async disconnectProvider(
     @CurrentUser('id') userId: string,
@@ -200,6 +204,7 @@ export class SettingsController {
   @ApiResponse({
     status: 400,
     description: 'Cannot revoke current active session (use sign-out instead).',
+    type: ErrorResponseDto,
   })
   async revokeSession(
     @CurrentUser('id') userId: string,

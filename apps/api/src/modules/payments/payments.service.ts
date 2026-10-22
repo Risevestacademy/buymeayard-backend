@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { PAYMENT_PROVIDER } from '../../infrastructure/payments/payment-provider.interface';
 import type { PaymentProvider } from '../../infrastructure/payments/payment-provider.interface';
@@ -16,6 +17,13 @@ import { CreatorStatus, PaymentStatus, SupportStatus } from '@buymeayard/types';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CONTRIBUTION_EVENTS } from '../notifications/events/notification.events';
 import { Prisma } from '@prisma/client';
+import { PayoutsService, TransferOutcome } from '../payouts/payouts.service';
+
+const TRANSFER_OUTCOMES: Record<string, TransferOutcome> = {
+  'transfer.success': 'SUCCESS',
+  'transfer.failed': 'FAILED',
+  'transfer.reversed': 'REVERSED',
+};
 
 @Injectable()
 export class PaymentsService {
@@ -27,6 +35,7 @@ export class PaymentsService {
     private readonly paymentProvider: PaymentProvider,
     private readonly ledgerService: LedgerService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly payoutsService: PayoutsService,
   ) {}
 
   async initializePayment(supportId: string, email: string) {
@@ -119,11 +128,14 @@ export class PaymentsService {
       });
     }
 
-    const eventId =
+    const eventType = payload.event;
+    // One object (e.g. a transfer) can send several events, such as
+    // transfer.failed then transfer.reversed, so the key includes the type.
+    const eventId = `${eventType}:${
       payload.event_id ||
       payload.data?.id?.toString() ||
-      payload.data?.reference;
-    const eventType = payload.event;
+      payload.data?.reference
+    }`;
 
     // Webhook Idempotency Check
     const existingEvent = await this.prisma.paymentEvent.findUnique({
@@ -138,6 +150,10 @@ export class PaymentsService {
     if (existingEvent) {
       this.logger.warn(`Webhook event ${eventId} already processed.`);
       return { status: 'already_processed' };
+    }
+
+    if (TRANSFER_OUTCOMES[eventType]) {
+      return this.handleTransferEvent(eventType, eventId, payload);
     }
 
     if (eventType === 'charge.success') {
@@ -230,6 +246,50 @@ export class PaymentsService {
           amount: payment.support.creatorAmount,
           message: payment.support.message,
         });
+      }
+    }
+
+    return { received: true };
+  }
+
+  private async handleTransferEvent(
+    eventType: string,
+    eventId: string,
+    payload: any,
+  ) {
+    const payout = await this.payoutsService.findByProviderReference(
+      payload.data?.reference ?? '',
+    );
+    if (!payout) {
+      this.logger.warn(
+        `Transfer event ${eventId} does not match any payout, ignoring.`,
+      );
+      return { received: true };
+    }
+
+    await this.payoutsService.applyTransferOutcome(
+      payout.id,
+      TRANSFER_OUTCOMES[eventType],
+    );
+
+    try {
+      await this.prisma.paymentEvent.create({
+        data: {
+          payoutId: payout.id,
+          provider: this.paymentProvider.providerName,
+          eventType,
+          providerEventId: eventId,
+          payload,
+          processedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      // A concurrent delivery of the same event already recorded it
+      if (
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        error.code !== 'P2002'
+      ) {
+        throw error;
       }
     }
 

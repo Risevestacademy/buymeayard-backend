@@ -1,3 +1,9 @@
+import { ErrorResponseDto } from '../../common/dto/error-response.dto';
+import {
+  ApiErrors,
+  CREATOR_NOT_FOUND_ERROR,
+  UNAUTHORIZED_ERROR,
+} from '../../common/decorators/api-errors.decorator';
 import {
   Controller,
   Get,
@@ -36,7 +42,6 @@ import {
   CreatorProfileDataDto,
   CreatorMaterialResponseDto,
   AvatarUploadResponseDto,
-  ApiErrorResponseDto,
 } from './dto/creator-response.dto';
 import { CheckSlugResponseDto } from './dto/check-slug.dto';
 import { CreatorShareLinkResponseDto } from './dto/share-link.dto';
@@ -99,7 +104,7 @@ export class CreatorsController {
   @ApiOperation({
     summary: 'Get current logged-in creator profile',
     description:
-      'Retrieves the creator profile for the currently authenticated user.',
+      'Retrieves the creator profile for the currently authenticated user. Includes `isKycCompleted` (identity verified) and `isBankAccountConnected` (a verified payout bank account is saved). `isBankAccountConnected` is only returned here, never on public profiles.',
   })
   @ApiResponse({
     status: 200,
@@ -109,12 +114,12 @@ export class CreatorsController {
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid session.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found for user.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async getMyProfile(@CurrentUser('id') userId: string) {
     const profile = await this.creatorsService.findByUserId(userId);
@@ -144,12 +149,12 @@ export class CreatorsController {
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid session.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async getDashboard(
     @CurrentUser('id') userId: string,
@@ -182,12 +187,12 @@ export class CreatorsController {
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid session.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async getOverview(
     @CurrentUser('id') userId: string,
@@ -212,12 +217,12 @@ export class CreatorsController {
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid session.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async getDashboardEarnings(
     @CurrentUser('id') userId: string,
@@ -242,12 +247,12 @@ export class CreatorsController {
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid session.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async getDashboardContributions(
     @CurrentUser('id') userId: string,
@@ -272,12 +277,12 @@ export class CreatorsController {
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid session.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async getDashboardMetrics(
     @CurrentUser('id') userId: string,
@@ -320,12 +325,12 @@ export class CreatorsController {
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid session.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async getDashboardRecentContributions(
     @CurrentUser('id') userId: string,
@@ -367,7 +372,7 @@ export class CreatorsController {
   @ApiOperation({
     summary: 'Get creator balance and payout eligibility overview',
     description:
-      'Returns available balance from ledger, pending balance, withdrawn to date, KYC status, and withdrawal capability.',
+      'Same response as GET /creators/me/balance. See that endpoint for how each field maps to the Payouts screens.',
   })
   @ApiResponse({
     status: 200,
@@ -377,12 +382,12 @@ export class CreatorsController {
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid session.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async getDashboardBalance(
     @CurrentUser('id') userId: string,
@@ -394,16 +399,26 @@ export class CreatorsController {
   @ApiBearerAuth()
   @ApiCookieAuth('better-auth.session_token')
   @ApiOperation({
-    summary:
-      'Get creator balance overview (alias for /creators/me/dashboard/balance)',
-    description:
-      'Alias for GET /creators/me/dashboard/balance matching CREATOR_DASHBOARD_OVERVIEW_ENDPOINTS.md spec.',
+    summary: 'Payouts overview: setup steps, balances and payout account',
+    description: `Everything the top of the **Payouts** page needs (web 1486:8708 … / mobile 01–06).
+
+**Setup card ("A little setup. Then, you’re ready.")**: \`setupStep\`:
+- \`VERIFY_IDENTITY\` → "Verify your identity" step, **Verify identity** button.
+- \`CONNECT_BANK\` → "Where should your money land?", **Add bank account** button.
+- \`READY\` → hide the setup card and show the account card (\`payoutMethod\`: "•••• 4589 Guaranty Trust Bank", **Change account**) and **Withdraw**.
+
+**Balance cards:** \`availableBalance\` ("Ready to withdraw"), \`pendingBalance\` ("Contributions still processing"), \`withdrawnToDate\` ("Total sent to your bank account"). All in kobo.
+
+**Withdraw button:** if \`canWithdraw\` is false only because \`availableBalance < minimumWithdrawal\`, show the "You’re below the minimum" modal.
+
+Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on \`GET /users/me\` and \`GET /creators/me\`: \`isKycCompleted\`, \`isBankAccountConnected\`.`,
   })
   @ApiResponse({
     status: 200,
     description: 'Creator balance overview returned successfully.',
     type: DashboardBalanceDto,
   })
+  @ApiErrors(UNAUTHORIZED_ERROR, CREATOR_NOT_FOUND_ERROR)
   async getBalanceAlias(
     @CurrentUser('id') userId: string,
   ): Promise<DashboardBalanceDto> {
@@ -464,17 +479,17 @@ export class CreatorsController {
   @ApiResponse({
     status: 400,
     description: 'Missing required fields or invalid slug format.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid session token.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 409,
     description: 'Conflict — slug is already taken.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async onboardCreator(
     @CurrentUser('id') userId: string,
@@ -518,12 +533,12 @@ export class CreatorsController {
   @ApiResponse({
     status: 400,
     description: 'Validation error (e.g. bio exceeds 160 characters).',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async updateProfile(
     @CurrentUser('id') userId: string,
@@ -607,7 +622,7 @@ export class CreatorsController {
   @ApiResponse({
     status: 400,
     description: 'Invalid file type or file too large.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async uploadAvatar(
     @CurrentUser('id') userId: string,
@@ -643,7 +658,7 @@ export class CreatorsController {
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async getMyMaterials(@CurrentUser('id') userId: string) {
     return this.creatorsService.getCreatorMaterials(userId);
@@ -683,12 +698,12 @@ export class CreatorsController {
   @ApiResponse({
     status: 400,
     description: 'Invalid material IDs or validation error.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async saveMyMaterials(
     @CurrentUser('id') userId: string,
@@ -736,12 +751,12 @@ export class CreatorsController {
   @ApiResponse({
     status: 400,
     description: 'Validation error — invalid URL, color, or missing name.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async createCustomMaterial(
     @CurrentUser('id') userId: string,
@@ -790,17 +805,17 @@ export class CreatorsController {
   @ApiResponse({
     status: 400,
     description: 'Invalid themeMaterialId or validation error.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid session token.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async updateCreatorSettings(
     @CurrentUser('id') userId: string,
@@ -831,17 +846,17 @@ export class CreatorsController {
     status: 400,
     description:
       'Cannot publish profile — required setup fields are incomplete.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid session token.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async updatePageStatus(
     @CurrentUser('id') userId: string,
@@ -867,12 +882,12 @@ export class CreatorsController {
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid session token.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   @ApiResponse({
     status: 404,
     description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async getMyShareLink(@CurrentUser('id') userId: string) {
     return this.creatorsService.getShareLink(userId);
@@ -952,7 +967,7 @@ export class CreatorsController {
   @ApiResponse({
     status: 404,
     description: 'Creator not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async getCreatorBySlug(@Param('slug') slug: string) {
     const profile = await this.creatorsService.findBySlug(slug);
@@ -979,7 +994,7 @@ export class CreatorsController {
   @ApiResponse({
     status: 404,
     description: 'Creator not found.',
-    type: ApiErrorResponseDto,
+    type: ErrorResponseDto,
   })
   async getShareLinkBySlug(@Param('slug') slug: string) {
     return this.creatorsService.getShareLinkBySlug(slug);

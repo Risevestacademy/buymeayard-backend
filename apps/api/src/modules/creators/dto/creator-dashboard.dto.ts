@@ -1,3 +1,4 @@
+import { PayoutMethodDto } from '../../payouts/dto/payout-method.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsOptional, IsString, IsIn, IsInt, Min, Max } from 'class-validator';
@@ -111,21 +112,21 @@ export class DashboardBalanceDto {
   @ApiProperty({
     example: 7200000,
     description:
-      'Available funds in ledger ready for payout in minor units / kobo (e.g. 7200000 kobo = ₦72,000)',
+      '"Available balance / Ready to withdraw", in kobo (e.g. 7200000 = ₦72,000). Withdrawals in progress are already taken out.',
   })
   availableBalance!: number;
 
   @ApiProperty({
     example: 1200000,
     description:
-      'Pending balance / funds in transit / pending payouts in minor units / kobo (e.g. 1200000 kobo = ₦12,000)',
+      'Contributions still processing (checkout opened in the last hour, not yet confirmed by Paystack), in kobo',
   })
   pendingBalance!: number;
 
   @ApiProperty({
     example: 3000000,
     description:
-      'Total amount successfully withdrawn to bank to date in minor units / kobo (e.g. 3000000 kobo = ₦30,000)',
+      'Total sent to the bank account to date, after processing fees, in kobo (e.g. 3000000 kobo = ₦30,000)',
   })
   withdrawnToDate!: number;
 
@@ -138,21 +139,43 @@ export class DashboardBalanceDto {
   @ApiProperty({
     example: true,
     description:
-      'Whether creator is currently eligible to withdraw (KYC verified, active, positive balance, and payout method configured)',
+      'Whether creator can withdraw now (KYC verified, active, balance at least the minimum, and a verified payout account)',
   })
   canWithdraw!: boolean;
 
   @ApiProperty({
     example: 'VERIFIED',
-    description: 'Current KYC verification status',
+    description:
+      'Identity verification status: NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW, EXPIRED. Only VERIFIED can add a bank account or withdraw.',
   })
   kycStatus!: string;
 
   @ApiProperty({
     example: true,
-    description: 'Whether creator has configured a default bank payout method',
+    description: 'Whether a verified payout bank account is saved',
   })
   hasPayoutMethod!: boolean;
+
+  @ApiProperty({
+    example: 100000,
+    description: 'Minimum withdrawal in kobo (₦1,000)',
+  })
+  minimumWithdrawal!: number;
+
+  @ApiProperty({
+    enum: ['VERIFY_IDENTITY', 'CONNECT_BANK', 'READY'],
+    example: 'READY',
+    description:
+      'Which "A little setup. Then, you’re ready." step the creator is on',
+  })
+  setupStep!: 'VERIFY_IDENTITY' | 'CONNECT_BANK' | 'READY';
+
+  @ApiProperty({
+    type: () => PayoutMethodDto,
+    nullable: true,
+    description: 'The bank account payouts are sent to',
+  })
+  payoutMethod!: PayoutMethodDto | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

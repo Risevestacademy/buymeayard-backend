@@ -35,47 +35,60 @@ describe('NotificationDispatcherService', () => {
     const payoutEvent: PayoutNotificationEvent = {
       payoutId: 'payout-123',
       creatorUserId: 'user-1',
-      amount: 5000000, // 50,000 NGN in kobo
+      amount: 4500000, // ₦45,000 in kobo
+      fee: 5000,
+      netAmount: 4495000,
       currency: 'NGN',
+      reference: 'PYT-20250925-0041',
       bankName: 'GTBank',
-      accountNumberMasked: '••••1234',
+      accountNumberMasked: '••••4589',
     };
 
-    it('creates in-app notification and sends email for CREATED payout', async () => {
+    function allowAll() {
       prisma.user.findUnique.mockResolvedValue({
         id: 'user-1',
-        name: 'Ada Lovelace',
-        email: 'ada@example.com',
+        name: 'Isaac Shosanya',
+        email: 'isaac@example.com',
       });
       prisma.notificationPreference.findUnique.mockResolvedValue({
         userId: 'user-1',
         inAppOnPayout: true,
         emailOnPayout: true,
       });
+    }
 
-      await service.dispatchPayoutNotification(payoutEvent, 'CREATED');
+    it('sends "Money landed" with the net amount and breakdown', async () => {
+      allowAll();
+
+      await service.dispatchPayoutNotification(payoutEvent, 'SUCCESS');
 
       expect(prisma.notification.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           userId: 'user-1',
           category: 'PAYOUT',
-          type: 'PAYOUT_CREATED',
-          title: 'Withdrawal submitted',
-          actionUrl: '/dashboard/payouts',
+          type: 'PAYOUT_COMPLETED',
+          title: 'Money landed',
+          body: '₦44,950 has been sent to your GTBank account (••••4589).',
+          actionUrl: '/dashboard/payouts?payoutId=payout-123',
         }),
       });
+      const html = (service.sendEmail as jest.Mock).mock.calls[0][2];
       expect(service.sendEmail).toHaveBeenCalledWith(
-        'ada@example.com',
-        'Withdrawal Submitted - Buy Me a Yard',
-        expect.stringContaining('50,000'),
+        'isaac@example.com',
+        'Money landed',
+        expect.any(String),
       );
+      expect(html).toContain('Hi Isaac,');
+      expect(html).toContain('₦45,000');
+      expect(html).toContain('₦50');
+      expect(html).toContain('Reference: PYT-20250925-0041');
     });
 
     it('respects user preference when in-app and email are disabled', async () => {
       prisma.user.findUnique.mockResolvedValue({
         id: 'user-1',
-        name: 'Ada Lovelace',
-        email: 'ada@example.com',
+        name: 'Isaac Shosanya',
+        email: 'isaac@example.com',
       });
       prisma.notificationPreference.findUnique.mockResolvedValue({
         userId: 'user-1',
@@ -89,35 +102,41 @@ describe('NotificationDispatcherService', () => {
       expect(service.sendEmail).not.toHaveBeenCalled();
     });
 
-    it('handles FAILED payout with reason in email', async () => {
-      prisma.user.findUnique.mockResolvedValue({
-        id: 'user-1',
-        name: 'Ada Lovelace',
-        email: 'ada@example.com',
-      });
-      prisma.notificationPreference.findUnique.mockResolvedValue({
-        userId: 'user-1',
-        inAppOnPayout: true,
-        emailOnPayout: true,
-      });
+    it('tells the creator the full amount was restored when a payout fails', async () => {
+      allowAll();
 
-      const failedEvent = {
-        ...payoutEvent,
-        failureReason: 'Account name mismatch',
-      };
-
-      await service.dispatchPayoutNotification(failedEvent, 'FAILED');
+      await service.dispatchPayoutNotification(payoutEvent, 'FAILED');
 
       expect(prisma.notification.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          category: 'PAYOUT',
           type: 'PAYOUT_FAILED',
+          title: 'Withdrawal didn’t go through',
+          body: 'Your ₦45,000 withdrawal failed. The full amount has been returned to your available balance.',
         }),
       });
       expect(service.sendEmail).toHaveBeenCalledWith(
-        'ada@example.com',
-        expect.stringContaining('Withdrawal Did Not Go Through'),
-        expect.stringContaining('Account name mismatch'),
+        'isaac@example.com',
+        'Withdrawal didn’t go through',
+        expect.stringContaining('Amount restored'),
+      );
+    });
+
+    it('sends the delayed notice with the support hint', async () => {
+      allowAll();
+
+      await service.dispatchPayoutNotification(payoutEvent, 'DELAYED');
+
+      expect(prisma.notification.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          type: 'PAYOUT_DELAYED',
+          title: 'Payout is taking longer than usual',
+          body: 'Your ₦44,950 transfer is awaiting confirmation from your bank. There’s no need to submit it again.',
+        }),
+      });
+      expect(service.sendEmail).toHaveBeenCalledWith(
+        'isaac@example.com',
+        'Payout is taking longer than usual',
+        expect.stringContaining('contact support with the reference below'),
       );
     });
   });
@@ -153,7 +172,9 @@ describe('NotificationDispatcherService', () => {
           category: 'CONTRIBUTION',
           type: 'CONTRIBUTION_RECEIVED',
           title: 'New contribution received!',
-          body: expect.stringContaining('Chidi bought 3 yards of Silk Cashmere (₦15,000)'),
+          body: expect.stringContaining(
+            'Chidi bought 3 yards of Silk Cashmere (₦15,000)',
+          ),
           actionUrl: '/dashboard/contributions',
         }),
       });

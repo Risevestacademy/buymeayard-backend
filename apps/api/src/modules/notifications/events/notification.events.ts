@@ -1,16 +1,18 @@
+/** Sent once per confirmed status change, as in the Payout notifications design. */
 export const PAYOUT_EVENTS = {
-  CREATED: 'payout.created',
-  PROCESSING: 'payout.processing',
   SUCCESS: 'payout.success',
   FAILED: 'payout.failed',
+  DELAYED: 'payout.delayed',
 } as const;
 
 export interface PayoutNotificationEvent {
   payoutId: string;
   creatorUserId: string;
   amount: number;
+  fee?: number;
   netAmount?: number;
   currency?: string;
+  reference?: string;
   bankName?: string;
   accountNumberMasked?: string;
   failureReason?: string;

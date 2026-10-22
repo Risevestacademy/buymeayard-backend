@@ -12,7 +12,12 @@ import {
   StorageProvider,
 } from '../../infrastructure/storage/storage-provider.interface';
 import { LedgerService } from '../ledger/ledger.service';
-import { AccountType, PayoutStatus } from '@buymeayard/types';
+import { AccountType, PaymentStatus, PayoutStatus } from '@buymeayard/types';
+import { PayoutMethod } from '@prisma/client';
+import { PayoutMethodsService } from '../payouts/payout-methods.service';
+import { MINIMUM_WITHDRAWAL } from '../payouts/payout-fees';
+
+const PENDING_CONTRIBUTION_WINDOW_MS = 60 * 60 * 1000;
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -310,6 +315,11 @@ export class CreatorsService {
           include: {
             material: true,
           },
+        },
+        // IDs only: formatCreatorProfile turns this into isBankAccountConnected
+        payoutMethods: {
+          where: { status: 'ACTIVE' },
+          select: { id: true },
         },
       },
     });
@@ -1070,6 +1080,7 @@ export class CreatorsService {
       username: _username,
       personalizedLink: _personalizedLink,
       materials: rawMaterials,
+      payoutMethods,
       ...cleanProfile
     } = profile;
 
@@ -1195,6 +1206,10 @@ export class CreatorsService {
       showSupportersOnPage: profile.showSupportersOnPage ?? true,
       isPublished,
       isKycCompleted,
+      // Only for the creator's own profile, which loads their payout accounts
+      ...(Array.isArray(payoutMethods) && {
+        isBankAccountConnected: payoutMethods.length > 0,
+      }),
     };
   }
 
@@ -1569,40 +1584,47 @@ export class CreatorsService {
     );
     const availableBalance = await this.ledger.getAccountBalance(account.id);
 
-    const pendingPayoutsAgg = await this.prisma.payout.aggregate({
+    // "Contributions still processing": checkouts opened recently that Paystack
+    // has not confirmed yet. Abandoned checkouts are never marked failed, so
+    // only recent ones count.
+    const pendingContributionsAgg = await this.prisma.support.aggregate({
       where: {
         creatorId: creator.id,
-        status: {
-          in: [
-            PayoutStatus.REQUESTED,
-            PayoutStatus.PENDING,
-            PayoutStatus.PROCESSING,
-          ],
+        payment: {
+          status: PaymentStatus.PROCESSING,
+          updatedAt: {
+            gte: new Date(Date.now() - PENDING_CONTRIBUTION_WINDOW_MS),
+          },
         },
       },
       _sum: {
-        amount: true,
+        creatorAmount: true,
       },
     });
-    const pendingBalance = pendingPayoutsAgg._sum.amount || 0;
+    const pendingBalance = pendingContributionsAgg._sum.creatorAmount || 0;
 
+    // "Total sent to your bank account": what reached the bank, after fees
     const completedPayoutsAgg = await this.prisma.payout.aggregate({
       where: {
         creatorId: creator.id,
         status: PayoutStatus.SUCCESS,
       },
       _sum: {
-        amount: true,
+        netAmount: true,
       },
     });
-    const withdrawnToDate = completedPayoutsAgg._sum.amount || 0;
+    const withdrawnToDate = completedPayoutsAgg._sum.netAmount || 0;
 
-    const hasPayoutMethod = (creator.payoutMethods || []).length > 0;
+    const activeMethod = (creator.payoutMethods || []).find(
+      (m: PayoutMethod) => m.status === 'ACTIVE',
+    );
+    const hasPayoutMethod = !!activeMethod;
+    const isKycVerified = creator.kycStatus === 'VERIFIED';
     const canWithdraw =
-      creator.kycStatus === 'VERIFIED' &&
+      isKycVerified &&
       creator.status === 'ACTIVE' &&
-      availableBalance > 0 &&
-      hasPayoutMethod;
+      availableBalance >= MINIMUM_WITHDRAWAL &&
+      !!activeMethod?.recipientCode;
 
     return {
       availableBalance,
@@ -1612,6 +1634,15 @@ export class CreatorsService {
       canWithdraw,
       kycStatus: creator.kycStatus,
       hasPayoutMethod,
+      minimumWithdrawal: MINIMUM_WITHDRAWAL,
+      setupStep: !isKycVerified
+        ? 'VERIFY_IDENTITY'
+        : !hasPayoutMethod
+          ? 'CONNECT_BANK'
+          : 'READY',
+      payoutMethod: activeMethod
+        ? PayoutMethodsService.toDto(activeMethod)
+        : null,
     };
   }
 

@@ -344,6 +344,13 @@ export class CreatorProfileDataDto {
   })
   isKycCompleted: boolean;
 
+  @ApiPropertyOptional({
+    example: true,
+    description:
+      'Whether the creator has a verified payout bank account. Returned on GET /creators/me only.',
+  })
+  isBankAccountConnected?: boolean;
+
   @ApiProperty({
     example: 'PROFILE_CREATED',
     description: 'Creator account lifecycle status',
@@ -451,17 +458,3 @@ export class AvatarUploadResponseDto {
 // ─────────────────────────────────────────────────────────────────────────────
 // Error response
 // ─────────────────────────────────────────────────────────────────────────────
-
-export class ApiErrorResponseDto {
-  @ApiProperty({ example: 400, description: 'HTTP status code' })
-  statusCode: number;
-
-  @ApiProperty({
-    example: 'Creator name is required',
-    description: 'Human-readable error message',
-  })
-  message: string;
-
-  @ApiProperty({ example: 'Bad Request', description: 'HTTP error title' })
-  error: string;
-}

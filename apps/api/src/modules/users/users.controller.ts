@@ -8,6 +8,11 @@ import {
 import { UsersService } from './users.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { UserMeResponseDto } from './dto/user-me-response.dto';
+import {
+  ApiErrors,
+  UNAUTHORIZED_ERROR,
+} from '../../common/decorators/api-errors.decorator';
 import { UserRole } from '@buymeayard/types';
 
 @ApiTags('users')
@@ -17,8 +22,24 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get('me')
-  @ApiOperation({ summary: 'Get profile of current authenticated user' })
-  @ApiResponse({ status: 200, description: 'Profile returned successfully' })
+  @ApiOperation({
+    summary: 'Get profile of current authenticated user',
+    description: `Returns the user, roles, creator profile summary, and setup flags:
+
+| Flag | true when |
+|---|---|
+| \`isOnboardingCompleted\` / \`isProfileSetupCompleted\` | The creator finished onboarding |
+| \`isKycCompleted\` | Identity verification approved (\`creatorProfile.kycStatus = VERIFIED\`) |
+| \`isBankAccountConnected\` | A verified payout bank account is saved |
+
+Non-creators get \`false\` for the creator flags. For balances and the payout account itself, use \`GET /creators/me/balance\`.`,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Profile returned successfully',
+    type: UserMeResponseDto,
+  })
+  @ApiErrors(UNAUTHORIZED_ERROR)
   async getProfile(@CurrentUser('id') userId: string) {
     return this.usersService.findByIdWithRoles(userId);
   }
