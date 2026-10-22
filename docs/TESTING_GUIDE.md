@@ -327,7 +327,7 @@ Folder 12 holds endpoints the product needs that don't exist yet. Each currently
 | Area | Endpoints | Replaces today |
 | :--- | :--- | :--- |
 | Creator yard menu | `GET/POST /creators/me/materials`, `PATCH/DELETE /creators/me/materials/:id` | `creator_materials` in `02-seed-creator-fixtures.sql` |
-| Creator profile | `PATCH /creators/me`, `GET /creators/me/supports`, `GET /creators/me/followers` | — |
+| Creator profile | `PATCH /creators/me`, `GET /creators/me/dashboard/contributions`, `GET /creators/me/followers` | — |
 | Payout methods & history | `GET /payouts/banks`, `POST /creators/me/payout-methods/resolve`, `GET/POST/PATCH/DELETE /creators/me/payout-methods`, `GET /creators/me/payouts[/:id]`, `POST /creators/me/payouts/:id/cancel`, `GET /creators/me/transactions` | `payout_methods` in the fixtures |
 | Payments | `GET /payments/verify/:reference` | — |
 | Posts & media | `POST /media/uploads`, `POST/GET /creators/me/posts`, `GET/PATCH/DELETE /posts/:id`, `POST /posts/:id/publish` | `posts` in the fixtures |

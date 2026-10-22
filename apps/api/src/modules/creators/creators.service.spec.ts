@@ -1271,6 +1271,114 @@ describe('CreatorsService', () => {
       expect(res.data[1].supporter.initials).toBe('CN');
       expect(res.data[1].material?.name).toBe('Lace');
     });
+
+    it('shows the name a guest typed, and hides it when they asked to be anonymous', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.count.mockResolvedValue(2);
+      const base = {
+        totalAmount: 500000,
+        platformFee: 50000,
+        creatorAmount: 450000,
+        currency: 'NGN',
+        status: 'PAID',
+        message: null,
+        supporter: null,
+        items: [],
+        payment: { providerReference: 'ref-9' },
+        createdAt: new Date('2026-10-06T10:00:00Z'),
+      };
+      prisma.support.findMany.mockResolvedValue([
+        { ...base, id: 's-1', isAnonymous: false, guestName: 'Ada Okafor' },
+        { ...base, id: 's-2', isAnonymous: true, guestName: 'Tomi' },
+      ]);
+
+      const res = await service.getDashboardContributions('u-1');
+
+      expect(res.data[0].supporter.name).toBe('Ada Okafor');
+      expect(res.data[1].supporter.name).toBe('Anonymous');
+      expect(res.data[0]).toMatchObject({
+        platformFee: 50000,
+        status: 'PAID',
+        reference: 'ref-9',
+      });
+    });
+
+    it('searches names and messages but never the name of an anonymous supporter', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.count.mockResolvedValue(0);
+      prisma.support.findMany.mockResolvedValue([]);
+
+      await service.getDashboardContributions('u-1', {
+        search: ' ada ',
+        order: 'asc',
+      });
+
+      const contains = { contains: 'ada', mode: 'insensitive' };
+      expect(prisma.support.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            creatorId: 'c-1',
+            status: { in: ['PAID', 'COMPLETED'] },
+            OR: [
+              { isAnonymous: false, guestName: contains },
+              { isAnonymous: false, supporter: { name: contains } },
+              { message: contains },
+            ],
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'desc' }],
+        }),
+      );
+    });
+  });
+
+  describe('getDashboardContribution', () => {
+    it('only looks inside the signed-in creator contributions, so another creator id is a 404', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getDashboardContribution('u-1', 'support-of-someone-else'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.support.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            id: 'support-of-someone-else',
+            creatorId: 'c-1',
+            status: { in: ['PAID', 'COMPLETED'] },
+          },
+        }),
+      );
+    });
+
+    it('returns the amount breakdown and payment reference', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.findFirst.mockResolvedValue({
+        id: 's-1',
+        totalAmount: 1250000,
+        platformFee: 5000,
+        creatorAmount: 1245000,
+        currency: 'NGN',
+        status: 'COMPLETED',
+        message: 'Loved the video',
+        isAnonymous: false,
+        guestName: null,
+        supporter: { id: 'u-9', name: 'Ada Okafor', image: null },
+        payment: { providerReference: 'BMY-1' },
+        items: [],
+        createdAt: new Date('2026-01-06T11:42:00Z'),
+      });
+
+      const dto = await service.getDashboardContribution('u-1', 's-1');
+
+      expect(dto).toMatchObject({
+        id: 's-1',
+        amount: 1250000,
+        platformFee: 5000,
+        creatorAmount: 1245000,
+        reference: 'BMY-1',
+        supporter: { name: 'Ada Okafor' },
+      });
+    });
   });
 
   describe('getDashboardMetrics', () => {
@@ -1298,6 +1406,41 @@ describe('CreatorsService', () => {
       expect(metrics.netEarnings).toBe(7125000);
       expect(metrics.platformFees).toBe(375000);
       expect(metrics.currency).toBe('NGN');
+    });
+
+    it('compares this month with last month', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.aggregate
+        .mockResolvedValueOnce({
+          _count: { id: 15 },
+          _sum: { totalAmount: 9000000, creatorAmount: 0, platformFee: 0 },
+        })
+        .mockResolvedValueOnce({
+          _count: { id: 4 },
+          _sum: { totalAmount: 1120000 },
+        })
+        .mockResolvedValueOnce({ _sum: { totalAmount: 1000000 } });
+
+      const metrics = await service.getDashboardMetrics('u-1');
+
+      expect(metrics).toMatchObject({
+        thisMonthContributions: 4,
+        thisMonthAmount: 1120000,
+        lastMonthAmount: 1000000,
+        thisMonthChangePercent: 12,
+      });
+    });
+
+    it('has no percentage when nothing was received last month', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.aggregate.mockResolvedValue({
+        _count: { id: 0 },
+        _sum: {},
+      });
+
+      const metrics = await service.getDashboardMetrics('u-1');
+
+      expect(metrics.thisMonthChangePercent).toBeNull();
     });
   });
 

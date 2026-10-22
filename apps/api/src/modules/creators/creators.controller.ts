@@ -3,6 +3,8 @@ import {
   ApiErrors,
   CREATOR_NOT_FOUND_ERROR,
   UNAUTHORIZED_ERROR,
+  VALIDATION_ERROR,
+  ApiErrorDoc,
 } from '../../common/decorators/api-errors.decorator';
 import {
   Controller,
@@ -48,6 +50,20 @@ import { CreatorShareLinkResponseDto } from './dto/share-link.dto';
 import { UpdateCreatorSettingsDto } from './dto/update-creator-settings.dto';
 import { UpdatePageStatusDto } from './dto/update-page-status.dto';
 import {
+  CreateSupportIntentDto,
+  SupportQuoteQueryDto,
+} from './dto/create-support-intent.dto';
+import { SupportsService } from '../supports/supports.service';
+import {
+  SupportWallQueryDto,
+  SupportWallResponseDto,
+} from '../supports/dto/support-wall.dto';
+import {
+  SupportIntentResponseDto,
+  SupportQuoteResponseDto,
+} from '../supports/dto/guest-support.dto';
+import { UpdateThankYouMessageDto } from './dto/update-thank-you-message.dto';
+import {
   CreatorDashboardResponseDto,
   DashboardBalanceDto,
   DashboardEarningsChartDto,
@@ -59,10 +75,35 @@ import {
   DashboardRecentContributionsQueryDto,
 } from './dto/creator-dashboard.dto';
 
+const CREATOR_UNAVAILABLE_ERRORS: ApiErrorDoc[] = [
+  {
+    status: 404,
+    code: 'CREATOR_NOT_FOUND',
+    message: 'Creator not found',
+    when: 'No creator has this slug, or their page is not published.',
+  },
+  {
+    status: 403,
+    code: 'CREATOR_NOT_ACTIVE',
+    message: 'This creator is not accepting contributions yet',
+    when: 'The creator has not finished verification, so gifts are closed.',
+  },
+];
+
+const NO_MATERIAL_ERROR: ApiErrorDoc = {
+  status: 400,
+  code: 'MATERIAL_NOT_FOUND',
+  message: 'This creator has no active materials available for support',
+  when: 'The creator has no active, priced fabric to count the gift in.',
+};
+
 @ApiTags('creators')
 @Controller('creators')
 export class CreatorsController {
-  constructor(private readonly creatorsService: CreatorsService) {}
+  constructor(
+    private readonly creatorsService: CreatorsService,
+    private readonly supportsService: SupportsService,
+  ) {}
 
   @Public()
   @Get()
@@ -248,6 +289,29 @@ export class CreatorsController {
     @Query() query: DashboardContributionsQueryDto,
   ): Promise<DashboardContributionsListResponseDto> {
     return this.creatorsService.getDashboardContributions(userId, query);
+  }
+
+  @Get('me/dashboard/contributions/:id')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Get one contribution for the details panel',
+    description:
+      'Amount, platform fee, net amount, message, status and payment reference. Only contributions received by the signed-in creator can be read.',
+  })
+  @ApiParam({ name: 'id', description: 'Contribution id from the list' })
+  @ApiResponse({ status: 200, type: DashboardContributionDto })
+  @ApiErrors(UNAUTHORIZED_ERROR, CREATOR_NOT_FOUND_ERROR, {
+    status: 404,
+    code: 'NOT_FOUND',
+    message: 'Contribution not found',
+    when: 'The id does not exist, is unpaid, or belongs to another creator.',
+  })
+  async getDashboardContribution(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ): Promise<DashboardContributionDto> {
+    return this.creatorsService.getDashboardContribution(userId, id);
   }
 
   @Get('me/dashboard/metrics')
@@ -534,6 +598,39 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
     @Body() dto: UpdateProfileDto,
   ) {
     const profile = await this.creatorsService.updateProfile(userId, dto);
+    return this.creatorsService.formatCreatorProfile(profile);
+  }
+
+  @Put('me/thank-you-message')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Set or clear the creator thank-you message',
+    description:
+      'Replaces the thank-you message shown to supporters after payment. Send null or blank text to clear it, which falls back to the platform default. The thankYouMessage key is required.',
+  })
+  @ApiBody({
+    type: UpdateThankYouMessageDto,
+    examples: {
+      set: {
+        summary: 'Set a message',
+        value: { thankYouMessage: 'Thank you for the yard! 🙏' },
+      },
+      clear: {
+        summary: 'Clear it (use the default)',
+        value: { thankYouMessage: null },
+      },
+    },
+  })
+  @ApiResponse({ status: 200, type: CreatorProfileDataDto })
+  @ApiErrors(VALIDATION_ERROR, UNAUTHORIZED_ERROR, CREATOR_NOT_FOUND_ERROR)
+  async updateThankYouMessage(
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdateThankYouMessageDto,
+  ) {
+    const profile = await this.creatorsService.updateCreatorSettings(userId, {
+      thankYouMessage: dto.thankYouMessage ?? '',
+    });
     return this.creatorsService.formatCreatorProfile(profile);
   }
 
@@ -914,5 +1011,61 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
   })
   async getShareLinkBySlug(@Param('slug') slug: string) {
     return this.creatorsService.getShareLinkBySlug(slug);
+  }
+
+  @Public()
+  @Get(':slug/supports/quote')
+  @ApiOperation({
+    summary: 'Preview the yard equivalent of a gift amount',
+    description:
+      'Powers "You\'re gifting ₦5,000 worth of Adire" on the gift form. Nothing is created. Uses the creator\'s theme fabric.',
+  })
+  @ApiParam({ name: 'slug', example: 'adeola' })
+  @ApiResponse({ status: 200, type: SupportQuoteResponseDto })
+  @ApiErrors(VALIDATION_ERROR, ...CREATOR_UNAVAILABLE_ERRORS, NO_MATERIAL_ERROR)
+  async quoteSupport(
+    @Param('slug') slug: string,
+    @Query() query: SupportQuoteQueryDto,
+  ) {
+    return this.supportsService.quoteGift(slug, query);
+  }
+
+  @Public()
+  @Post(':slug/supports/intent')
+  @ApiOperation({
+    summary: 'Create a guest support intent',
+    description:
+      'Public endpoint for a guest to start a gift to a creator. No authentication required. Next, send the returned supportId to POST /payments/initialize to get the Paystack checkout URL.',
+  })
+  @ApiParam({
+    name: 'slug',
+    description: 'Creator slug handle (e.g. "adeola")',
+    example: 'adeola',
+  })
+  @ApiBody({ type: CreateSupportIntentDto })
+  @ApiResponse({ status: 201, type: SupportIntentResponseDto })
+  @ApiErrors(VALIDATION_ERROR, ...CREATOR_UNAVAILABLE_ERRORS, NO_MATERIAL_ERROR)
+  async createSupportIntent(
+    @Param('slug') slug: string,
+    @Body() dto: CreateSupportIntentDto,
+  ) {
+    return this.supportsService.createGuestIntent(slug, dto);
+  }
+
+  @Public()
+  @Get(':slug/supports')
+  @ApiOperation({
+    summary: 'Get the public supporter wall',
+    description:
+      'Paginated feed of paid gifts, newest first, plus the supporter count for the page header. Anonymous gifts hide the name and message. Returns an empty list and a null count if the creator turned the wall off.',
+  })
+  @ApiParam({ name: 'slug', example: 'adeola' })
+  @ApiResponse({ status: 200, type: SupportWallResponseDto })
+  @ApiErrors(VALIDATION_ERROR, CREATOR_UNAVAILABLE_ERRORS[0])
+  async getSupporterWall(
+    @Param('slug') slug: string,
+    @Query() query: SupportWallQueryDto,
+  ) {
+    return this.supportsService.getPublicWall(slug, query);
   }
 }

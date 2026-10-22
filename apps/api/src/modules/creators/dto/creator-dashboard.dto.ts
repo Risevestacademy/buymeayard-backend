@@ -1,7 +1,15 @@
 import { PayoutMethodDto } from '../../payouts/dto/payout-method.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsOptional, IsString, IsIn, IsInt, Min, Max } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsIn,
+  IsInt,
+  Min,
+  Max,
+  MaxLength,
+} from 'class-validator';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. Creator Context
@@ -96,6 +104,33 @@ export class DashboardMetricsDto {
       'Total platform processing and service fees deducted in minor units / kobo (e.g. 600000 kobo = ₦6,000)',
   })
   platformFees!: number;
+
+  @ApiProperty({
+    example: 3,
+    description: 'Contributions received since the start of this month (UTC)',
+  })
+  thisMonthContributions!: number;
+
+  @ApiProperty({
+    example: 6850000,
+    description: 'Amount contributed this month, in kobo ("This month" card)',
+  })
+  thisMonthAmount!: number;
+
+  @ApiProperty({
+    example: 6100000,
+    description: 'Amount contributed last month, in kobo',
+  })
+  lastMonthAmount!: number;
+
+  @ApiProperty({
+    example: 12,
+    nullable: true,
+    type: Number,
+    description:
+      'This month vs last month, in whole percent (negative when down). Null when nothing was received last month.',
+  })
+  thisMonthChangePercent!: number | null;
 
   @ApiProperty({
     example: 'NGN',
@@ -279,6 +314,12 @@ export class DashboardContributionDto {
   amount!: number;
 
   @ApiProperty({
+    example: 25000,
+    description: 'Platform fee deducted from the amount, in minor units / kobo',
+  })
+  platformFee!: number;
+
+  @ApiProperty({
     example: 475000,
     description:
       'Net amount credited to creator in minor units / kobo (e.g. 475000 kobo = ₦4,750)',
@@ -290,6 +331,21 @@ export class DashboardContributionDto {
     description: 'ISO currency code',
   })
   currency!: string;
+
+  @ApiProperty({
+    example: 'PAID',
+    description:
+      'Payment status. Only received (PAID / COMPLETED) gifts are listed.',
+  })
+  status!: string;
+
+  @ApiProperty({
+    example: 'T123456789',
+    nullable: true,
+    type: String,
+    description: 'Payment reference shown under "Payment details"',
+  })
+  reference!: string | null;
 
   @ApiProperty({
     example: '2026-10-06T10:42:00.000Z',
@@ -451,6 +507,25 @@ export class DashboardContributionsQueryDto {
   @Min(1)
   @Max(50)
   limit?: number = 10;
+
+  @ApiPropertyOptional({
+    example: 'ada',
+    description:
+      'Matches the supporter name or message, case-insensitive. Anonymous supporters can only be found by their message.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
+  @ApiPropertyOptional({
+    enum: ['asc', 'desc'],
+    default: 'desc',
+    description: 'Date order: newest first (desc) or oldest first (asc)',
+  })
+  @IsOptional()
+  @IsIn(['asc', 'desc'])
+  order?: 'asc' | 'desc' = 'desc';
 }
 
 export class DashboardContributionsPaginationDto {

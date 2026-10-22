@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CreatorsController } from './creators.controller';
 import { CreatorsService } from './creators.service';
+import { SupportsService } from '../supports/supports.service';
 
 describe('CreatorsController', () => {
   let controller: CreatorsController;
@@ -88,6 +89,10 @@ describe('CreatorsController', () => {
         {
           provide: CreatorsService,
           useValue: creatorsService,
+        },
+        {
+          provide: SupportsService,
+          useValue: {},
         },
       ],
     }).compile();

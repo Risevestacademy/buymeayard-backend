@@ -2,7 +2,12 @@ import { ForbiddenException } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 
 describe('PaymentsService.initializePayment contribution gate', () => {
-  function setup(creatorStatus: string) {
+  function setup(
+    creatorStatus: string,
+    support: Record<string, unknown> = {
+      supporter: { email: 's@example.com' },
+    },
+  ) {
     const prisma = {
       support: {
         findUnique: jest.fn().mockResolvedValue({
@@ -10,7 +15,7 @@ describe('PaymentsService.initializePayment contribution gate', () => {
           status: 'CREATED',
           totalAmount: 500_000,
           currency: 'NGN',
-          supporter: { email: 's@example.com' },
+          ...support,
           creator: { status: creatorStatus },
         }),
         update: jest.fn(),
@@ -57,6 +62,28 @@ describe('PaymentsService.initializePayment contribution gate', () => {
       service.initializePayment('support-1', 's@example.com'),
     ).resolves.toMatchObject({ paymentId: 'payment-1' });
     expect(provider.initializePayment).toHaveBeenCalled();
+  });
+
+  it('lets a guest pay with the email they gave on the intent', async () => {
+    const { service, provider } = setup('ACTIVE', {
+      supporter: null,
+      guestEmail: 'guest@example.com',
+    });
+    await service.initializePayment('support-1');
+    expect(provider.initializePayment).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'guest@example.com' }),
+    );
+  });
+
+  it('prefers an email sent with the initialize call', async () => {
+    const { service, provider } = setup('ACTIVE', {
+      supporter: null,
+      guestEmail: 'guest@example.com',
+    });
+    await service.initializePayment('support-1', 'other@example.com');
+    expect(provider.initializePayment).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'other@example.com' }),
+    );
   });
 });
 
