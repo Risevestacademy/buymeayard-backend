@@ -285,7 +285,7 @@ describe('Creators Endpoints (HTTP Integration)', () => {
       controllers: [CreatorsController],
       providers: [
         { provide: CreatorsService, useValue: creatorsService },
-       { provide: SupportsService, useValue: {}, },
+        { provide: SupportsService, useValue: {} },
         Reflector,
       ],
     }).compile();

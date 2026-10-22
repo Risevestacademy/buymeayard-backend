@@ -51,4 +51,13 @@ export class SupportWallResponseDto {
     description: 'Null when there are no more pages',
   })
   nextCursor!: string | null;
+
+  @ApiProperty({
+    nullable: true,
+    type: Number,
+    example: 128,
+    description:
+      'Total paid gifts received, for the "128 Supporters" header. Null when the creator turned the wall off.',
+  })
+  supporterCount!: number | null;
 }

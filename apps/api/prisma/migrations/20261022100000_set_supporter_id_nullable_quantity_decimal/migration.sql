@@ -8,5 +8,6 @@
 ALTER TABLE "support_items" ALTER COLUMN "quantity" SET DATA TYPE DECIMAL(10,2);
 
 -- AlterTable
-ALTER TABLE "supports" ADD COLUMN     "guestName" TEXT,
+ALTER TABLE "supports" ADD COLUMN     "guestEmail" TEXT,
+ADD COLUMN     "guestName" TEXT,
 ALTER COLUMN "supporterId" DROP NOT NULL;

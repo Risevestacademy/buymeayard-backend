@@ -2,15 +2,21 @@ import { Controller, Post, Body, Headers, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { Public } from '../../common/decorators/public.decorator';
+import { InitializePaymentDto } from './dto/initialize-payment.dto';
 
 @ApiTags('payments')
 @Controller()
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
+  @Public()
   @Post('payments/initialize')
-  @ApiOperation({ summary: 'Initialize Paystack payment for a support order' })
-  async initialize(@Body() body: { supportId: string; email: string }) {
+  @ApiOperation({
+    summary: 'Initialize Paystack payment for a support order',
+    description:
+      'Public, so a guest can pay for the support they just created. The unguessable support id is the only credential, and it only lets the caller pay, never read anything.',
+  })
+  async initialize(@Body() body: InitializePaymentDto) {
     return this.paymentsService.initializePayment(body.supportId, body.email);
   }
 

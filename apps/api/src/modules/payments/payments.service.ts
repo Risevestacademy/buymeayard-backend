@@ -16,7 +16,6 @@ import { CreatorStatus, PaymentStatus, SupportStatus } from '@buymeayard/types';
 
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CONTRIBUTION_EVENTS } from '../notifications/events/notification.events';
-import { Prisma } from '@prisma/client';
 import { PayoutsService, TransferOutcome } from '../payouts/payouts.service';
 
 const TRANSFER_OUTCOMES: Record<string, TransferOutcome> = {
@@ -38,7 +37,7 @@ export class PaymentsService {
     private readonly payoutsService: PayoutsService,
   ) {}
 
-  async initializePayment(supportId: string, email: string) {
+  async initializePayment(supportId: string, email?: string) {
     const support = await this.prisma.support.findUnique({
       where: { id: supportId },
       include: { supporter: true, creator: { select: { status: true } } },
@@ -88,7 +87,11 @@ export class PaymentsService {
       supportId: support.id,
       amount: support.totalAmount,
       currency: support.currency,
-      email: email || support.supporter?.email || 'supporter@buymeayard.com',
+      email:
+        email ||
+        support.guestEmail ||
+        support.supporter?.email ||
+        'supporter@buymeayard.com',
     });
 
     // Update payment with provider reference
@@ -231,10 +234,12 @@ export class PaymentsService {
             .join(', ') || 'Fabric';
         const supporterName = payment.support.isAnonymous
           ? 'Anonymous'
-          : payment.support.supporter?.name || 'A supporter';
+          : payment.support.guestName ||
+            payment.support.supporter?.name ||
+            'A supporter';
         const supporterEmail = payment.support.isAnonymous
           ? undefined
-          : payment.support.supporter?.email;
+          : payment.support.guestEmail || payment.support.supporter?.email;
 
         this.eventEmitter.emit(CONTRIBUTION_EVENTS.RECEIVED, {
           supportId: payment.support.id,

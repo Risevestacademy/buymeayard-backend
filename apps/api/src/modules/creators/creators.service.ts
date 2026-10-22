@@ -38,6 +38,16 @@ import {
 } from './dto/creator-dashboard.dto';
 import { Prisma } from '@prisma/client';
 
+const CONTRIBUTION_INCLUDE = {
+  supporter: { select: { id: true, name: true, image: true } },
+  payment: { select: { providerReference: true } },
+  items: { include: { creatorMaterial: { include: { material: true } } } },
+} satisfies Prisma.SupportInclude;
+
+type ContributionRow = Prisma.SupportGetPayload<{
+  include: typeof CONTRIBUTION_INCLUDE;
+}>;
+
 @Injectable()
 export class CreatorsService {
   private readonly ledger: LedgerService;
@@ -1422,92 +1432,129 @@ export class CreatorsService {
     const page = Math.max(1, query?.page || 1);
     const limit = Math.min(50, Math.max(1, query?.limit || 10));
     const skip = (page - 1) * limit;
+    const where = this.contributionsWhere(creator.id, query?.search);
 
     const [total, supports] = await Promise.all([
-      this.prisma.support.count({
-        where: {
-          creatorId: creator.id,
-          status: { in: ['PAID', 'COMPLETED'] },
-        },
-      }),
+      this.prisma.support.count({ where }),
       this.prisma.support.findMany({
-        where: {
-          creatorId: creator.id,
-          status: { in: ['PAID', 'COMPLETED'] },
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
+        where,
+        orderBy: [
+          { createdAt: query?.order === 'asc' ? 'asc' : 'desc' },
+          { id: 'desc' },
+        ],
         skip,
         take: limit,
-        include: {
-          supporter: {
-            select: {
-              id: true,
-              name: true,
-              image: true,
-            },
-          },
-          items: {
-            include: {
-              creatorMaterial: {
-                include: {
-                  material: true,
-                },
-              },
-            },
-          },
-        },
+        include: CONTRIBUTION_INCLUDE,
       }),
     ]);
 
-    const data: DashboardContributionDto[] = supports.map((support) => {
-      const isAnonymous = support.isAnonymous;
-      const supporterName = isAnonymous
-        ? 'Anonymous'
-        : support.supporter?.name || 'Supporter';
-
-      const firstItem = support.items[0];
-      const material = firstItem
-        ? {
-            name: firstItem.materialNameSnapshot,
-            color: firstItem.creatorMaterial?.material?.color || null,
-            thumbnailUrl:
-              firstItem.creatorMaterial?.material?.thumbnailSmallUrl ||
-              firstItem.creatorMaterial?.material?.imageUrl ||
-              null,
-            quantity: support.items
-              .reduce((acc, it) => acc.add(it.quantity), new Prisma.Decimal(0))
-              .toNumber(),
-          }
-        : null;
-
-      return {
-        id: support.id,
-        supporter: {
-          id: isAnonymous ? null : support.supporter?.id || null,
-          name: supporterName,
-          initials: this.extractInitials(supporterName),
-          avatarUrl: isAnonymous ? null : support.supporter?.image || null,
-          isAnonymous,
-        },
-        material,
-        message: support.message || null,
-        amount: support.totalAmount,
-        creatorAmount: support.creatorAmount,
-        currency: support.currency,
-        createdAt: support.createdAt,
-      };
-    });
-
     return {
-      data,
+      data: supports.map((support) => this.toContributionDto(support)),
       pagination: {
         total,
         page,
         limit,
         totalPages: Math.ceil(total / limit) || 1,
       },
+    };
+  }
+
+  async getDashboardContribution(
+    userId: string,
+    supportId: string,
+  ): Promise<DashboardContributionDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    // Scoped to the signed-in creator, so another creator's id is just a 404.
+    const support = await this.prisma.support.findFirst({
+      where: { id: supportId, ...this.contributionsWhere(creator.id) },
+      include: CONTRIBUTION_INCLUDE,
+    });
+
+    if (!support) {
+      throw new NotFoundException({
+        code: ErrorCodes.NOT_FOUND,
+        message: 'Contribution not found',
+      });
+    }
+
+    return this.toContributionDto(support);
+  }
+
+  /** Paid gifts received by one creator, optionally narrowed by a search term. */
+  private contributionsWhere(
+    creatorId: string,
+    search?: string,
+  ): Prisma.SupportWhereInput {
+    const term = search?.trim();
+    const where: Prisma.SupportWhereInput = {
+      creatorId,
+      status: { in: ['PAID', 'COMPLETED'] },
+    };
+    if (!term) return where;
+
+    // Names of anonymous supporters stay hidden from the creator, so they
+    // can't be searched for either. Messages are always visible to the creator.
+    const contains = { contains: term, mode: 'insensitive' as const };
+    where.OR = [
+      { isAnonymous: false, guestName: contains },
+      { isAnonymous: false, supporter: { name: contains } },
+      { message: contains },
+    ];
+    return where;
+  }
+
+  private toContributionDto(
+    support: ContributionRow,
+  ): DashboardContributionDto {
+    const isAnonymous = support.isAnonymous;
+    const supporterName = isAnonymous
+      ? 'Anonymous'
+      : support.guestName?.trim() || support.supporter?.name || 'Supporter';
+
+    const firstItem = support.items[0];
+    const material = firstItem
+      ? {
+          name: firstItem.materialNameSnapshot,
+          color: firstItem.creatorMaterial?.material?.color || null,
+          thumbnailUrl:
+            firstItem.creatorMaterial?.material?.thumbnailSmallUrl ||
+            firstItem.creatorMaterial?.material?.imageUrl ||
+            null,
+          quantity: support.items
+            .reduce((acc, it) => acc.add(it.quantity), new Prisma.Decimal(0))
+            .toNumber(),
+        }
+      : null;
+
+    return {
+      id: support.id,
+      supporter: {
+        id: isAnonymous ? null : support.supporter?.id || null,
+        name: supporterName,
+        initials: this.extractInitials(supporterName),
+        avatarUrl: isAnonymous ? null : support.supporter?.image || null,
+        isAnonymous,
+      },
+      material,
+      message: support.message || null,
+      amount: support.totalAmount,
+      platformFee: support.platformFee,
+      creatorAmount: support.creatorAmount,
+      currency: support.currency,
+      status: support.status,
+      reference: support.payment?.providerReference ?? null,
+      createdAt: support.createdAt,
     };
   }
 
@@ -1550,26 +1597,59 @@ export class CreatorsService {
   private async calculateDashboardMetrics(
     creatorId: string,
   ): Promise<DashboardMetricsDto> {
-    const agg = await this.prisma.support.aggregate({
-      where: {
-        creatorId,
-        status: { in: ['PAID', 'COMPLETED'] },
-      },
-      _count: {
-        id: true,
-      },
-      _sum: {
-        totalAmount: true,
-        creatorAmount: true,
-        platformFee: true,
-      },
-    });
+    const received = {
+      creatorId,
+      status: { in: ['PAID', 'COMPLETED'] },
+    };
+    const now = new Date();
+    const startOfMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+    const startOfLastMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
+    );
+
+    const [agg, thisMonth, lastMonth] = await Promise.all([
+      this.prisma.support.aggregate({
+        where: received,
+        _count: { id: true },
+        _sum: {
+          totalAmount: true,
+          creatorAmount: true,
+          platformFee: true,
+        },
+      }),
+      this.prisma.support.aggregate({
+        where: { ...received, createdAt: { gte: startOfMonth } },
+        _count: { id: true },
+        _sum: { totalAmount: true },
+      }),
+      this.prisma.support.aggregate({
+        where: {
+          ...received,
+          createdAt: { gte: startOfLastMonth, lt: startOfMonth },
+        },
+        _sum: { totalAmount: true },
+      }),
+    ]);
+
+    const thisMonthAmount = thisMonth._sum.totalAmount || 0;
+    const lastMonthAmount = lastMonth._sum.totalAmount || 0;
 
     return {
       totalContributions: agg._count.id || 0,
       totalContributionAmount: agg._sum.totalAmount || 0,
       netEarnings: agg._sum.creatorAmount || 0,
       platformFees: agg._sum.platformFee || 0,
+      thisMonthContributions: thisMonth._count.id || 0,
+      thisMonthAmount,
+      lastMonthAmount,
+      thisMonthChangePercent:
+        lastMonthAmount > 0
+          ? Math.round(
+              ((thisMonthAmount - lastMonthAmount) / lastMonthAmount) * 100,
+            )
+          : null,
       currency: 'NGN',
     };
   }
@@ -1651,72 +1731,13 @@ export class CreatorsService {
     limit = 5,
   ): Promise<DashboardContributionDto[]> {
     const supports = await this.prisma.support.findMany({
-      where: {
-        creatorId,
-        status: { in: ['PAID', 'COMPLETED'] },
-      },
-      orderBy: {
-        createdAt: 'desc',
-      },
+      where: this.contributionsWhere(creatorId),
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit,
-      include: {
-        supporter: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-          },
-        },
-        items: {
-          include: {
-            creatorMaterial: {
-              include: {
-                material: true,
-              },
-            },
-          },
-        },
-      },
+      include: CONTRIBUTION_INCLUDE,
     });
 
-    return supports.map((support) => {
-      const isAnonymous = support.isAnonymous;
-      const supporterName = isAnonymous
-        ? 'Anonymous'
-        : support.supporter?.name || 'Supporter';
-
-      const firstItem = support.items[0];
-      const material = firstItem
-        ? {
-            name: firstItem.materialNameSnapshot,
-            color: firstItem.creatorMaterial?.material?.color || null,
-            thumbnailUrl:
-              firstItem.creatorMaterial?.material?.thumbnailSmallUrl ||
-              firstItem.creatorMaterial?.material?.imageUrl ||
-              null,
-            quantity: support.items
-              .reduce((acc, it) => acc.add(it.quantity), new Prisma.Decimal(0))
-              .toNumber(),
-          }
-        : null;
-
-      return {
-        id: support.id,
-        supporter: {
-          id: isAnonymous ? null : support.supporter?.id || null,
-          name: supporterName,
-          initials: this.extractInitials(supporterName),
-          avatarUrl: isAnonymous ? null : support.supporter?.image || null,
-          isAnonymous,
-        },
-        material,
-        message: support.message || null,
-        amount: support.totalAmount,
-        creatorAmount: support.creatorAmount,
-        currency: support.currency,
-        createdAt: support.createdAt,
-      };
-    });
+    return supports.map((support) => this.toContributionDto(support));
   }
 
   private async buildEarningsChart(

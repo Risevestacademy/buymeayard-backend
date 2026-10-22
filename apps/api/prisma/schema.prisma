@@ -224,6 +224,7 @@ model Support {
   totalAmount   Int // Minor units (creatorAmount + platformFee)
   currency      String   @default("NGN")
   guestName     String?
+  guestEmail    String?
   message       String?
   isAnonymous   Boolean  @default(false)
   status        String   @default("CREATED") // CREATED, PAYMENT_PENDING, PAID, COMPLETED, PAYMENT_FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK

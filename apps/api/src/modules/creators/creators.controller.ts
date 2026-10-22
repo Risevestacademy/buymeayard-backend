@@ -3,6 +3,8 @@ import {
   ApiErrors,
   CREATOR_NOT_FOUND_ERROR,
   UNAUTHORIZED_ERROR,
+  VALIDATION_ERROR,
+  ApiErrorDoc,
 } from '../../common/decorators/api-errors.decorator';
 import {
   Controller,
@@ -47,13 +49,19 @@ import { CheckSlugResponseDto } from './dto/check-slug.dto';
 import { CreatorShareLinkResponseDto } from './dto/share-link.dto';
 import { UpdateCreatorSettingsDto } from './dto/update-creator-settings.dto';
 import { UpdatePageStatusDto } from './dto/update-page-status.dto';
-import { CreateSupportIntentDto } from './dto/create-support-intent.dto';
+import {
+  CreateSupportIntentDto,
+  SupportQuoteQueryDto,
+} from './dto/create-support-intent.dto';
 import { SupportsService } from '../supports/supports.service';
 import {
   SupportWallQueryDto,
   SupportWallResponseDto,
 } from '../supports/dto/support-wall.dto';
-import { CreatorSupportListResponseDto } from '../supports/dto/creator-support.dto';
+import {
+  SupportIntentResponseDto,
+  SupportQuoteResponseDto,
+} from '../supports/dto/guest-support.dto';
 import { UpdateThankYouMessageDto } from './dto/update-thank-you-message.dto';
 import {
   CreatorDashboardResponseDto,
@@ -66,6 +74,28 @@ import {
   DashboardContributionDto,
   DashboardRecentContributionsQueryDto,
 } from './dto/creator-dashboard.dto';
+
+const CREATOR_UNAVAILABLE_ERRORS: ApiErrorDoc[] = [
+  {
+    status: 404,
+    code: 'CREATOR_NOT_FOUND',
+    message: 'Creator not found',
+    when: 'No creator has this slug, or their page is not published.',
+  },
+  {
+    status: 403,
+    code: 'CREATOR_NOT_ACTIVE',
+    message: 'This creator is not accepting contributions yet',
+    when: 'The creator has not finished verification, so gifts are closed.',
+  },
+];
+
+const NO_MATERIAL_ERROR: ApiErrorDoc = {
+  status: 400,
+  code: 'MATERIAL_NOT_FOUND',
+  message: 'This creator has no active materials available for support',
+  when: 'The creator has no active, priced fabric to count the gift in.',
+};
 
 @ApiTags('creators')
 @Controller('creators')
@@ -259,6 +289,29 @@ export class CreatorsController {
     @Query() query: DashboardContributionsQueryDto,
   ): Promise<DashboardContributionsListResponseDto> {
     return this.creatorsService.getDashboardContributions(userId, query);
+  }
+
+  @Get('me/dashboard/contributions/:id')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Get one contribution for the details panel',
+    description:
+      'Amount, platform fee, net amount, message, status and payment reference. Only contributions received by the signed-in creator can be read.',
+  })
+  @ApiParam({ name: 'id', description: 'Contribution id from the list' })
+  @ApiResponse({ status: 200, type: DashboardContributionDto })
+  @ApiErrors(UNAUTHORIZED_ERROR, CREATOR_NOT_FOUND_ERROR, {
+    status: 404,
+    code: 'NOT_FOUND',
+    message: 'Contribution not found',
+    when: 'The id does not exist, is unpaid, or belongs to another creator.',
+  })
+  async getDashboardContribution(
+    @CurrentUser('id') userId: string,
+    @Param('id') id: string,
+  ): Promise<DashboardContributionDto> {
+    return this.creatorsService.getDashboardContribution(userId, id);
   }
 
   @Get('me/dashboard/metrics')
@@ -570,21 +623,7 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
     },
   })
   @ApiResponse({ status: 200, type: CreatorProfileDataDto })
-  @ApiResponse({
-    status: 400,
-    description: 'Missing key, not a string, or over 500 characters.',
-    type: ApiErrorResponseDto,
-  })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized.',
-    type: ApiErrorResponseDto,
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
-  })
+  @ApiErrors(VALIDATION_ERROR, UNAUTHORIZED_ERROR, CREATOR_NOT_FOUND_ERROR)
   async updateThankYouMessage(
     @CurrentUser('id') userId: string,
     @Body() dto: UpdateThankYouMessageDto,
@@ -893,32 +932,6 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
     return this.creatorsService.getShareLink(userId);
   }
 
-  @Get('me/supports')
-  @ApiBearerAuth()
-  @ApiCookieAuth('better-auth.session_token')
-  @ApiOperation({
-    summary: "List the logged-in creator's received contributions",
-    description:
-      'Paginated, newest first. Only paid gifts. Gifts the supporter marked anonymous show as "Anonymous".',
-  })
-  @ApiResponse({ status: 200, type: CreatorSupportListResponseDto })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized.',
-    type: ApiErrorResponseDto,
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Creator profile not found.',
-    type: ApiErrorResponseDto,
-  })
-  async getMySupports(
-    @CurrentUser('id') userId: string,
-    @Query() query: SupportWallQueryDto,
-  ) {
-    return this.supportsService.getCreatorSupports(userId, query);
-  }
-
   @Public()
   @Get('check-slug')
   @ApiOperation({
@@ -1001,11 +1014,28 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
   }
 
   @Public()
+  @Get(':slug/supports/quote')
+  @ApiOperation({
+    summary: 'Preview the yard equivalent of a gift amount',
+    description:
+      'Powers "You\'re gifting ₦5,000 worth of Adire" on the gift form. Nothing is created. Uses the creator\'s theme fabric.',
+  })
+  @ApiParam({ name: 'slug', example: 'adeola' })
+  @ApiResponse({ status: 200, type: SupportQuoteResponseDto })
+  @ApiErrors(VALIDATION_ERROR, ...CREATOR_UNAVAILABLE_ERRORS, NO_MATERIAL_ERROR)
+  async quoteSupport(
+    @Param('slug') slug: string,
+    @Query() query: SupportQuoteQueryDto,
+  ) {
+    return this.supportsService.quoteGift(slug, query);
+  }
+
+  @Public()
   @Post(':slug/supports/intent')
   @ApiOperation({
     summary: 'Create a guest support intent',
     description:
-      'Public endpoint for a guest supporter to initiate a contribution to a creator. No authentication required.',
+      'Public endpoint for a guest to start a gift to a creator. No authentication required. Next, send the returned supportId to POST /payments/initialize to get the Paystack checkout URL.',
   })
   @ApiParam({
     name: 'slug',
@@ -1013,21 +1043,13 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
     example: 'adeola',
   })
   @ApiBody({ type: CreateSupportIntentDto })
-  @ApiResponse({
-    status: 201,
-    description: 'Support intent created successfully.',
-  })
-  @ApiResponse({
-    status: 404,
-    description: 'Creator not found.',
-    type: ApiErrorResponseDto,
-  })
+  @ApiResponse({ status: 201, type: SupportIntentResponseDto })
+  @ApiErrors(VALIDATION_ERROR, ...CREATOR_UNAVAILABLE_ERRORS, NO_MATERIAL_ERROR)
   async createSupportIntent(
     @Param('slug') slug: string,
     @Body() dto: CreateSupportIntentDto,
   ) {
-    const creator = await this.creatorsService.findBySlug(slug);
-    return this.supportsService.createGuestIntent(creator.id, dto);
+    return this.supportsService.createGuestIntent(slug, dto);
   }
 
   @Public()
@@ -1035,15 +1057,11 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
   @ApiOperation({
     summary: 'Get the public supporter wall',
     description:
-      'Paginated feed of paid gifts, newest first. Anonymous gifts hide the name and message. Returns an empty list if the creator turned the wall off.',
+      'Paginated feed of paid gifts, newest first, plus the supporter count for the page header. Anonymous gifts hide the name and message. Returns an empty list and a null count if the creator turned the wall off.',
   })
   @ApiParam({ name: 'slug', example: 'adeola' })
   @ApiResponse({ status: 200, type: SupportWallResponseDto })
-  @ApiResponse({
-    status: 404,
-    description: 'Creator not found.',
-    type: ApiErrorResponseDto,
-  })
+  @ApiErrors(VALIDATION_ERROR, CREATOR_UNAVAILABLE_ERRORS[0])
   async getSupporterWall(
     @Param('slug') slug: string,
     @Query() query: SupportWallQueryDto,
