@@ -60,6 +60,22 @@ export interface TransferResult {
   failureReason?: string;
 }
 
+export interface RefundParams {
+  /** Reference of the original payment (the provider's transaction reference). */
+  paymentReference: string;
+  amount: number; // minor units
+  reason?: string;
+}
+
+/** Paystack: pending/processing resolve later via webhook; processed is final. */
+export type RefundStatus = 'PENDING' | 'PROCESSING' | 'PROCESSED' | 'FAILED';
+
+export interface RefundResult {
+  status: RefundStatus;
+  providerRefundId?: string;
+  failureReason?: string;
+}
+
 /**
  * Thrown when the provider rejected a request outright (bad account, invalid
  * recipient, insufficient platform balance), as opposed to a network error
@@ -93,4 +109,7 @@ export interface PaymentProvider {
   }): Promise<string>;
   initiateTransfer(params: InitiateTransferParams): Promise<TransferResult>;
   verifyTransfer(reference: string): Promise<TransferResult>;
+
+  // Refunds
+  refundPayment(params: RefundParams): Promise<RefundResult>;
 }

@@ -16,6 +16,7 @@ import { AccountType, PaymentStatus, PayoutStatus } from '@buymeayard/types';
 import { PayoutMethod } from '@prisma/client';
 import { PayoutMethodsService } from '../payouts/payout-methods.service';
 import { MINIMUM_WITHDRAWAL } from '../payouts/payout-fees';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 
 const PENDING_CONTRIBUTION_WINDOW_MS = 60 * 60 * 1000;
 import { ErrorCodes } from '../../common/errors/error-codes';
@@ -59,6 +60,8 @@ export class CreatorsService {
     private readonly storage: StorageProvider,
     @Optional()
     ledgerService?: LedgerService,
+    @Optional()
+    private readonly platformSettings?: PlatformSettingsService,
   ) {
     this.ledger = ledgerService || new LedgerService(this.prisma);
   }
@@ -1696,10 +1699,13 @@ export class CreatorsService {
     );
     const hasPayoutMethod = !!activeMethod;
     const isKycVerified = creator.kycStatus === 'VERIFIED';
+    const minimumWithdrawal = this.platformSettings
+      ? (await this.platformSettings.get()).minimumWithdrawal
+      : MINIMUM_WITHDRAWAL;
     const canWithdraw =
       isKycVerified &&
       creator.status === 'ACTIVE' &&
-      availableBalance >= MINIMUM_WITHDRAWAL &&
+      availableBalance >= minimumWithdrawal &&
       !!activeMethod?.recipientCode;
 
     return {
@@ -1710,7 +1716,7 @@ export class CreatorsService {
       canWithdraw,
       kycStatus: creator.kycStatus,
       hasPayoutMethod,
-      minimumWithdrawal: MINIMUM_WITHDRAWAL,
+      minimumWithdrawal,
       setupStep: !isKycVerified
         ? 'VERIFY_IDENTITY'
         : !hasPayoutMethod

@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { CreatorStatus } from '@buymeayard/types';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { MoneyUtil } from '../../common/utils/money.util';
@@ -44,7 +44,7 @@ const YARD_DECIMAL_PLACES = 2;
 export class SupportsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly configService: ConfigService,
+    private readonly platformSettings: PlatformSettingsService,
   ) {}
 
   async createSupport(supporterUserId: string, dto: CreateSupportDto) {
@@ -125,8 +125,8 @@ export class SupportsService {
       });
     }
 
-    const feePercentage =
-      this.configService.get<number>('PLATFORM_FEE_PERCENTAGE') || 10;
+    const { platformFeePercent: feePercentage } =
+      await this.platformSettings.get();
     const { platformFee, creatorAmount } = MoneyUtil.calculateSplit(
       subtotal,
       feePercentage,
@@ -276,8 +276,8 @@ export class SupportsService {
     );
     const { amountMinor, yards } = this.priceGift(dto.amount, material.price);
 
-    const feePercentage =
-      this.configService.get<number>('PLATFORM_FEE_PERCENTAGE') || 10;
+    const { platformFeePercent: feePercentage } =
+      await this.platformSettings.get();
     const { platformFee, creatorAmount } = MoneyUtil.calculateSplit(
       amountMinor,
       feePercentage,

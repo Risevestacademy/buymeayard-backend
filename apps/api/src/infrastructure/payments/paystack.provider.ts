@@ -8,6 +8,9 @@ import {
   InitiateTransferParams,
   PaymentProvider,
   PaymentProviderRejectedError,
+  RefundParams,
+  RefundResult,
+  RefundStatus,
   ResolveAccountResult,
   TransferResult,
   TransferStatus,
@@ -322,6 +325,41 @@ export class PaystackProvider implements PaymentProvider {
         return { status: 'NOT_FOUND' };
       }
       throw error;
+    }
+  }
+
+  async refundPayment(params: RefundParams): Promise<RefundResult> {
+    if (!this.isLive()) {
+      return {
+        status: 'PROCESSED',
+        providerRefundId: `mock_refund_${Date.now()}`,
+      };
+    }
+
+    const res = await this.request<{
+      data: { id: number; status: string };
+    }>('POST', '/refund', {
+      transaction: params.paymentReference,
+      amount: params.amount,
+      currency: 'NGN',
+      merchant_note: params.reason,
+    });
+    return {
+      status: this.mapRefundStatus(res.data.status),
+      providerRefundId: String(res.data.id),
+    };
+  }
+
+  mapRefundStatus(status: string): RefundStatus {
+    switch (status) {
+      case 'processed':
+        return 'PROCESSED';
+      case 'failed':
+        return 'FAILED';
+      case 'processing':
+        return 'PROCESSING';
+      default:
+        return 'PENDING'; // pending, needs-attention
     }
   }
 

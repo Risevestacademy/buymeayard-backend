@@ -17,11 +17,19 @@ import { CreatorStatus, PaymentStatus, SupportStatus } from '@buymeayard/types';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CONTRIBUTION_EVENTS } from '../notifications/events/notification.events';
 import { PayoutsService, TransferOutcome } from '../payouts/payouts.service';
+import { RefundsService } from './refunds.service';
 
 const TRANSFER_OUTCOMES: Record<string, TransferOutcome> = {
   'transfer.success': 'SUCCESS',
   'transfer.failed': 'FAILED',
   'transfer.reversed': 'REVERSED',
+};
+
+const REFUND_EVENTS: Record<string, 'PROCESSED' | 'FAILED' | 'PROCESSING'> = {
+  'refund.processed': 'PROCESSED',
+  'refund.failed': 'FAILED',
+  'refund.processing': 'PROCESSING',
+  'refund.pending': 'PROCESSING',
 };
 
 @Injectable()
@@ -35,6 +43,7 @@ export class PaymentsService {
     private readonly ledgerService: LedgerService,
     private readonly eventEmitter: EventEmitter2,
     private readonly payoutsService: PayoutsService,
+    private readonly refundsService: RefundsService,
   ) {}
 
   async initializePayment(supportId: string, email?: string) {
@@ -137,6 +146,7 @@ export class PaymentsService {
     const eventId = `${eventType}:${
       payload.event_id ||
       payload.data?.id?.toString() ||
+      payload.data?.refund_reference ||
       payload.data?.reference
     }`;
 
@@ -157,6 +167,10 @@ export class PaymentsService {
 
     if (TRANSFER_OUTCOMES[eventType]) {
       return this.handleTransferEvent(eventType, eventId, payload);
+    }
+
+    if (REFUND_EVENTS[eventType]) {
+      return this.handleRefundEvent(eventType, eventId, payload);
     }
 
     if (eventType === 'charge.success') {
@@ -254,6 +268,54 @@ export class PaymentsService {
       }
     }
 
+    return { received: true };
+  }
+
+  private async handleRefundEvent(
+    eventType: string,
+    eventId: string,
+    payload: any,
+  ) {
+    const data = payload.data ?? {};
+    const paymentReference: string =
+      data.transaction_reference ?? data.transaction?.reference ?? '';
+    const applied = await this.refundsService.applyProviderEvent(
+      paymentReference,
+      REFUND_EVENTS[eventType],
+      data.id?.toString(),
+      data.customer_note || data.merchant_note,
+    );
+    if (!applied) {
+      this.logger.warn(
+        `Refund event ${eventId} does not match an open refund, ignoring.`,
+      );
+    }
+
+    const payment = paymentReference
+      ? await this.prisma.payment.findFirst({
+          where: { providerReference: paymentReference },
+          select: { id: true },
+        })
+      : null;
+    try {
+      await this.prisma.paymentEvent.create({
+        data: {
+          paymentId: payment?.id,
+          provider: this.paymentProvider.providerName,
+          eventType,
+          providerEventId: eventId,
+          payload,
+          processedAt: new Date(),
+        },
+      });
+    } catch (error) {
+      if (
+        !(error instanceof Prisma.PrismaClientKnownRequestError) ||
+        error.code !== 'P2002'
+      ) {
+        throw error;
+      }
+    }
     return { received: true };
   }
 

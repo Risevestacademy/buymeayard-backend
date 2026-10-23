@@ -16,6 +16,48 @@ describe('PaystackProvider', () => {
     global.fetch = originalFetch;
   });
 
+  describe('refundPayment', () => {
+    it('asks Paystack to refund the transaction and maps its status', async () => {
+      const config = {
+        get: jest.fn((key: string) =>
+          key === 'PAYSTACK_SECRET_KEY' ? 'sk_test_validsecretkey12345' : null,
+        ),
+      };
+      const module = await Test.createTestingModule({
+        providers: [
+          PaystackProvider,
+          { provide: ConfigService, useValue: config },
+        ],
+      }).compile();
+      const live = module.get(PaystackProvider);
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            status: true,
+            data: { id: 3018, status: 'pending' },
+          }),
+      }) as never;
+
+      const result = await live.refundPayment({
+        paymentReference: 'pay-ref',
+        amount: 10_000,
+        reason: 'Duplicate',
+      });
+
+      expect(result).toEqual({ status: 'PENDING', providerRefundId: '3018' });
+      const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
+      expect(url).toBe('https://api.paystack.co/refund');
+      expect(JSON.parse(init.body)).toEqual({
+        transaction: 'pay-ref',
+        amount: 10_000,
+        currency: 'NGN',
+        merchant_note: 'Duplicate',
+      });
+    });
+  });
+
   describe('when configured with real secret key', () => {
     beforeEach(async () => {
       configService = {
