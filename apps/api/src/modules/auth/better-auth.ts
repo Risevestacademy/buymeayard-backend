@@ -3,6 +3,7 @@ import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, genericOAuth } from 'better-auth/plugins';
 import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
+import { renderEmailTemplate } from './email-templates/render-email-template';
 import * as crypto from 'crypto';
 import {
   isMobileRequest,
@@ -136,6 +137,12 @@ export function createBetterAuth(
     creator: process.env.CREATOR_FRONTEND_URL || 'http://localhost:3001', // creators
     admin: process.env.ADMIN_FRONTEND_URL || 'http://localhost:3002', // admins
   };
+
+  // Hosted copy of email-templates/logo.png (email clients need an absolute URL)
+  const emailLogoUrl =
+    process.env.EMAIL_LOGO_URL ||
+    'https://res.cloudinary.com/dymntdsp9/image/upload/v1792739782/logo_mafsug.png';
+  const emailTokenExpiresIn = '1 hour';
 
   /**
    * Resolves the frontend URL for password reset emails.
@@ -336,7 +343,13 @@ export function createBetterAuth(
         sendEmail(
           user.email,
           'Reset Your Password - BuyMeAYard',
-          `<p>Click the link below to reset your password:</p><p><a href="${frontendLink}">${frontendLink}</a></p>`,
+          renderEmailTemplate('reset-password', {
+            name: user.name || 'there',
+            logoUrl: emailLogoUrl,
+            appUrl: baseUrl,
+            resetUrl: frontendLink,
+            expiresIn: emailTokenExpiresIn,
+          }),
         ).catch((err) =>
           console.error('[Auth] Failed to send password reset email:', err),
         );
@@ -375,7 +388,13 @@ export function createBetterAuth(
         sendEmail(
           user.email,
           'Verify Your Email - BuyMeAYard',
-          `<p>Click the link below to verify your email address:</p><p><a href="${frontendLink}">${frontendLink}</a></p>`,
+          renderEmailTemplate('verify-email', {
+            name: user.name || 'there',
+            logoUrl: emailLogoUrl,
+            appUrl: frontendUrls.creator,
+            verificationUrl: frontendLink,
+            expiresIn: emailTokenExpiresIn,
+          }),
         ).catch((err) =>
           console.error('[Auth] Failed to send verification email:', err),
         );
@@ -455,6 +474,19 @@ export function createBetterAuth(
             }
           },
           after: async (user: any) => {
+            // Only creators self-register, so every new user gets the creator welcome
+            sendEmail(
+              user.email,
+              'Welcome to BuyMeAYard',
+              renderEmailTemplate('welcome', {
+                name: user.name || 'there',
+                logoUrl: emailLogoUrl,
+                appUrl: frontendUrls.creator,
+                dashboardUrl: `${frontendUrls.creator}/dashboard`,
+              }),
+            ).catch((err) =>
+              console.error('[Auth] Failed to send welcome email:', err),
+            );
             if (eventEmitter) {
               eventEmitter.emit(USER_EVENTS.CREATED, {
                 userId: user.id,
