@@ -1,4 +1,5 @@
-import { Controller, Get, Header, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { UserRole } from '@buymeayard/types';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -43,10 +44,12 @@ export class AdminController {
   }
 
   @Get('waitlist/export')
-  @Header('Content-Type', 'text/csv; charset=utf-8')
-  @Header('Content-Disposition', 'attachment; filename="waitlist.csv"')
   @ApiOperation({ summary: 'Download the whole waitlist as CSV' })
-  exportWaitlist() {
-    return this.waitlist.exportCsv();
+  async exportWaitlist(@Res() res: Response) {
+    // Sent raw: a CSV must not be wrapped in the JSON envelope
+    res
+      .type('text/csv; charset=utf-8')
+      .attachment('waitlist.csv')
+      .send(await this.waitlist.exportCsv());
   }
 }

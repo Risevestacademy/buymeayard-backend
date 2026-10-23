@@ -201,7 +201,7 @@ describe('PayoutsService', () => {
 
       expect(result.status).toBe('IN_PROGRESS');
       expect(tx.payout.updateMany).toHaveBeenCalledWith({
-        where: { id: 'payout-1', status: 'REQUESTED' },
+        where: { id: 'payout-1', status: { in: ['REQUESTED', 'PENDING'] } },
         data: { status: 'PENDING' },
       });
       expect(tx.ledgerEntry.create).toHaveBeenCalledTimes(1); // reservation only

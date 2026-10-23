@@ -103,12 +103,16 @@ describe('PayoutsService admin actions', () => {
 
   describe('retryTransfer', () => {
     it('sends the transfer again with the same reference when Paystack has no record', async () => {
-      const { service, provider } = setup({
+      const { service, provider, prisma } = setup({
         payout: { ...payout, status: 'PENDING' },
       });
 
       await service.retryTransfer('p-1');
 
+      expect(prisma.payout.updateMany).toHaveBeenCalledWith({
+        where: { id: 'p-1', status: { in: ['REQUESTED', 'PENDING'] } },
+        data: { status: 'PROCESSING', providerTransferCode: 'TRF_1' },
+      });
       expect(provider.initiateTransfer).toHaveBeenCalledWith(
         expect.objectContaining({
           reference: 'pyt-1',

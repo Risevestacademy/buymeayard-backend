@@ -5,7 +5,6 @@ import {
   HttpCode,
   HttpStatus,
   Param,
-  ParseUUIDPipe,
   Patch,
   Query,
   UseGuards,
@@ -36,7 +35,7 @@ export class AdminUsersController {
   @ApiOperation({
     summary: 'User detail with roles, sessions and admin history',
   })
-  get(@Param('id', ParseUUIDPipe) id: string) {
+  get(@Param('id') id: string) {
     return this.users.get(id);
   }
 
@@ -48,7 +47,7 @@ export class AdminUsersController {
       'Suspending or banning signs the user out everywhere and unpublishes their creator page. Admins cannot be changed from here.',
   })
   setStatus(
-    @Param('id', ParseUUIDPipe) id: string,
+    @Param('id') id: string,
     @CurrentUser('id') adminId: string,
     @Body() dto: AdminSetUserStatusDto,
   ) {

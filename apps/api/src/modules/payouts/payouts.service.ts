@@ -551,7 +551,10 @@ export class PayoutsService {
         await this.applyTransferOutcome(payout.id, result.status);
       } else {
         await this.prisma.payout.updateMany({
-          where: { id: payout.id, status: PayoutStatus.REQUESTED },
+          where: {
+            id: payout.id,
+            status: { in: [PayoutStatus.REQUESTED, PayoutStatus.PENDING] },
+          },
           data: {
             status: PayoutStatus.PROCESSING,
             providerTransferCode: result.transferCode,
@@ -574,7 +577,10 @@ export class PayoutsService {
           error,
         );
         await this.prisma.payout.updateMany({
-          where: { id: payout.id, status: PayoutStatus.REQUESTED },
+          where: {
+            id: payout.id,
+            status: { in: [PayoutStatus.REQUESTED, PayoutStatus.PENDING] },
+          },
           data: { status: PayoutStatus.PENDING },
         });
       }

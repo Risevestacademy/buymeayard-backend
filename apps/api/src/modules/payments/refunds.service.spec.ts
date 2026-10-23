@@ -64,6 +64,7 @@ describe('RefundsService', () => {
           .mockResolvedValue('support' in opts ? opts.support : support),
       },
       refund: {
+        findFirst: jest.fn().mockResolvedValue(opts.existingRefund ?? null),
         update: jest.fn(),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'ref-row' }),
       },
@@ -188,6 +189,16 @@ describe('RefundsService', () => {
     });
     await expect(service.initiateRefund('sup-1', options)).rejects.toThrow(
       ConflictException,
+    );
+  });
+
+  it('reports an existing refund before a low balance', async () => {
+    const { service } = setup({
+      balance: 0,
+      existingRefund: { id: 'old', status: 'PROCESSING' },
+    });
+    await expect(service.initiateRefund('sup-1', options)).rejects.toThrow(
+      'already has a refund',
     );
   });
 

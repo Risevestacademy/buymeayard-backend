@@ -81,6 +81,13 @@ export class RefundsService {
       });
     }
 
+    // Checked again under the lock below; this gives the clearer error first
+    const open = await this.prisma.refund.findFirst({
+      where: { paymentId: payment.id, status: { in: ACTIVE_REFUND_STATUSES } },
+      select: { id: true },
+    });
+    if (open) this.throwAlreadyRefunded();
+
     const creatorAccount = await this.ledgerService.getOrCreateAccount(
       AccountType.CREATOR,
       support.creatorId,
@@ -114,12 +121,7 @@ export class RefundsService {
           status: { in: ACTIVE_REFUND_STATUSES },
         },
       });
-      if (existing) {
-        throw new ConflictException({
-          code: ErrorCodes.REFUND_NOT_ALLOWED,
-          message: 'This contribution already has a refund',
-        });
-      }
+      if (existing) this.throwAlreadyRefunded();
 
       const created = await tx.refund.create({
         data: {
@@ -196,6 +198,13 @@ export class RefundsService {
       });
     }
     return this.prisma.refund.findUniqueOrThrow({ where: { id: refund.id } });
+  }
+
+  private throwAlreadyRefunded(): never {
+    throw new ConflictException({
+      code: ErrorCodes.REFUND_NOT_ALLOWED,
+      message: 'This contribution already has a refund',
+    });
   }
 
   /**
