@@ -42,16 +42,4 @@ describe('WaitlistController', () => {
     });
     expect(result).toBe(expected);
   });
-
-  it('should call waitlistService.getWaitlist on GET', async () => {
-    const expected = {
-      items: [{ id: 'uuid-1', email: 'test@example.com' }],
-      pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
-    };
-    service.getWaitlist.mockResolvedValue(expected);
-
-    const result = await controller.getWaitlist({ page: 1, limit: 50 });
-    expect(service.getWaitlist).toHaveBeenCalledWith({ page: 1, limit: 50 });
-    expect(result).toBe(expected);
-  });
 });

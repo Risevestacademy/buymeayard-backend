@@ -30,7 +30,8 @@ import {
   PayoutNotificationEvent,
 } from '../notifications/events/notification.events';
 import { PayoutMethodsService } from './payout-methods.service';
-import { MINIMUM_WITHDRAWAL, calculatePayoutFee } from './payout-fees';
+import { calculatePayoutFee } from './payout-fees';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { buildPagination } from '../../common/utils/pagination.util';
 import {
   ListPayoutsQueryDto,
@@ -71,6 +72,7 @@ export class PayoutsService {
     @Inject(PAYMENT_PROVIDER)
     private readonly paymentProvider: PaymentProvider,
     private readonly eventEmitter: EventEmitter2,
+    private readonly platformSettings: PlatformSettingsService,
   ) {}
 
   async quote(creatorUserId: string, amount: number): Promise<PayoutQuoteDto> {
@@ -82,17 +84,18 @@ export class PayoutsService {
     const availableBalance = await this.ledgerService.getAccountBalance(
       account.id,
     );
-    const fee = amount > 0 ? calculatePayoutFee(amount) : 0;
+    const rules = await this.platformSettings.get();
+    const fee = amount > 0 ? calculatePayoutFee(amount, rules) : 0;
 
     let error: PayoutQuoteDto['error'] = null;
-    if (amount < MINIMUM_WITHDRAWAL) error = 'BELOW_MINIMUM';
+    if (amount < rules.minimumWithdrawal) error = 'BELOW_MINIMUM';
     else if (amount > availableBalance) error = 'EXCEEDS_BALANCE';
 
     return {
       amount,
       fee,
       netAmount: Math.max(amount - fee, 0),
-      minimumWithdrawal: MINIMUM_WITHDRAWAL,
+      minimumWithdrawal: rules.minimumWithdrawal,
       availableBalance,
       isValid: error === null,
       error,
@@ -110,10 +113,11 @@ export class PayoutsService {
         message: 'Payout amount must be greater than 0',
       });
     }
-    if (amount < MINIMUM_WITHDRAWAL) {
+    const rules = await this.platformSettings.get();
+    if (amount < rules.minimumWithdrawal) {
       throw new BadRequestException({
         code: ErrorCodes.BELOW_MINIMUM_WITHDRAWAL,
-        message: `You need at least ₦${(MINIMUM_WITHDRAWAL / 100).toLocaleString()} to withdraw`,
+        message: `You need at least ₦${(rules.minimumWithdrawal / 100).toLocaleString()} to withdraw`,
       });
     }
 
@@ -153,7 +157,7 @@ export class PayoutsService {
       });
     }
 
-    const fee = calculatePayoutFee(amount);
+    const fee = calculatePayoutFee(amount, rules);
 
     let payout: Payout;
     try {
@@ -351,6 +355,145 @@ export class PayoutsService {
       payout,
     );
     return true;
+  }
+
+  /**
+   * Admin: asks Paystack what happened to a payout that is still in flight and
+   * applies the answer. Returns the payout as it stands afterwards.
+   */
+  async reconcilePayout(payoutId: string): Promise<Payout> {
+    const payout = await this.getInFlightPayout(payoutId);
+    const result = await this.paymentProvider.verifyTransfer(
+      payout.providerReference ?? '',
+    );
+    if (result.status === 'NOT_FOUND') {
+      // The transfer never reached Paystack, so no money moved
+      await this.applyTransferOutcome(
+        payout.id,
+        'FAILED',
+        'The transfer could not be started.',
+      );
+    } else if (result.status !== 'PENDING') {
+      await this.applyTransferOutcome(payout.id, result.status);
+    }
+    return this.prisma.payout.findUniqueOrThrow({ where: { id: payout.id } });
+  }
+
+  /**
+   * Admin: sends a stuck payout (REQUESTED or PENDING) to Paystack again. The
+   * transfer reference is reused, so Paystack refuses a duplicate: if it
+   * already has the transfer, its state is applied instead of sending twice.
+   */
+  async retryTransfer(payoutId: string): Promise<Payout> {
+    const payout = await this.prisma.payout.findUnique({
+      where: { id: payoutId },
+      include: { payoutMethod: true },
+    });
+    if (!payout) this.throwPayoutNotFound();
+    if (
+      payout.status !== PayoutStatus.REQUESTED &&
+      payout.status !== PayoutStatus.PENDING
+    ) {
+      throw new BadRequestException({
+        code: ErrorCodes.PAYOUT_ALREADY_PROCESSED,
+        message: `A ${payout.status} payout cannot be retried`,
+      });
+    }
+    const recipientCode = payout.payoutMethod?.recipientCode;
+    if (!recipientCode) {
+      throw new BadRequestException({
+        code: ErrorCodes.PAYOUT_METHOD_REQUIRED,
+        message: 'The payout has no bank recipient to send to',
+      });
+    }
+
+    const existing = await this.paymentProvider.verifyTransfer(
+      payout.providerReference ?? '',
+    );
+    if (existing.status === 'NOT_FOUND') {
+      return this.startTransfer(payout, recipientCode);
+    }
+    return this.reconcilePayout(payoutId);
+  }
+
+  /**
+   * Admin: cancels a payout whose transfer was never sent, returning the
+   * reserved amount to the creator's balance.
+   */
+  async cancelPayout(payoutId: string, reason: string): Promise<Payout> {
+    const payout = await this.prisma.payout.findUnique({
+      where: { id: payoutId },
+    });
+    if (!payout) this.throwPayoutNotFound();
+    if (payout.status !== PayoutStatus.REQUESTED) {
+      throw new BadRequestException({
+        code: ErrorCodes.PAYOUT_ALREADY_PROCESSED,
+        message:
+          'Only a payout whose transfer has not started can be cancelled. Reconcile it instead.',
+      });
+    }
+    const existing = await this.paymentProvider.verifyTransfer(
+      payout.providerReference ?? '',
+    );
+    if (existing.status !== 'NOT_FOUND') {
+      throw new BadRequestException({
+        code: ErrorCodes.PAYOUT_ALREADY_PROCESSED,
+        message: 'Paystack already has this transfer. Reconcile it instead.',
+      });
+    }
+
+    const cancelled = await this.prisma.$transaction(async (tx) => {
+      const claimed = await tx.payout.updateMany({
+        where: { id: payoutId, status: PayoutStatus.REQUESTED },
+        data: {
+          status: PayoutStatus.CANCELLED,
+          processedAt: new Date(),
+          failureReason: reason,
+        },
+      });
+      if (claimed.count === 0) return null;
+      await tx.ledgerEntry.create({
+        data: {
+          accountId: payout.accountId,
+          transactionId: payout.id,
+          entryType: LedgerEntryType.PAYOUT_REVERSED,
+          direction: LedgerDirection.CREDIT,
+          amount: payout.amount,
+          currency: payout.currency,
+          reference: `PAYOUT_REVERSE_${payout.id}`,
+        },
+      });
+      return tx.payout.findUniqueOrThrow({ where: { id: payoutId } });
+    });
+    if (!cancelled) {
+      throw new BadRequestException({
+        code: ErrorCodes.PAYOUT_ALREADY_PROCESSED,
+        message: 'The payout changed state while cancelling',
+      });
+    }
+    await this.emitPayoutEvent(PAYOUT_EVENTS.FAILED, cancelled);
+    return cancelled;
+  }
+
+  private async getInFlightPayout(payoutId: string): Promise<Payout> {
+    const payout = await this.prisma.payout.findUnique({
+      where: { id: payoutId },
+    });
+    if (!payout) this.throwPayoutNotFound();
+    if (!IN_FLIGHT_PAYOUT_STATUSES.includes(payout.status)) {
+      throw new BadRequestException({
+        code: ErrorCodes.PAYOUT_ALREADY_PROCESSED,
+        message: `The payout is already ${payout.status}`,
+      });
+    }
+    return payout;
+  }
+
+  private throwPayoutNotFound(): never {
+    throw new NotFoundException({
+      code: ErrorCodes.PAYOUT_NOT_FOUND,
+      message: 'Payout not found',
+    });
   }
 
   /** Finds the payout a Paystack transfer reference belongs to. */

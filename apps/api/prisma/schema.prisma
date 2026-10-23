@@ -309,12 +309,19 @@ model Refund {
   currency          String   @default("NGN")
   reason            String?
   providerReference String?
-  status            String   @default("PENDING")
+  status            String   @default("PENDING") // PENDING, PROCESSING, PROCESSED, FAILED
+  initiatedBy       String? // Admin user id
+  failureReason     String?
+  creatorDebit      Int      @default(0) // Minor units taken back from the creator
+  platformDebit     Int      @default(0) // Minor units taken back from the platform fee
+  processedAt       DateTime?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
+  @@index([paymentId])
+  @@index([status])
   @@map("refunds")
 }
 
@@ -427,6 +434,9 @@ model SupportTicket {
   message   String
   context   Json? // Snapshot of the payout/contribution details sent with the message
   status    String   @default("OPEN") // OPEN, RESOLVED
+  resolvedBy     String?
+  resolvedAt     DateTime?
+  resolutionNote String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -437,6 +447,7 @@ model SupportTicket {
   @@index([userId])
   @@index([payoutId])
   @@index([supportId])
+  @@index([status])
   @@map("support_tickets")
 }
 
@@ -631,11 +642,13 @@ model ContentReport {
   status      String    @default("PENDING") // PENDING, UNDER_REVIEW, RESOLVED, REJECTED
   reviewedBy  String?
   reviewedAt  DateTime?
+  resolutionNote String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   reporter User @relation("ReporterReports", fields: [reporterId], references: [id], onDelete: Cascade)
 
+  @@index([status])
   @@map("content_reports")
 }
 
@@ -670,4 +683,17 @@ model WaitlistEntry {
   @@index([email])
   @@index([createdAt])
   @@map("waitlist_entries")
+}
+
+// --------------------------------------------------------
+// PLATFORM SETTINGS (admin editable)
+// --------------------------------------------------------
+
+model PlatformSetting {
+  key       String   @id // e.g. "platform"
+  value     Json
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+
+  @@map("platform_settings")
 }

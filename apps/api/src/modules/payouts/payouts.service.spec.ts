@@ -1,6 +1,12 @@
+import { DEFAULT_PAYOUT_RULES } from '../platform-settings/platform-settings.service';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PaymentProviderRejectedError } from '../../infrastructure/payments/payment-provider.interface';
 import { PayoutsService } from './payouts.service';
+
+const DEFAULT_SETTINGS = {
+  platformFeePercent: 10,
+  ...DEFAULT_PAYOUT_RULES,
+};
 
 describe('PayoutsService', () => {
   const method = {
@@ -114,6 +120,7 @@ describe('PayoutsService', () => {
         payoutMethods as never,
         provider as never,
         eventEmitter as never,
+        { get: () => Promise.resolve(DEFAULT_SETTINGS) } as never,
       ),
     };
   }

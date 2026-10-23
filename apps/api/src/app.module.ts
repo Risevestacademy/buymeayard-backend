@@ -35,6 +35,7 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { WaitlistModule } from './modules/waitlist/waitlist.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { SupportTicketsModule } from './modules/support-tickets/support-tickets.module';
+import { PlatformSettingsModule } from './modules/platform-settings/platform-settings.module';
 
 // Common
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -87,6 +88,7 @@ import { AuditLogInterceptor } from './modules/admin/interceptors/audit-log.inte
     WaitlistModule,
     SettingsModule,
     SupportTicketsModule,
+    PlatformSettingsModule,
   ],
   controllers: [AppController],
   providers: [

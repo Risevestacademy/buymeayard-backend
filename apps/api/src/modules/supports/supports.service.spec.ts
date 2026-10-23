@@ -28,7 +28,9 @@ describe('SupportsService contribution gate', () => {
       creatorMaterial: { findUnique: jest.fn().mockResolvedValue(material) },
       support: { create: jest.fn().mockResolvedValue({ id: 'support-1' }) },
     };
-    const config = { get: jest.fn().mockReturnValue(10) };
+    const config = {
+      get: jest.fn().mockResolvedValue({ platformFeePercent: 10 }),
+    };
     return {
       prisma,
       service: new SupportsService(prisma as never, config as never),
@@ -107,7 +109,9 @@ describe('SupportsService guest gifting', () => {
       },
       support: { create: jest.fn().mockResolvedValue({ id: 'support-1' }) },
     };
-    const config = { get: jest.fn().mockReturnValue(10) };
+    const config = {
+      get: jest.fn().mockResolvedValue({ platformFeePercent: 10 }),
+    };
     return {
       prisma,
       service: new SupportsService(prisma as never, config as never),

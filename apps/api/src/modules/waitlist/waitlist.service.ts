@@ -70,4 +70,16 @@ export class WaitlistService {
 
     return { items: entries, pagination: buildPagination(page, limit, total) };
   }
+
+  /** Every entry, oldest first, as CSV for the admin export. */
+  async exportCsv(): Promise<string> {
+    const entries = await this.prisma.waitlistEntry.findMany({
+      orderBy: { createdAt: 'asc' },
+      select: { email: true, createdAt: true },
+    });
+    const rows = entries.map(
+      (e) => `${e.email.replace(/[",\n]/g, '')},${e.createdAt.toISOString()}`,
+    );
+    return ['email,joinedAt', ...rows].join('\n');
+  }
 }

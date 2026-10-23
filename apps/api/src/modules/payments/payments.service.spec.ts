@@ -43,6 +43,7 @@ describe('PaymentsService.initializePayment contribution gate', () => {
         {} as never,
         eventEmitter as never,
         {} as never,
+        {} as never,
       ),
     };
   }
@@ -113,6 +114,7 @@ describe('PaymentsService.handleWebhook transfer events', () => {
       {} as never,
       { emit: jest.fn() } as never,
       payouts as never,
+      {} as never,
     );
     return { service, prisma, payouts };
   }
@@ -178,4 +180,60 @@ describe('PaymentsService.handleWebhook transfer events', () => {
     expect(payouts.applyTransferOutcome).not.toHaveBeenCalled();
     expect(prisma.paymentEvent.create).not.toHaveBeenCalled();
   });
+});
+
+describe('PaymentsService.handleWebhook refund events', () => {
+  function setup() {
+    const prisma = {
+      paymentEvent: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
+      payment: { findFirst: jest.fn().mockResolvedValue({ id: 'pay-1' }) },
+    };
+    const provider = {
+      providerName: 'PAYSTACK',
+      verifyWebhookSignature: jest.fn().mockResolvedValue({ isValid: true }),
+    };
+    const refunds = { applyProviderEvent: jest.fn().mockResolvedValue(true) };
+    const service = new PaymentsService(
+      prisma as never,
+      provider as never,
+      {} as never,
+      { emit: jest.fn() } as never,
+      {} as never,
+      refunds as never,
+    );
+    return { service, prisma, refunds };
+  }
+
+  it.each([
+    ['refund.processed', 'PROCESSED'],
+    ['refund.failed', 'FAILED'],
+    ['refund.processing', 'PROCESSING'],
+  ])(
+    'applies %s to the refund of the original payment',
+    async (type, status) => {
+      const { service, refunds, prisma } = setup();
+
+      await service.handleWebhook(
+        'sig',
+        { event: type, data: { id: 55, transaction_reference: 'ref-1' } },
+        'raw',
+      );
+
+      expect(refunds.applyProviderEvent).toHaveBeenCalledWith(
+        'ref-1',
+        status,
+        '55',
+        undefined,
+      );
+      expect(prisma.paymentEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          paymentId: 'pay-1',
+          providerEventId: `${type}:55`,
+        }),
+      });
+    },
+  );
 });

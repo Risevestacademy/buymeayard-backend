@@ -1,17 +1,8 @@
 import { ErrorResponseDto } from '../../common/dto/error-response.dto';
-import {
-  Body,
-  Controller,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Post,
-  Query,
-} from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { WaitlistService } from './waitlist.service';
 import { JoinWaitlistDto } from './dto/join-waitlist.dto';
-import { GetWaitlistQueryDto } from './dto/get-waitlist-query.dto';
 import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('waitlist')
@@ -35,18 +26,5 @@ export class WaitlistController {
   })
   async joinWaitlist(@Body() dto: JoinWaitlistDto) {
     return this.waitlistService.joinWaitlist(dto);
-  }
-
-  @Public()
-  @Get()
-  @ApiOperation({
-    summary: 'Get all waitlist entries with pagination and search',
-  })
-  @ApiResponse({
-    status: 200,
-    description: 'Paginated list of waitlist members',
-  })
-  async getWaitlist(@Query() query: GetWaitlistQueryDto) {
-    return this.waitlistService.getWaitlist(query);
   }
 }
