@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
 
@@ -246,31 +247,10 @@ export class PayoutDetailDto extends PayoutDto {
   failureReason!: string | null;
 }
 
-export class PayoutPaginationDto {
-  @ApiProperty({ example: 1 })
-  page!: number;
-
-  @ApiProperty({ example: 10 })
-  limit!: number;
-
-  @ApiProperty({
-    example: 67,
-    description: 'Payouts matching the status filter',
-  })
-  total!: number;
-
-  @ApiProperty({
-    example: 7,
-    description:
-      'Last page. Mobile infinite scroll stops when page >= totalPages.',
-  })
-  totalPages!: number;
-}
-
 export class PayoutListDto {
   @ApiProperty({ type: [PayoutDto] })
   items!: PayoutDto[];
 
-  @ApiProperty({ type: PayoutPaginationDto })
-  pagination!: PayoutPaginationDto;
+  @ApiProperty({ type: PaginationDto })
+  pagination!: PaginationDto;
 }

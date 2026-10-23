@@ -37,6 +37,7 @@ import {
   DashboardContributionsListResponseDto,
 } from './dto/creator-dashboard.dto';
 import { Prisma } from '@prisma/client';
+import { buildPagination } from '../../common/utils/pagination.util';
 
 const CONTRIBUTION_INCLUDE = {
   supporter: { select: { id: true, name: true, image: true } },
@@ -1449,13 +1450,8 @@ export class CreatorsService {
     ]);
 
     return {
-      data: supports.map((support) => this.toContributionDto(support)),
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit) || 1,
-      },
+      items: supports.map((support) => this.toContributionDto(support)),
+      pagination: buildPagination(page, limit, total),
     };
   }
 

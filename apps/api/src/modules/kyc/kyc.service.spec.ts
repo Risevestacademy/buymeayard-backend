@@ -936,7 +936,13 @@ describe('KycService', () => {
       expect(creator.kycStatus).toBe('NEEDS_REVIEW');
       expect(creator.status).toBe('KYC_PENDING');
       const queue = await admin.listQueue({});
-      expect(queue.data.map((s) => s.id)).toEqual([submission.id]);
+      expect(queue.items.map((s) => s.id)).toEqual([submission.id]);
+      expect(queue.pagination).toEqual({
+        page: 1,
+        limit: 20,
+        total: 1,
+        totalPages: 1,
+      });
     });
 
     it('a declined check inside an approval also goes to review', async () => {

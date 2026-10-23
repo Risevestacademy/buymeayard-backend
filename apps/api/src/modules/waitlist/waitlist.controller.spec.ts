@@ -45,11 +45,8 @@ describe('WaitlistController', () => {
 
   it('should call waitlistService.getWaitlist on GET', async () => {
     const expected = {
-      entries: [{ id: 'uuid-1', email: 'test@example.com' }],
-      total: 1,
-      page: 1,
-      limit: 50,
-      totalPages: 1,
+      items: [{ id: 'uuid-1', email: 'test@example.com' }],
+      pagination: { page: 1, limit: 50, total: 1, totalPages: 1 },
     };
     service.getWaitlist.mockResolvedValue(expected);
 

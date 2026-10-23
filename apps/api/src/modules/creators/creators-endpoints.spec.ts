@@ -262,7 +262,7 @@ describe('Creators Endpoints (HTTP Integration)', () => {
         dataPoints: [],
       }),
       getDashboardContributions: jest.fn().mockResolvedValue({
-        data: [],
+        items: [],
         pagination: { total: 0, page: 1, limit: 10, totalPages: 1 },
       }),
       getDashboardMetrics: jest.fn().mockResolvedValue({
@@ -608,7 +608,7 @@ describe('Creators Endpoints (HTTP Integration)', () => {
         mockUser.id,
         expect.objectContaining({ page: 1, limit: 10 }),
       );
-      expect(response.body).toHaveProperty('data');
+      expect(response.body).toHaveProperty('items');
       expect(response.body).toHaveProperty('pagination');
     });
   });

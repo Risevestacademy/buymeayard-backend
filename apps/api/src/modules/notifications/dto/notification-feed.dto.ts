@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 
 export class NotificationItemDto {
   @ApiProperty({ example: 'notif_123' })
@@ -41,27 +42,16 @@ export class NotificationItemDto {
   createdAt!: Date;
 }
 
-export class NotificationPaginationDto {
-  @ApiProperty({ example: 1 })
-  page!: number;
-
-  @ApiProperty({ example: 20 })
-  limit!: number;
-
-  @ApiProperty({ example: 35 })
-  total!: number;
-
-  @ApiProperty({ example: 2 })
-  totalPages!: number;
-}
-
 export class NotificationsFeedResponseDto {
-  @ApiProperty({ example: 4, description: 'Total number of unread notifications' })
+  @ApiProperty({
+    example: 4,
+    description: 'Total number of unread notifications',
+  })
   unreadCount!: number;
 
   @ApiProperty({ type: () => [NotificationItemDto] })
   items!: NotificationItemDto[];
 
-  @ApiProperty({ type: () => NotificationPaginationDto })
-  pagination!: NotificationPaginationDto;
+  @ApiProperty({ type: () => PaginationDto })
+  pagination!: PaginationDto;
 }

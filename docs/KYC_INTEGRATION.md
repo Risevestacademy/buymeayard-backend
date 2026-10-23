@@ -127,7 +127,7 @@ Requires the `ADMIN` or `SUPER_ADMIN` role.
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /api/v1/admin/kyc?status=NEEDS_REVIEW&page=1&limit=20` | Review queue (oldest first, paginated `meta`) |
+| `GET /api/v1/admin/kyc?status=NEEDS_REVIEW&page=1&limit=20` | Review queue (oldest first, paginated `data.items` + `data.pagination`) |
 | `GET /api/v1/admin/kyc/:id` | Details, including `claimedDetails`, `decisionSummary`, and the live Didit decision in `providerDecision` (shape below). Its image URLs expire quickly: display them, never store them. Each view is audit-logged |
 | `POST /api/v1/admin/kyc/:id/approve` `{ note? }` | Approve an in-review case (or override a rejection) |
 | `POST /api/v1/admin/kyc/:id/reject` `{ reason, note? }` | `reason` is shown to the creator; `note` is internal |

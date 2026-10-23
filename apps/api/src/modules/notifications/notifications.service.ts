@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Inject,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Inject, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { NOTIFICATION_PROVIDER } from '../../infrastructure/notifications/notification-provider.interface';
 import type { NotificationProvider } from '../../infrastructure/notifications/notification-provider.interface';
@@ -12,6 +8,7 @@ import {
   NotificationItemDto,
 } from './dto/notification-feed.dto';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import { buildPagination } from '../../common/utils/pagination.util';
 
 @Injectable()
 export class NotificationsService {
@@ -69,12 +66,7 @@ export class NotificationsService {
     return {
       unreadCount,
       items: mappedItems,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit) || 1,
-      },
+      pagination: buildPagination(page, limit, total),
     };
   }
 

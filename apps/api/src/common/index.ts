@@ -8,3 +8,5 @@ export * from './decorators/is-valid-password.decorator';
 export * from './guards/auth.guard';
 export * from './guards/roles.guard';
 export * from './utils/money.util';
+export * from './dto/pagination.dto';
+export * from './utils/pagination.util';

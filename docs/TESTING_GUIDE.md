@@ -227,7 +227,7 @@ An unverified creator can't receive or withdraw money:
 2. **Replay** the identical signed body. It returns `status: "already_processed"`: the event is stored once and applied once. *Send this within 5 minutes of step 1, because signatures expire after 5 minutes.*
 3. **Bad signature (→ 401)** and **stale `X-Timestamp` (→ 401)**.
 4. Creator `GET /creators/me/kyc` returns `NEEDS_REVIEW` with `canStartSession: false`. `POST …/session` **(→ 409 `KYC_UNDER_REVIEW`)**.
-5. **Admin review queue** — `GET /admin/kyc` defaults to `NEEDS_REVIEW`, oldest first, with pagination `meta`. Saves `kycSubmissionId`. Also covered:
+5. **Admin review queue** — `GET /admin/kyc` defaults to `NEEDS_REVIEW`, oldest first, with `data.pagination`. Saves `kycSubmissionId`. Also covered:
    - a filtered and paginated query
    - an invalid status **(→ 400)**
    - a creator calling the admin route **(→ 403)**
