@@ -2673,9 +2673,9 @@
                 "exec": [
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
                   "const json = pm.response.json();",
-                  "const mine = json.data.find((s) => s.creator.id === pm.variables.get('creatorId'));",
+                  "const mine = json.data.items.find((s) => s.creator.id === pm.variables.get('creatorId'));",
                   "pm.test('Creator is in the review queue', () => pm.expect(mine).to.exist);",
-                  "pm.test('Paginated meta', () => pm.expect(json.meta).to.have.keys('total', 'page', 'limit', 'totalPages', 'hasNextPage', 'hasPreviousPage'));",
+                  "pm.test('Paginated', () => pm.expect(json.data.pagination).to.have.keys('total', 'page', 'limit', 'totalPages'));",
                   "if (mine) pm.collectionVariables.set('kycSubmissionId', mine.id);"
                 ]
               }

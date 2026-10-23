@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { JoinWaitlistDto } from './dto/join-waitlist.dto';
 import { GetWaitlistQueryDto } from './dto/get-waitlist-query.dto';
+import { buildPagination } from '../../common/utils/pagination.util';
 
 @Injectable()
 export class WaitlistService {
@@ -67,12 +68,6 @@ export class WaitlistService {
       }),
     ]);
 
-    return {
-      entries,
-      total,
-      page,
-      limit,
-      totalPages: Math.ceil(total / limit),
-    };
+    return { items: entries, pagination: buildPagination(page, limit, total) };
   }
 }

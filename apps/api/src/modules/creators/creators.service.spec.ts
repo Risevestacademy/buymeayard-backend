@@ -1264,12 +1264,12 @@ describe('CreatorsService', () => {
       });
 
       expect(res.pagination.total).toBe(2);
-      expect(res.data).toHaveLength(2);
-      expect(res.data[0].supporter.name).toBe('Anonymous');
-      expect(res.data[0].supporter.initials).toBe('AN');
-      expect(res.data[1].supporter.name).toBe('Chidi Nwosu');
-      expect(res.data[1].supporter.initials).toBe('CN');
-      expect(res.data[1].material?.name).toBe('Lace');
+      expect(res.items).toHaveLength(2);
+      expect(res.items[0].supporter.name).toBe('Anonymous');
+      expect(res.items[0].supporter.initials).toBe('AN');
+      expect(res.items[1].supporter.name).toBe('Chidi Nwosu');
+      expect(res.items[1].supporter.initials).toBe('CN');
+      expect(res.items[1].material?.name).toBe('Lace');
     });
 
     it('shows the name a guest typed, and hides it when they asked to be anonymous', async () => {
@@ -1294,9 +1294,9 @@ describe('CreatorsService', () => {
 
       const res = await service.getDashboardContributions('u-1');
 
-      expect(res.data[0].supporter.name).toBe('Ada Okafor');
-      expect(res.data[1].supporter.name).toBe('Anonymous');
-      expect(res.data[0]).toMatchObject({
+      expect(res.items[0].supporter.name).toBe('Ada Okafor');
+      expect(res.items[1].supporter.name).toBe('Anonymous');
+      expect(res.items[0]).toMatchObject({
         platformFee: 50000,
         status: 'PAID',
         reference: 'ref-9',

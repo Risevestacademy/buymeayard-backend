@@ -23,6 +23,7 @@ import { KycTransitionService } from './kyc-transition.service';
 import { KYC_TRANSACTION_OPTIONS, KycService } from './kyc.service';
 import { RECONCILABLE_STATUSES } from './kyc-state';
 import { KycQueueQueryDto } from './dto/admin-kyc.dto';
+import { buildPagination } from '../../common/utils/pagination.util';
 
 const CREATOR_SELECT = {
   id: true,
@@ -83,18 +84,7 @@ export class KycAdminService {
       }),
     ]);
 
-    const totalPages = Math.max(1, Math.ceil(total / limit));
-    return {
-      data: items,
-      meta: {
-        total,
-        page,
-        limit,
-        totalPages,
-        hasNextPage: page < totalPages,
-        hasPreviousPage: page > 1,
-      },
-    };
+    return { items, pagination: buildPagination(page, limit, total) };
   }
 
   async getDetail(submissionId: string, adminId: string) {

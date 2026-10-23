@@ -453,7 +453,7 @@ describe('CreatorsController', () => {
   describe('getDashboardContributions (GET /creators/me/dashboard/contributions)', () => {
     it('should delegate to creatorsService.getDashboardContributions', async () => {
       const mockContributions = {
-        data: [],
+        items: [],
         pagination: { total: 0, page: 1, limit: 10, totalPages: 1 },
       };
       creatorsService.getDashboardContributions.mockResolvedValue(

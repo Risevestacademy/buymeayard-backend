@@ -31,6 +31,7 @@ import {
 } from '../notifications/events/notification.events';
 import { PayoutMethodsService } from './payout-methods.service';
 import { MINIMUM_WITHDRAWAL, calculatePayoutFee } from './payout-fees';
+import { buildPagination } from '../../common/utils/pagination.util';
 import {
   ListPayoutsQueryDto,
   PayoutDetailDto,
@@ -269,12 +270,7 @@ export class PayoutsService {
 
     return {
       items: payouts.map((p) => this.toDto(p)),
-      pagination: {
-        page: query.page,
-        limit: query.limit,
-        total,
-        totalPages: Math.ceil(total / query.limit) || 1,
-      },
+      pagination: buildPagination(query.page, query.limit, total),
     };
   }
 

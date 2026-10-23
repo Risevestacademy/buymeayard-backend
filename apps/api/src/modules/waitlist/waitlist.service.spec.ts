@@ -103,11 +103,8 @@ describe('WaitlistService', () => {
         take: 10,
       });
       expect(result).toEqual({
-        entries: mockEntries,
-        total: 2,
-        page: 1,
-        limit: 10,
-        totalPages: 1,
+        items: mockEntries,
+        pagination: { page: 1, limit: 10, total: 2, totalPages: 1 },
       });
     });
 

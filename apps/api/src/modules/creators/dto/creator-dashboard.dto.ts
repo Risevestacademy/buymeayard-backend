@@ -1,4 +1,5 @@
 import { PayoutMethodDto } from '../../payouts/dto/payout-method.dto';
+import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -528,32 +529,15 @@ export class DashboardContributionsQueryDto {
   order?: 'asc' | 'desc' = 'desc';
 }
 
-export class DashboardContributionsPaginationDto {
-  @ApiProperty({ example: 24, description: 'Total count of contributions' })
-  total!: number;
-
-  @ApiProperty({ example: 1, description: 'Current page number' })
-  page!: number;
-
-  @ApiProperty({ example: 10, description: 'Page size limit' })
-  limit!: number;
-
-  @ApiProperty({ example: 3, description: 'Total number of pages' })
-  totalPages!: number;
-}
-
 export class DashboardContributionsListResponseDto {
   @ApiProperty({
     type: [DashboardContributionDto],
     description: 'List of contributions',
   })
-  data!: DashboardContributionDto[];
+  items!: DashboardContributionDto[];
 
-  @ApiProperty({
-    type: DashboardContributionsPaginationDto,
-    description: 'Pagination metadata',
-  })
-  pagination!: DashboardContributionsPaginationDto;
+  @ApiProperty({ type: PaginationDto, description: 'Pagination metadata' })
+  pagination!: PaginationDto;
 }
 
 export class DashboardRecentContributionsQueryDto {
