@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="color-scheme" content="light" />
+    <meta name="supported-color-schemes" content="light" />
+    <title>Verify your email</title>
+    <style>
+      body { margin: 0; padding: 0; width: 100% !important; background-color: #F7F6F2; }
+      table { border-collapse: collapse; }
+      img { border: 0; display: block; outline: none; text-decoration: none; }
+      a { color: #AB491F; }
+      @media only screen and (max-width: 600px) {
+        .container { width: 100% !important; }
+        .card-pad { padding: 32px 24px !important; }
+        .heading { font-size: 24px !important; line-height: 32px !important; }
+      }
+    </style>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #F7F6F2;">
+    <div style="display: none; max-height: 0; overflow: hidden; opacity: 0; mso-hide: all;">Confirm your email address to finish setting up your Buy Me a Yard account.</div>
+    <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" bgcolor="#F7F6F2" style="background-color: #F7F6F2;">
+      <tr>
+        <td align="center" style="padding: 40px 16px;">
+          <table role="presentation" class="container" width="560" border="0" cellpadding="0" cellspacing="0" style="width: 560px; max-width: 560px;">
+            <tr>
+              <td align="center" style="padding: 0 0 24px;">
+                <a href="{{appUrl}}" target="_blank" style="text-decoration: none;">
+                  <img src="{{logoUrl}}" width="158" height="24" alt="Buy Me a Yard" style="width: 158px; height: 24px;" />
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td class="card-pad" bgcolor="#FFFFFF" style="background-color: #FFFFFF; border: 1px solid #EDEDEF; border-radius: 16px; padding: 40px;">
+                <table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td>
+                      <span style="display: inline-block; padding: 4px 12px; border-radius: 999px; background-color: #FFF4EE; font-family: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px; font-weight: 600; color: #7F3516;">Verify your email</span>
+                      <h1 class="heading" style="margin: 16px 0 0; font-family: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -0.56px; color: #191716;">Confirm your email address</h1>
+                      <p style="margin: 16px 0 0; font-family: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px; color: #53525B;">Hi {{name}},</p><p style="margin: 16px 0 0; font-family: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 16px; line-height: 24px; color: #53525B;">Thanks for signing up to Buy Me a Yard. Please confirm this is your email address so we can finish setting up your creator account.</p><table role="presentation" width="100%" border="0" cellpadding="0" cellspacing="0" style="margin-top: 32px;">
+                        <tr>
+                          <td align="left">
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" style="margin: 0;">
+                <tr>
+                  <td align="center" bgcolor="#AB491F" style="border-radius: 999px;">
+                    <a href="{{verificationUrl}}" target="_blank" style="display: inline-block; padding: 14px 32px; font-family: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 16px; line-height: 20px; font-weight: 600; color: #FFFFFF; text-decoration: none; border-radius: 999px;">Verify email address</a>
+                  </td>
+                </tr>
+              </table>
+                          </td>
+                        </tr>
+                      </table><p style="margin: 16px 0 0; font-family: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px; color: #53525B;">This link expires in {{expiresIn}}.</p><hr style="margin: 32px 0 0; border: 0; border-top: 1px solid #EDEDEF;" /><p style="margin: 24px 0 0; font-family: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 13px; line-height: 20px; color: #8D8C93;">
+                If the button doesn't work, copy and paste this link into your browser:<br />
+                <a href="{{verificationUrl}}" target="_blank" style="color: #AB491F; text-decoration: underline; word-break: break-all;">{{verificationUrl}}</a>
+              </p><p style="margin: 16px 0 0; font-family: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 20px; color: #53525B;">If you didn't create a Buy Me a Yard account, you can safely ignore this email.</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" style="padding: 24px 24px 0;">
+                <p style="margin: 0; font-family: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px; color: #8D8C93;">You're receiving this email because this address was used to sign up for Buy Me a Yard.</p>
+                <p style="margin: 8px 0 0; font-family: 'Switzer', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; font-size: 12px; line-height: 18px; color: #8D8C93;">&copy; Buy Me a Yard</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
