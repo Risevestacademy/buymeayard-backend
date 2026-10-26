@@ -83,7 +83,7 @@ const BANK_ACCOUNT_ERRORS: ApiErrorDoc[] = [
 ];
 
 const IDEMPOTENCY_KEY_HEADER = {
-  name: 'Idempotency-Key',
+  name: 'idempotency-key',
   required: false,
   description:
     'Strongly recommended. A new UUID per withdrawal attempt (generate it when the creator lands on the Review screen). Retrying with the same key (double tap, timeout, app resumed) returns the **same** payout instead of withdrawing twice. Max 100 characters.',
