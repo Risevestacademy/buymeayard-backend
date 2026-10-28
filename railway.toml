@@ -4,10 +4,9 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 # The runner image has no pnpm, so call the Prisma CLI directly.
-preDeployCommand = [
-  "node apps/api/node_modules/prisma/build/index.js migrate deploy --schema apps/api/prisma/schema.prisma",
-  "node apps/api/node_modules/ts-node/dist/bin.js apps/api/prisma/seed.ts",
-]
+preDeployCommand = ["node apps/api/node_modules/prisma/build/index.js migrate deploy --schema apps/api/prisma/schema.prisma"]
+# One-time staging seed: runs inside Railway (private DB network), then starts the API even if it fails. Remove once seeded.
+startCommand = "sh -c 'node apps/api/node_modules/ts-node/dist/bin.js apps/api/prisma/seed.ts; exec dumb-init node apps/api/dist/main.js'"
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
