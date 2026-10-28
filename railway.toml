@@ -4,7 +4,7 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 # The runner image has no pnpm, so call the Prisma CLI directly.
-preDeployCommand = ["node apps/api/node_modules/prisma/build/index.js migrate deploy --schema apps/api/prisma/schema.prisma"]
+preDeployCommand = ["node apps/api/node_modules/prisma/build/index.js migrate deploy --schema apps/api/prisma/schema.prisma && node apps/api/node_modules/ts-node/dist/bin.js apps/api/prisma/seed.ts"]
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 restartPolicyType = "ON_FAILURE"
