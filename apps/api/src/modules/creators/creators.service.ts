@@ -17,6 +17,8 @@ import { PayoutMethod } from '@prisma/client';
 import { PayoutMethodsService } from '../payouts/payout-methods.service';
 import { MINIMUM_WITHDRAWAL } from '../payouts/payout-fees';
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { USER_EVENTS } from '../analytics/events/user.events';
 
 const PENDING_CONTRIBUTION_WINDOW_MS = 60 * 60 * 1000;
 import { ErrorCodes } from '../../common/errors/error-codes';
@@ -62,6 +64,8 @@ export class CreatorsService {
     ledgerService?: LedgerService,
     @Optional()
     private readonly platformSettings?: PlatformSettingsService,
+    @Optional()
+    private readonly eventEmitter?: EventEmitter2,
   ) {
     this.ledger = ledgerService || new LedgerService(this.prisma);
   }
@@ -407,6 +411,10 @@ export class CreatorsService {
       where: { userId },
     });
 
+    // First completion of onboarding (no profile yet, or still REGISTERED)
+    const isFirstOnboarding =
+      !existingProfile || existingProfile.status === 'REGISTERED';
+
     let profile;
 
     if (existingProfile) {
@@ -552,6 +560,14 @@ export class CreatorsService {
         '[CreatorsService] Failed to auto-sync OAuth social accounts:',
         err,
       );
+    }
+
+    if (isFirstOnboarding && profile.user?.email) {
+      this.eventEmitter?.emit(USER_EVENTS.ONBOARDED, {
+        userId,
+        email: profile.user.email,
+        name: creatorName,
+      });
     }
 
     // Return refreshed profile with socialLinks and materials

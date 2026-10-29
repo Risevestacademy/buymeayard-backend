@@ -10,7 +10,11 @@ import {
   KYC_NOTIFICATION_EVENTS,
   KycNotificationEvent,
 } from './events/notification.events';
-import { USER_EVENTS, UserLoginEvent } from '../analytics/events/user.events';
+import {
+  USER_EVENTS,
+  UserLoginEvent,
+  UserOnboardedEvent,
+} from '../analytics/events/user.events';
 import {
   parseUserAgent,
   resolveLocationFromIp,
@@ -66,6 +70,14 @@ export class NotificationListeners {
       `Handling contribution.received for creator: ${event.creatorUserId} from supporter: ${event.supporterName}`,
     );
     await this.dispatcher.dispatchContributionNotification(event);
+  }
+
+  /**
+   * Creator finished onboarding: send the welcome email
+   */
+  @OnEvent(USER_EVENTS.ONBOARDED)
+  async handleUserOnboarded(event: UserOnboardedEvent) {
+    await this.dispatcher.sendCreatorWelcomeEmail(event.email, event.name);
   }
 
   /**
