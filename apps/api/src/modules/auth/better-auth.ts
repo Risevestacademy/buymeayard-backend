@@ -143,6 +143,8 @@ export function createBetterAuth(
     process.env.EMAIL_LOGO_URL ||
     'https://res.cloudinary.com/dymntdsp9/image/upload/v1792739782/logo_mafsug.png';
   const emailTokenExpiresIn = '1 hour';
+  // Set when frontends and the API share a parent domain (e.g. ".buymeayard.com")
+  const cookieDomain = process.env.COOKIE_DOMAIN?.trim() || undefined;
 
   /**
    * Resolves the frontend URL for password reset emails.
@@ -225,6 +227,9 @@ export function createBetterAuth(
       'https://buymeayard-creator-dev.up.railway.app',
       'https://buymeayard-admin-dev.up.railway.app',
       'https://buymeayardbackend.onrender.com',
+      'https://api.buymeayard.com',
+      'https://creator.buymeayard.com',
+      'https://admin.buymeayard.com',
       'https://appleid.apple.com',
       'buymeayard://',
       'buymeayard://*',
@@ -411,9 +416,11 @@ export function createBetterAuth(
     advanced: {
       crossSubDomainCookies: {
         enabled: true,
+        // e.g. ".buymeayard.com" so the frontends and api.* share the session cookie
+        ...(cookieDomain ? { domain: cookieDomain } : {}),
       },
       defaultCookieAttributes: {
-        sameSite: 'none',
+        sameSite: 'lax',
         secure: true,
       },
     },
