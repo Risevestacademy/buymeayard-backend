@@ -331,7 +331,7 @@ Webhooks must be signed with HMAC-SHA512 of the raw body using `PAYSTACK_WEBHOOK
 ```sh
 BODY='{"event":"transfer.success","data":{"id":777,"reference":"pyt-20261017-0001"}}'
 SIG=$(printf '%s' "$BODY" | openssl dgst -sha512 -hmac "$PAYSTACK_WEBHOOK_SECRET" | awk '{print $NF}')
-curl -X POST http://localhost:3000/webhooks/paystack \
+curl -X POST http://localhost:8000/webhooks/paystack \
   -H "Content-Type: application/json" -H "x-paystack-signature: $SIG" -d "$BODY"
 ```
 

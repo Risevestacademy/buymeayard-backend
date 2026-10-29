@@ -7744,12 +7744,12 @@
   "variable": [
     {
       "key": "baseUrl",
-      "value": "http://localhost:3000/api/v1",
+      "value": "http://localhost:8000/api/v1",
       "type": "string"
     },
     {
       "key": "hostUrl",
-      "value": "http://localhost:3000",
+      "value": "http://localhost:8000",
       "type": "string"
     },
     {

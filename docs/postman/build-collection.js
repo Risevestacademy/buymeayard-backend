@@ -1366,8 +1366,8 @@ Import \`BuyMeAYard.local.postman_environment.json\` too, and make sure its secr
   },
   item: [f00, f01, f02, f03, f04, f05, f06, f07, f08, f09, f10, f11, f12],
   variable: [
-    ['baseUrl', 'http://localhost:3000/api/v1'],
-    ['hostUrl', 'http://localhost:3000'],
+    ['baseUrl', 'http://localhost:8000/api/v1'],
+    ['hostUrl', 'http://localhost:8000'],
     ['adminEmail', 'admin@buymeayard.com'],
     ['adminPassword', 'AdminPassword123!'],
     ['testPassword', 'TestP@ssw0rd123'],
@@ -1380,8 +1380,8 @@ Import \`BuyMeAYard.local.postman_environment.json\` too, and make sure its secr
 const environment = {
   name: 'Buy Me a Yard — Local (development only, never use these credentials elsewhere)',
   values: [
-    ['baseUrl', 'http://localhost:3000/api/v1', 'default'],
-    ['hostUrl', 'http://localhost:3000', 'default'],
+    ['baseUrl', 'http://localhost:8000/api/v1', 'default'],
+    ['hostUrl', 'http://localhost:8000', 'default'],
     ['adminEmail', 'admin@buymeayard.com', 'default'],
     ['adminPassword', 'AdminPassword123!', 'secret'],
     ['testPassword', 'TestP@ssw0rd123', 'secret'],

@@ -481,19 +481,7 @@ export function createBetterAuth(
             }
           },
           after: async (user: any) => {
-            // Only creators self-register, so every new user gets the creator welcome
-            sendEmail(
-              user.email,
-              'Welcome to BuyMeAYard',
-              renderEmailTemplate('welcome', {
-                name: user.name || 'there',
-                logoUrl: emailLogoUrl,
-                appUrl: frontendUrls.creator,
-                dashboardUrl: `${frontendUrls.creator}/dashboard`,
-              }),
-            ).catch((err) =>
-              console.error('[Auth] Failed to send welcome email:', err),
-            );
+            // The creator welcome email is sent on USER_EVENTS.ONBOARDED, not here
             if (eventEmitter) {
               eventEmitter.emit(USER_EVENTS.CREATED, {
                 userId: user.id,
