@@ -1,8 +1,15 @@
 import { Controller, Post, Body, Headers, Req } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiErrors,
+  VALIDATION_ERROR,
+} from '../../common/decorators/api-errors.decorator';
 import { PaymentsService } from './payments.service';
 import { Public } from '../../common/decorators/public.decorator';
-import { InitializePaymentDto } from './dto/initialize-payment.dto';
+import {
+  InitializePaymentDto,
+  InitializePaymentResponseDto,
+} from './dto/initialize-payment.dto';
 
 @ApiTags('payments')
 @Controller()
@@ -16,6 +23,28 @@ export class PaymentsController {
     description:
       'Public, so a guest can pay for the support they just created. The unguessable support id is the only credential, and it only lets the caller pay, never read anything.',
   })
+  @ApiResponse({ status: 201, type: InitializePaymentResponseDto })
+  @ApiErrors(
+    VALIDATION_ERROR,
+    {
+      status: 400,
+      code: 'PAYMENT_ALREADY_PROCESSED',
+      message: 'This payment has already been processed',
+      when: 'The support is already paid. Show the thank-you screen instead of opening checkout.',
+    },
+    {
+      status: 403,
+      code: 'CREATOR_NOT_ACTIVE',
+      message: 'This creator is not accepting contributions yet',
+      when: 'The creator lost verification or took their page down since the intent was created.',
+    },
+    {
+      status: 404,
+      code: 'NOT_FOUND',
+      message: 'Support transaction not found',
+      when: 'The supportId does not exist.',
+    },
+  )
   async initialize(@Body() body: InitializePaymentDto) {
     return this.paymentsService.initializePayment(body.supportId, body.email);
   }

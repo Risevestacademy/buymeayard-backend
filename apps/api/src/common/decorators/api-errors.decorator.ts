@@ -52,7 +52,7 @@ export const CREATOR_NOT_FOUND_ERROR: ApiErrorDoc = {
   status: 404,
   code: 'CREATOR_NOT_FOUND',
   message: 'Creator profile not found',
-  when: 'The signed-in user has no creator profile (e.g. a supporter account).',
+  when: 'The signed-in user has no creator profile yet (onboarding not done).',
 };
 
 export const VALIDATION_ERROR: ApiErrorDoc = {
