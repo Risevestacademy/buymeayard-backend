@@ -69,7 +69,7 @@ export class AdminUsersService {
         ...USER_LIST_SELECT,
         updatedAt: true,
         _count: {
-          select: { supports: true, supportTickets: true, reports: true },
+          select: { supportTickets: true, reports: true },
         },
         sessions: {
           select: {
@@ -96,7 +96,6 @@ export class AdminUsersService {
       ...this.toListItem(user),
       updatedAt: user.updatedAt,
       counts: {
-        contributionsMade: user._count.supports,
         supportTickets: user._count.supportTickets,
         reportsFiled: user._count.reports,
       },

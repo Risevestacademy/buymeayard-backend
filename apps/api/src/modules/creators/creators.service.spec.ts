@@ -1052,11 +1052,7 @@ describe('CreatorsService', () => {
           message: 'Love your work!',
           isAnonymous: false,
           createdAt: new Date('2026-10-05T12:00:00Z'),
-          supporter: {
-            id: 'sup-user-1',
-            name: 'Ada Okafor',
-            image: 'https://cdn.example.com/ada.jpg',
-          },
+          guestName: 'Ada Okafor',
           items: [
             {
               quantity: 2,
@@ -1247,7 +1243,7 @@ describe('CreatorsService', () => {
           message: 'Congrats!',
           isAnonymous: false,
           createdAt: new Date('2026-10-06T11:00:00Z'),
-          supporter: { id: 'u-sup', name: 'Chidi Nwosu', image: null },
+          guestName: 'Chidi Nwosu',
           items: [
             {
               quantity: 1,
@@ -1321,7 +1317,6 @@ describe('CreatorsService', () => {
             status: { in: ['PAID', 'COMPLETED'] },
             OR: [
               { isAnonymous: false, guestName: contains },
-              { isAnonymous: false, supporter: { name: contains } },
               { message: contains },
             ],
           },
@@ -1361,8 +1356,7 @@ describe('CreatorsService', () => {
         status: 'COMPLETED',
         message: 'Loved the video',
         isAnonymous: false,
-        guestName: null,
-        supporter: { id: 'u-9', name: 'Ada Okafor', image: null },
+        guestName: 'Ada Okafor',
         payment: { providerReference: 'BMY-1' },
         items: [],
         createdAt: new Date('2026-01-06T11:42:00Z'),
@@ -1463,7 +1457,7 @@ describe('CreatorsService', () => {
           message: 'Great work!',
           isAnonymous: false,
           createdAt: new Date('2026-10-06T12:00:00Z'),
-          supporter: { id: 'u-1', name: 'Ada Okafor', image: null },
+          guestName: 'Ada Okafor',
           items: [
             {
               quantity: 1,

@@ -9,7 +9,6 @@ export const SUPPORT_WALL_SELECT = {
   guestName: true,
   message: true,
   isAnonymous: true,
-  supporter: { select: { name: true } },
   items: { select: { materialNameSnapshot: true }, take: 1 }, // single-material model
 } satisfies Prisma.SupportSelect;
 

@@ -28,8 +28,6 @@ model User {
   // Domain Relations
   roles                  UserRole[]
   creatorProfile         CreatorProfile?
-  supports               Support[]               @relation("SupporterSupports")
-  follows                Follow[]                @relation("SupporterFollows")
   notifications          Notification[]
   supportTickets         SupportTicket[]
   notificationPreference NotificationPreference?
@@ -67,8 +65,8 @@ model AuthAccount {
   scope                 String?
   expiresAt             DateTime?
   password              String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -114,35 +112,34 @@ model UserRole {
 // --------------------------------------------------------
 
 model CreatorProfile {
-  id                   String              @id @default(uuid())
-  userId               String              @unique
+  id                   String    @id @default(uuid())
+  userId               String    @unique
   creatorName          String?
-  slug                 String              @unique
+  slug                 String    @unique
   bio                  String?
   avatarUrl            String?
-  themeMaterialId      String?             // Selected appearance fabric theme ID (Appearance: Choose your theme)
-  thankYouMessage      String?             // Shown after payment and in receipt email
-  showSupportersOnPage Boolean             @default(true) // Display supporter count and public contributions
-  isPublished          Boolean             @default(false) // Must pass completeness check to publish
-  status               String              @default("REGISTERED") // REGISTERED, PROFILE_CREATED, KYC_PENDING, VERIFIED, ACTIVE, SUSPENDED, BANNED, DEACTIVATED
-  kycStatus            String              @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW, EXPIRED
+  themeMaterialId      String? // Selected appearance fabric theme ID (Appearance: Choose your theme)
+  thankYouMessage      String? // Shown after payment and in receipt email
+  showSupportersOnPage Boolean   @default(true) // Display supporter count and public contributions
+  isPublished          Boolean   @default(false) // Must pass completeness check to publish
+  status               String    @default("REGISTERED") // REGISTERED, PROFILE_CREATED, KYC_PENDING, VERIFIED, ACTIVE, SUSPENDED, BANNED, DEACTIVATED
+  kycStatus            String    @default("NOT_SUBMITTED") // NOT_SUBMITTED, PENDING, VERIFIED, REJECTED, NEEDS_REVIEW, EXPIRED
   kycVerifiedAt        DateTime?
-  kycBlockedAt         DateTime?           // Set when an admin revokes verification; blocks re-verification until lifted
+  kycBlockedAt         DateTime? // Set when an admin revokes verification; blocks re-verification until lifted
   kycBlockedReason     String?
-  createdAt            DateTime            @default(now())
-  updatedAt            DateTime            @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  user           User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  themeMaterial  Material?           @relation("CreatorThemeMaterial", fields: [themeMaterialId], references: [id], onDelete: SetNull)
-  socialLinks    CreatorSocialLink[]
-  materials      CreatorMaterial[]
+  user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  themeMaterial   Material?           @relation("CreatorThemeMaterial", fields: [themeMaterialId], references: [id], onDelete: SetNull)
+  socialLinks     CreatorSocialLink[]
+  materials       CreatorMaterial[]
   customMaterials Material[]          @relation("CustomMaterials")
-  supports       Support[]           @relation("CreatorSupports")
-  payouts        Payout[]
-  payoutMethods  PayoutMethod[]
-  posts          Post[]
-  followers      Follow[]            @relation("CreatorFollowers")
-  kycSubmissions KycSubmission[]
+  supports        Support[]           @relation("CreatorSupports")
+  payouts         Payout[]
+  payoutMethods   PayoutMethod[]
+  posts           Post[]
+  kycSubmissions  KycSubmission[]
 
   @@index([slug])
   @@map("creator_profiles")
@@ -151,7 +148,7 @@ model CreatorProfile {
 model CreatorSocialLink {
   id        String   @id @default(uuid())
   creatorId String
-  platform  String   // twitter, instagram, youtube, tiktok, etc.
+  platform  String // twitter, instagram, youtube, tiktok, etc.
   url       String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -166,20 +163,20 @@ model CreatorSocialLink {
 // --------------------------------------------------------
 
 model Material {
-  id                 String   @id @default(uuid())
-  creatorId          String?  // null for platform materials; creator profile id for custom creator materials
-  name               String   // Ankara, Lace, Aso-oke, Adire or custom
-  slug               String   @unique
-  description        String?
-  imageUrl           String?  // Legacy / fallback image
-  thumbnailSmallUrl  String?  // Small card thumbnail (e.g. 80x80 for grid selectors)
-  thumbnailLargeUrl  String?  // Large preview image (e.g. 400x400 for material detail)
-  color              String?  // Hexadecimal color code (e.g. #7F3516)
-  defaultPrice       Int      @default(0) // Minor units (kobo)
-  currency           String   @default("NGN")
-  status             String   @default("ACTIVE")
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id                String   @id @default(uuid())
+  creatorId         String? // null for platform materials; creator profile id for custom creator materials
+  name              String // Ankara, Lace, Aso-oke, Adire or custom
+  slug              String   @unique
+  description       String?
+  imageUrl          String? // Legacy / fallback image
+  thumbnailSmallUrl String? // Small card thumbnail (e.g. 80x80 for grid selectors)
+  thumbnailLargeUrl String? // Large preview image (e.g. 400x400 for material detail)
+  color             String? // Hexadecimal color code (e.g. #7F3516)
+  defaultPrice      Int      @default(0) // Minor units (kobo)
+  currency          String   @default("NGN")
+  status            String   @default("ACTIVE")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   creator          CreatorProfile?   @relation("CustomMaterials", fields: [creatorId], references: [id], onDelete: Cascade)
   themeCreators    CreatorProfile[]  @relation("CreatorThemeMaterial")
@@ -193,7 +190,7 @@ model CreatorMaterial {
   id          String   @id @default(uuid())
   creatorId   String
   materialId  String
-  price       Int      // Minor units (kobo)
+  price       Int // Minor units (kobo)
   currency    String   @default("NGN")
   displayName String?
   description String?
@@ -216,7 +213,6 @@ model CreatorMaterial {
 
 model Support {
   id            String   @id @default(uuid())
-  supporterId   String?
   creatorId     String
   subtotal      Int // Minor units
   platformFee   Int // Minor units
@@ -231,13 +227,11 @@ model Support {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  supporter User?           @relation("SupporterSupports", fields: [supporterId], references: [id], onDelete: Cascade)
-  creator   CreatorProfile  @relation("CreatorSupports", fields: [creatorId], references: [id], onDelete: Cascade)
-  items     SupportItem[]
-  payment   Payment?
-  tickets   SupportTicket[]
+  creator CreatorProfile  @relation("CreatorSupports", fields: [creatorId], references: [id], onDelete: Cascade)
+  items   SupportItem[]
+  payment Payment?
+  tickets SupportTicket[]
 
-  @@index([supporterId])
   @@index([createdAt])
   @@index([creatorId, createdAt(sort: Desc), id(sort: Desc)])
   @@map("supports")
@@ -247,10 +241,10 @@ model SupportItem {
   id                   String   @id @default(uuid())
   supportId            String
   creatorMaterialId    String
-  materialNameSnapshot String   // Historical snapshot of material name
-  unitPrice            Int      // Historical price snapshot in minor units
-  quantity             Decimal  @db.Decimal(10,2)     // Must be > 0
-  totalPrice           Int      // unitPrice * quantity
+  materialNameSnapshot String // Historical snapshot of material name
+  unitPrice            Int // Historical price snapshot in minor units
+  quantity             Decimal  @db.Decimal(10, 2) // Must be > 0
+  totalPrice           Int // unitPrice * quantity
   currency             String   @default("NGN")
   createdAt            DateTime @default(now())
 
@@ -261,18 +255,18 @@ model SupportItem {
 }
 
 model Payment {
-  id                   String    @id @default(uuid())
-  supportId            String    @unique
-  provider             String    @default("PAYSTACK")
-  providerReference    String
+  id                    String    @id @default(uuid())
+  supportId             String    @unique
+  provider              String    @default("PAYSTACK")
+  providerReference     String
   providerTransactionId String?
-  amount               Int       // Minor units
-  currency             String    @default("NGN")
-  status               String    @default("PENDING") // PENDING, PROCESSING, SUCCESS, FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
-  paidAt               DateTime?
-  metadata             Json?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  amount                Int // Minor units
+  currency              String    @default("NGN")
+  status                String    @default("PENDING") // PENDING, PROCESSING, SUCCESS, FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
+  paidAt                DateTime?
+  metadata              Json?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   support Support        @relation(fields: [supportId], references: [id], onDelete: Cascade)
   events  PaymentEvent[]
@@ -303,20 +297,20 @@ model PaymentEvent {
 }
 
 model Refund {
-  id                String   @id @default(uuid())
+  id                String    @id @default(uuid())
   paymentId         String
-  amount            Int      // Minor units
-  currency          String   @default("NGN")
+  amount            Int // Minor units
+  currency          String    @default("NGN")
   reason            String?
   providerReference String?
-  status            String   @default("PENDING") // PENDING, PROCESSING, PROCESSED, FAILED
+  status            String    @default("PENDING") // PENDING, PROCESSING, PROCESSED, FAILED
   initiatedBy       String? // Admin user id
   failureReason     String?
-  creatorDebit      Int      @default(0) // Minor units taken back from the creator
-  platformDebit     Int      @default(0) // Minor units taken back from the platform fee
+  creatorDebit      Int       @default(0) // Minor units taken back from the creator
+  platformDebit     Int       @default(0) // Minor units taken back from the platform fee
   processedAt       DateTime?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
 
@@ -331,8 +325,8 @@ model Refund {
 
 model Account {
   id        String   @id @default(uuid())
-  ownerType String   // CREATOR, PLATFORM
-  ownerId   String   // creatorId or 'PLATFORM'
+  ownerType String // CREATOR, PLATFORM
+  ownerId   String // creatorId or 'PLATFORM'
   currency  String   @default("NGN")
   status    String   @default("ACTIVE")
   createdAt DateTime @default(now())
@@ -349,9 +343,9 @@ model LedgerEntry {
   id            String   @id @default(uuid())
   accountId     String
   transactionId String
-  entryType     String   // SUPPORT_PAYMENT, PLATFORM_FEE, PAYOUT_RESERVATION, PAYOUT_COMPLETED, PAYOUT_REVERSED, REFUND, ADJUSTMENT
-  direction     String   // CREDIT, DEBIT
-  amount        Int      // Minor units (positive integer)
+  entryType     String // SUPPORT_PAYMENT, PLATFORM_FEE, PAYOUT_RESERVATION, PAYOUT_COMPLETED, PAYOUT_REVERSED, REFUND, ADJUSTMENT
+  direction     String // CREDIT, DEBIT
+  amount        Int // Minor units (positive integer)
   currency      String   @default("NGN")
   reference     String
   metadata      Json?
@@ -427,18 +421,18 @@ model PayoutMethod {
 }
 
 model SupportTicket {
-  id        String   @id @default(uuid())
-  userId    String
-  payoutId  String?
-  supportId String? // Contribution the message is about
-  message   String
-  context   Json? // Snapshot of the payout/contribution details sent with the message
-  status    String   @default("OPEN") // OPEN, RESOLVED
+  id             String    @id @default(uuid())
+  userId         String
+  payoutId       String?
+  supportId      String? // Contribution the message is about
+  message        String
+  context        Json? // Snapshot of the payout/contribution details sent with the message
+  status         String    @default("OPEN") // OPEN, RESOLVED
   resolvedBy     String?
   resolvedAt     DateTime?
   resolutionNote String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   payout  Payout?  @relation(fields: [payoutId], references: [id], onDelete: SetNull)
@@ -461,7 +455,7 @@ model Post {
   title       String
   body        String
   visibility  String    @default("PUBLIC") // PUBLIC, EXCLUSIVE
-  status      String    @default("DRAFT")  // DRAFT, PUBLISHED, ARCHIVED
+  status      String    @default("DRAFT") // DRAFT, PUBLISHED, ARCHIVED
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -478,10 +472,10 @@ model Post {
 model Media {
   id         String   @id @default(uuid())
   ownerId    String
-  ownerType  String   // CREATOR, POST
+  ownerType  String // CREATOR, POST
   storageKey String
   mimeType   String
-  mediaType  String   // image, video, audio
+  mediaType  String // image, video, audio
   fileSize   Int
   status     String   @default("ACTIVE")
   createdAt  DateTime @default(now())
@@ -508,7 +502,7 @@ model PostEntitlement {
   id          String    @id @default(uuid())
   postId      String
   supporterId String
-  grantedBy   String    // SUPPORT, ADMIN, GIFT
+  grantedBy   String // SUPPORT, ADMIN, GIFT
   expiresAt   DateTime?
   createdAt   DateTime  @default(now())
 
@@ -522,20 +516,6 @@ model PostEntitlement {
 // --------------------------------------------------------
 // SOCIAL, NOTIFICATIONS, KYC, MODERATION & AUDIT
 // --------------------------------------------------------
-
-model Follow {
-  supporterId String
-  creatorId   String
-  createdAt   DateTime @default(now())
-
-  supporter User           @relation("SupporterFollows", fields: [supporterId], references: [id], onDelete: Cascade)
-  creator   CreatorProfile @relation("CreatorFollowers", fields: [creatorId], references: [id], onDelete: Cascade)
-
-  @@id([supporterId, creatorId])
-  @@index([creatorId])
-  @@index([supporterId])
-  @@map("follows")
-}
 
 model Notification {
   id        String    @id @default(uuid())
@@ -563,15 +543,15 @@ model NotificationPreference {
   // Support activity
   emailOnContribution   Boolean  @default(true)
   inAppOnContribution   Boolean  @default(true)
-  pushOnContribution   Boolean  @default(true)
+  pushOnContribution    Boolean  @default(true)
   // Payout updates (transactional)
   emailOnPayout         Boolean  @default(true)
   inAppOnPayout         Boolean  @default(true)
-  pushOnPayout         Boolean  @default(true)
+  pushOnPayout          Boolean  @default(true)
   // KYC & Security alerts
   emailOnSecurityAlert  Boolean  @default(true)
   inAppOnSecurityAlert  Boolean  @default(true)
-  pushOnSecurityAlert  Boolean  @default(true)
+  pushOnSecurityAlert   Boolean  @default(true)
   // Platform updates & creator tips
   emailOnProductUpdates Boolean  @default(false)
   emailOnCreatorTips    Boolean  @default(false)
@@ -583,19 +563,18 @@ model NotificationPreference {
   @@map("notification_preferences")
 }
 
-
 model KycSubmission {
   id                String    @id @default(uuid())
   creatorId         String
   provider          String    @default("DIDIT")
-  providerReference String?   // Provider session ID (Didit session_id)
-  providerStatus    String?   // Raw provider status label, e.g. "In Review"
+  providerReference String? // Provider session ID (Didit session_id)
+  providerStatus    String? // Raw provider status label, e.g. "In Review"
   status            String    @default("CREATED") // CREATED, IN_PROGRESS, NEEDS_REVIEW, VERIFIED, REJECTED, RESUBMISSION_REQUIRED, ABANDONED, EXPIRED, KYC_EXPIRED, CANCELLED
   workflowId        String?
-  environment       String?   // live, sandbox
-  claimedDetails    Json?     // Details entered by the creator before capture
-  decisionSummary   Json?     // Minimized provider decision (no images or URLs)
-  rejectionReason   String?   // User-safe explanation
+  environment       String? // live, sandbox
+  claimedDetails    Json? // Details entered by the creator before capture
+  decisionSummary   Json? // Minimized provider decision (no images or URLs)
+  rejectionReason   String? // User-safe explanation
   providerUpdatedAt DateTime? // Provider timestamp of the last applied event (out-of-order guard)
   lastSyncedAt      DateTime?
   completedAt       DateTime?
@@ -623,7 +602,7 @@ model KycEvent {
   providerEventId String
   eventType       String
   providerStatus  String?
-  payload         Json     // Redacted envelope (no decision media or PII)
+  payload         Json // Redacted envelope (no decision media or PII)
   createdAt       DateTime @default(now())
 
   submission KycSubmission? @relation(fields: [submissionId], references: [id], onDelete: SetNull)
@@ -634,17 +613,17 @@ model KycEvent {
 }
 
 model ContentReport {
-  id          String    @id @default(uuid())
-  reporterId  String
-  contentId   String
-  reason      String
-  description String?
-  status      String    @default("PENDING") // PENDING, UNDER_REVIEW, RESOLVED, REJECTED
-  reviewedBy  String?
-  reviewedAt  DateTime?
+  id             String    @id @default(uuid())
+  reporterId     String
+  contentId      String
+  reason         String
+  description    String?
+  status         String    @default("PENDING") // PENDING, UNDER_REVIEW, RESOLVED, REJECTED
+  reviewedBy     String?
+  reviewedAt     DateTime?
   resolutionNote String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   reporter User @relation("ReporterReports", fields: [reporterId], references: [id], onDelete: Cascade)
 

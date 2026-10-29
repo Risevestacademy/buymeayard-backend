@@ -32,7 +32,7 @@ export class SupportTicketsController {
 
 - \`message\`: what happened (1–2000 characters, trimmed). Show "Don’t include your password or PIN." under the field.
 - \`payoutId\` (optional): the payout's reference, amount, date and status are attached automatically ("Included automatically with your message"). Must be the signed-in creator's payout.
-- \`contributionId\` (optional): the same for a contribution. The creator who received it or the supporter who sent it can attach it.
+- \`contributionId\` (optional): the same for a contribution. The creator who received it can attach it.
 
 The message is stored and emailed to the support inbox (\`SUPPORT_EMAIL\`). If the email fails, the ticket is still saved and this still returns 201.
 
