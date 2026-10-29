@@ -265,9 +265,9 @@ The backend supports dual-mode authentication via Better Auth:
 ---
 
 ### Endpoints & Documentation
-- **API Base:** [http://localhost:3000/api/v1](http://localhost:3000/api/v1)
-- **Interactive Swagger Docs:** [http://localhost:3000/api/docs](http://localhost:3000/api/docs)
-- **Health Check:** [http://localhost:3000/health](http://localhost:3000/health)
+- **API Base:** [http://localhost:8000/api/v1](http://localhost:8000/api/v1)
+- **Interactive Swagger Docs:** [http://localhost:8000/api/docs](http://localhost:8000/api/docs)
+- **Health Check:** [http://localhost:8000/health](http://localhost:8000/health)
 - **Prisma Studio:** [http://localhost:5555](http://localhost:5555) (via `pnpm db:studio`)
 
 ---
@@ -312,7 +312,7 @@ The project includes a multi-stage `Dockerfile` optimized for production deploym
 docker build -t buymeayard-api .
 
 # Run the container
-docker run -p 3000:3000 \
+docker run -p 8000:8000 \
   -e DATABASE_URL="postgresql://..." \
   -e REDIS_URL="redis://..." \
   -e BETTER_AUTH_SECRET="your-production-secret" \
@@ -343,7 +343,7 @@ docker run -p 3000:3000 \
 | :--- | :--- |
 | **Database Schema** | [`docs/DATABASE_SCHEMA.md`](docs/DATABASE_SCHEMA.md) — Full ER diagram, table dictionaries, and financial invariants |
 | **End-to-End Testing (Postman)** | [`docs/TESTING_GUIDE.md`](docs/TESTING_GUIDE.md) — Step-by-step workflow test with the collection in [`docs/postman/`](docs/postman/) |
-| **API Reference (Swagger)** | [http://localhost:3000/api/docs](http://localhost:3000/api/docs) — Interactive API documentation (run `pnpm dev` first) |
+| **API Reference (Swagger)** | [http://localhost:8000/api/docs](http://localhost:8000/api/docs) — Interactive API documentation (run `pnpm dev` first) |
 | **Railway Deployment** | [`docs/RAILWAY_DEPLOYMENT.md`](docs/RAILWAY_DEPLOYMENT.md) — Staging deploy guide |
 | **CI Pipeline** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — Lint → Test → Build |
 | **Production Dockerfile** | [`Dockerfile`](Dockerfile) — Multi-stage Docker build |

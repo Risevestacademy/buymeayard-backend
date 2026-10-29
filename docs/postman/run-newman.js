@@ -6,8 +6,8 @@
  *   NODE_PATH=$(npm root -g) node docs/postman/run-newman.js
  *
  * Environment overrides (defaults match the local setup):
- *   BASE_URL      http://localhost:3000/api/v1
- *   HOST_URL      http://localhost:3000
+ *   BASE_URL      http://localhost:8000/api/v1
+ *   HOST_URL      http://localhost:8000
  *   PG_CONTAINER  buymeayard-postgres
  *   PG_DB         buymeayard
  *
@@ -18,8 +18,8 @@ const { execSync } = require('child_process');
 const newman = require('newman');
 
 const dir = __dirname;
-const baseUrl = process.env.BASE_URL || 'http://localhost:3000/api/v1';
-const hostUrl = process.env.HOST_URL || 'http://localhost:3000';
+const baseUrl = process.env.BASE_URL || 'http://localhost:8000/api/v1';
+const hostUrl = process.env.HOST_URL || 'http://localhost:8000';
 const container = process.env.PG_CONTAINER || 'buymeayard-postgres';
 const db = process.env.PG_DB || 'buymeayard';
 

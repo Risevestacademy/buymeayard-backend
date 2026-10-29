@@ -16,11 +16,11 @@ export function parseKycChecks(value: string | undefined): string[] {
 }
 
 export const envSchema = z.object({
-  PORT: z.coerce.number().default(3000),
+  PORT: z.coerce.number().default(8000),
   NODE_ENV: z
     .enum(['development', 'production', 'test'])
     .default('development'),
-  API_URL: z.string().url().default('http://localhost:3000'),
+  API_URL: z.string().url().default('http://localhost:8000'),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   REDIS_URL: z
@@ -31,7 +31,7 @@ export const envSchema = z.object({
   BETTER_AUTH_SECRET: z
     .string()
     .min(16, 'BETTER_AUTH_SECRET must be at least 16 characters'),
-  BETTER_AUTH_URL: z.string().url().default('http://localhost:3000'),
+  BETTER_AUTH_URL: z.string().url().default('http://localhost:8000'),
 
   PAYSTACK_SECRET_KEY: z.string().default('sk_test_mock'),
   PAYSTACK_PUBLIC_KEY: z.string().default('pk_test_mock'),

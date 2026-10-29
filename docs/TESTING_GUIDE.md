@@ -72,7 +72,7 @@ Keep `PLATFORM_FEE_PERCENTAGE=10`. The amount assertions assume a 10% fee.
 pnpm dev
 ```
 
-Wait for `🚀 Buy Me a Yard API running at http://localhost:3000/api/v1`. Restart the API after any `.env` change.
+Wait for `🚀 Buy Me a Yard API running at http://localhost:8000/api/v1`. Restart the API after any `.env` change.
 
 ### 2.5 Import into Postman
 
@@ -315,7 +315,7 @@ See the next section.
 ## 6. Testing against the real Didit sandbox
 
 1. In the Didit Console, use your **sandbox** application. Copy the API key, the workflow id and the webhook destination's `secret_shared_key` into `DIDIT_API_KEY`, `DIDIT_WORKFLOW_ID` and `DIDIT_WEBHOOK_SECRET`. Put the same workflow id and secret into the Postman variables `diditWorkflowId` and `diditWebhookSecret`.
-2. Expose your local API so Didit can reach it. For example, `ngrok http 3000`, then set the Didit webhook URL to `https://<ngrok-host>/webhooks/didit`. The webhook path has **no** `/api/v1` prefix.
+2. Expose your local API so Didit can reach it. For example, `ngrok http 8000`, then set the Didit webhook URL to `https://<ngrok-host>/webhooks/didit`. The webhook path has **no** `/api/v1` prefix.
 3. In folder 05, **Start session** now returns 200. Open `verificationUrl` from the console and complete the hosted flow. Didit then sends real webhooks. Alternatively, trigger approved / declined / in-review test webhooks from the Didit Console.
 4. In folder 06, skip the simulated **In Review** webhook. Once Didit puts the session in review, **Option A — Admin approve** returns 200 and Didit echoes the decision back by webhook.
 5. The signed simulation requests still work alongside real traffic, because they use their own session ids.
