@@ -163,7 +163,7 @@ Use the Didit **sandbox** application's keys in development. The Didit Console c
 
 **Sandbox only works with `NODE_ENV=development`.** When `NODE_ENV=production` (which includes our staging deployment), the backend deliberately ignores webhooks whose `environment` is `sandbox`. Use a live Didit application there, or expect results to arrive only through the status poll (§4).
 
-Didit can only reach `/webhooks/didit` on a public URL. On a local machine, use a tunnel (`cloudflared tunnel --url http://localhost:3000` or `ngrok http 3000`), or leave `DIDIT_WEBHOOK_SECRET` empty and rely on `GET /creators/me/kyc` pulling the result once an attempt is more than 60 seconds old.
+Didit can only reach `/webhooks/didit` on a public URL. On a local machine, use a tunnel (`cloudflared tunnel --url http://localhost:8000` or `ngrok http 8000`), or leave `DIDIT_WEBHOOK_SECRET` empty and rely on `GET /creators/me/kyc` pulling the result once an attempt is more than 60 seconds old.
 
 ## 8. Troubleshooting: verification never completes
 
