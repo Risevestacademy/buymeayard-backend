@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import * as nodemailer from 'nodemailer';
+import { renderEmailTemplate } from '../auth/email-templates/render-email-template';
 import {
   PayoutNotificationEvent,
   ContributionNotificationEvent,
@@ -34,6 +35,18 @@ export class NotificationDispatcherService {
         pass: process.env.SMTP_PASS,
       },
     });
+  }
+
+  async sendCreatorWelcomeEmail(to: string, name?: string): Promise<void> {
+    const html = renderEmailTemplate('welcome', {
+      name: name || 'there',
+      logoUrl:
+        process.env.EMAIL_LOGO_URL ||
+        'https://res.cloudinary.com/dymntdsp9/image/upload/v1792739782/logo_mafsug.png',
+      appUrl: this.frontendUrl,
+      dashboardUrl: `${this.frontendUrl}/dashboard`,
+    });
+    await this.sendEmail(to, 'Welcome to BuyMeAYard', html);
   }
 
   /**
