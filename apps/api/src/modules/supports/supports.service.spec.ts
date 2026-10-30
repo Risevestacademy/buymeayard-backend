@@ -144,7 +144,12 @@ describe('SupportsService.getPublicWall', () => {
             message: 'Keep creating',
             isAnonymous: false,
             supporter: null,
-            items: [{ materialNameSnapshot: 'Adire' }],
+            items: [
+              {
+                materialNameSnapshot: 'Adire',
+                creatorMaterial: { materialId: 'mat-adire' },
+              },
+            ],
           },
         ]),
         count: jest.fn().mockResolvedValue(128),
@@ -165,7 +170,12 @@ describe('SupportsService.getPublicWall', () => {
     const wall = await service.getPublicWall('adeola', {});
     expect(wall.supporterCount).toBe(128);
     expect(wall.items).toEqual([
-      expect.objectContaining({ displayName: 'Tomi', materialName: 'Adire' }),
+      expect.objectContaining({
+        id: 's-1',
+        displayName: 'Tomi',
+        materialId: 'mat-adire',
+        materialName: 'Adire',
+      }),
     ]);
   });
 
