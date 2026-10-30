@@ -267,6 +267,12 @@ export class DashboardContributionSupporterDto {
 }
 
 export class DashboardContributionMaterialDto {
+  @ApiPropertyOptional({
+    description:
+      'Platform material id (e.g. Adire), for picking the swatch. Stays the same if the creator renames the fabric.',
+  })
+  id?: string;
+
   @ApiProperty({
     example: 'Ankara',
     description: 'Material / fabric name',

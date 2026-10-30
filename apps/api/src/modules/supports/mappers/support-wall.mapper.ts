@@ -12,7 +12,15 @@ export const SUPPORT_WALL_SELECT = {
   items: {
     select: {
       materialNameSnapshot: true,
-      creatorMaterial: { select: { materialId: true } },
+      quantity: true,
+      creatorMaterial: {
+        select: {
+          materialId: true,
+          material: {
+            select: { color: true, thumbnailSmallUrl: true, imageUrl: true },
+          },
+        },
+      },
     },
     take: 1, // single-material model
   },
@@ -23,11 +31,28 @@ type SupportWallRow = Prisma.SupportGetPayload<{
 }>;
 
 export function toSupportWallItem(row: SupportWallRow): SupportWallItemDto {
+  const item = row.items[0];
+  const platformMaterial = item?.creatorMaterial.material;
+  // Same shape as the creator dashboard's contribution `material`
+  const material = item
+    ? {
+        id: item.creatorMaterial.materialId,
+        name: item.materialNameSnapshot,
+        color: platformMaterial?.color || null,
+        thumbnailUrl:
+          platformMaterial?.thumbnailSmallUrl ||
+          platformMaterial?.imageUrl ||
+          null,
+        quantity: item.quantity.toNumber(),
+      }
+    : null;
+
   return {
     id: row.id,
     displayName: resolveDisplayName(row),
-    materialId: row.items[0]?.creatorMaterial.materialId ?? null,
-    materialName: row.items[0]?.materialNameSnapshot ?? null,
+    material,
+    materialId: material?.id ?? null,
+    materialName: material?.name ?? null,
     message: row.isAnonymous ? null : row.message || null,
     createdAt: row.createdAt,
   };

@@ -1538,6 +1538,7 @@ export class CreatorsService {
     const firstItem = support.items[0];
     const material = firstItem
       ? {
+          id: firstItem.creatorMaterial?.materialId,
           name: firstItem.materialNameSnapshot,
           color: firstItem.creatorMaterial?.material?.color || null,
           thumbnailUrl:

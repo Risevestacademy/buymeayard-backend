@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import { DashboardContributionMaterialDto } from '../../creators/dto/creator-dashboard.dto';
 import {
   IsInt,
   IsOptional,
@@ -37,14 +38,28 @@ export class SupportWallItemDto {
   displayName!: string;
 
   @ApiProperty({
+    type: DashboardContributionMaterialDto,
+    nullable: true,
+    description:
+      'The fabric gifted, same shape as on the creator dashboard: id, name, color, thumbnailUrl and yards (quantity).',
+  })
+  material!: DashboardContributionMaterialDto | null;
+
+  @ApiProperty({
     nullable: true,
     type: String,
-    description:
-      'The platform fabric (e.g. Adire) the gift was counted in, for picking its swatch. Stays the same if the creator renames it on their menu.',
+    deprecated: true,
+    description: 'Use material.id',
   })
   materialId!: string | null;
 
-  @ApiProperty({ example: 'Adire', nullable: true, type: String })
+  @ApiProperty({
+    example: 'Adire',
+    nullable: true,
+    type: String,
+    deprecated: true,
+    description: 'Use material.name',
+  })
   materialName!: string | null;
 
   @ApiProperty({ example: 'Keep creating!', nullable: true, type: String })
