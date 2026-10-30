@@ -1,5 +1,14 @@
-import { Controller, Post, Body, Headers, Req } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Headers,
+  Param,
+  ParseUUIDPipe,
+  Req,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import {
   ApiErrors,
   VALIDATION_ERROR,
@@ -10,6 +19,7 @@ import {
   InitializePaymentDto,
   InitializePaymentResponseDto,
 } from './dto/initialize-payment.dto';
+import { SupportStatusResponseDto } from './dto/support-status.dto';
 
 @ApiTags('payments')
 @Controller()
@@ -46,7 +56,32 @@ export class PaymentsController {
     },
   )
   async initialize(@Body() body: InitializePaymentDto) {
-    return this.paymentsService.initializePayment(body.supportId, body.email);
+    return this.paymentsService.initializePayment(
+      body.supportId,
+      body.email,
+      body.callbackUrl,
+    );
+  }
+
+  @Public()
+  @Get('supports/:supportId/status')
+  @ApiOperation({
+    summary: 'Check whether a gift has been paid',
+    description:
+      'For the page Paystack sends the supporter back to. Paystack confirms the payment by webhook, which can land a few seconds after the redirect, so poll this every second or two (up to about 15 seconds) until `paid` is true, then show `thankYouMessage`. Never treat the redirect itself as proof of payment. The unguessable support id is the only credential.',
+  })
+  @ApiParam({ name: 'supportId', description: 'From the intent/checkout call' })
+  @ApiResponse({ status: 200, type: SupportStatusResponseDto })
+  @ApiErrors(VALIDATION_ERROR, {
+    status: 404,
+    code: 'NOT_FOUND',
+    message: 'Support transaction not found',
+    when: 'The supportId does not exist.',
+  })
+  async supportStatus(
+    @Param('supportId', ParseUUIDPipe) supportId: string,
+  ): Promise<SupportStatusResponseDto> {
+    return this.paymentsService.getSupportStatus(supportId);
   }
 
   @Public()

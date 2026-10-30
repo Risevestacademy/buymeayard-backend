@@ -18,6 +18,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CONTRIBUTION_EVENTS } from '../notifications/events/notification.events';
 import { PayoutsService, TransferOutcome } from '../payouts/payouts.service';
 import { RefundsService } from './refunds.service';
+import { resolveCallbackUrl } from './utils/callback-url.util';
+import { resolveThankYouMessage } from '../supports/utils/thank-you-message.util';
 
 const TRANSFER_OUTCOMES: Record<string, TransferOutcome> = {
   'transfer.success': 'SUCCESS',
@@ -46,7 +48,12 @@ export class PaymentsService {
     private readonly refundsService: RefundsService,
   ) {}
 
-  async initializePayment(supportId: string, email?: string) {
+  async initializePayment(
+    supportId: string,
+    email?: string,
+    callbackUrl?: string,
+  ) {
+    const callback = resolveCallbackUrl(callbackUrl, supportId);
     const support = await this.prisma.support.findUnique({
       where: { id: supportId },
       include: { creator: { select: { status: true } } },
@@ -97,6 +104,7 @@ export class PaymentsService {
       amount: support.totalAmount,
       currency: support.currency,
       email: email || support.guestEmail || 'supporter@buymeayard.com',
+      callbackUrl: callback,
     });
 
     // Update payment with provider reference
@@ -117,6 +125,49 @@ export class PaymentsService {
       paymentId: payment.id,
       providerReference: initResult.providerReference,
       authorizationUrl: initResult.authorizationUrl,
+    };
+  }
+
+  /**
+   * What the page Paystack sends the supporter back to needs: whether the
+   * gift is paid yet (the webhook can land a moment after the redirect) and
+   * the thank-you message to show. The support id is the only credential.
+   */
+  async getSupportStatus(supportId: string) {
+    const support = await this.prisma.support.findUnique({
+      where: { id: supportId },
+      select: {
+        id: true,
+        status: true,
+        totalAmount: true,
+        currency: true,
+        items: { select: { quantity: true, materialNameSnapshot: true } },
+        creator: { select: { creatorName: true, thankYouMessage: true } },
+      },
+    });
+    if (!support) {
+      throw new NotFoundException({
+        code: ErrorCodes.NOT_FOUND,
+        message: 'Support transaction not found',
+      });
+    }
+
+    const yards = support.items.reduce(
+      (sum, item) => sum.add(item.quantity),
+      new Prisma.Decimal(0),
+    );
+    return {
+      supportId: support.id,
+      status: support.status,
+      paid:
+        support.status === SupportStatus.PAID ||
+        support.status === SupportStatus.COMPLETED,
+      amount: support.totalAmount,
+      currency: support.currency,
+      yards: yards.toNumber(),
+      materialName: support.items[0]?.materialNameSnapshot ?? null,
+      creatorName: support.creator.creatorName,
+      thankYouMessage: resolveThankYouMessage(support.creator.thankYouMessage),
     };
   }
 

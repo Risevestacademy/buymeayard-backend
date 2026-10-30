@@ -1,4 +1,4 @@
-import { IsEmail, IsOptional, IsUUID, MaxLength } from 'class-validator';
+import { IsEmail, IsOptional, IsUrl, IsUUID, MaxLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class InitializePaymentDto {
@@ -15,6 +15,20 @@ export class InitializePaymentDto {
   @IsEmail()
   @MaxLength(254)
   email?: string;
+
+  @ApiPropertyOptional({
+    example: 'https://buymeayard.com/adeola/thanks',
+    description:
+      'Page Paystack sends the supporter back to after paying. Must be on one of our own sites. We add `supportId` to it, and Paystack adds `reference` and `trxref`. Call GET /supports/:supportId/status there to confirm the payment.',
+  })
+  @IsOptional()
+  @IsUrl({
+    require_tld: false,
+    require_protocol: true,
+    protocols: ['http', 'https'],
+  })
+  @MaxLength(2000)
+  callbackUrl?: string;
 }
 
 export class InitializePaymentResponseDto {

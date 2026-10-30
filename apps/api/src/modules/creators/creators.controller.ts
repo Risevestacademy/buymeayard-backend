@@ -54,11 +54,15 @@ import {
   SupportQuoteQueryDto,
 } from './dto/create-support-intent.dto';
 import { SupportsService } from '../supports/supports.service';
+import { PaymentsService } from '../payments/payments.service';
+import { resolveCallbackUrl } from '../payments/utils/callback-url.util';
 import {
   SupportWallQueryDto,
   SupportWallResponseDto,
 } from '../supports/dto/support-wall.dto';
 import {
+  CheckoutGiftDto,
+  CheckoutGiftResponseDto,
   SupportIntentResponseDto,
   SupportQuoteResponseDto,
 } from '../supports/dto/guest-support.dto';
@@ -103,6 +107,7 @@ export class CreatorsController {
   constructor(
     private readonly creatorsService: CreatorsService,
     private readonly supportsService: SupportsService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   @Public()
@@ -1035,7 +1040,7 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
   @ApiOperation({
     summary: 'Create a guest support intent',
     description:
-      'Public endpoint for a guest to start a gift to a creator. No authentication required. Next, send the returned supportId to POST /payments/initialize to get the Paystack checkout URL.',
+      'Public endpoint for a guest to start a gift to a creator. No authentication required. To get the Paystack checkout URL in the same call, use POST /creators/:slug/supports/checkout instead. Otherwise send the returned supportId to POST /payments/initialize.',
   })
   @ApiParam({
     name: 'slug',
@@ -1050,6 +1055,36 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
     @Body() dto: CreateSupportIntentDto,
   ) {
     return this.supportsService.createGuestIntent(slug, dto);
+  }
+
+  @Public()
+  @Post(':slug/supports/checkout')
+  @ApiOperation({
+    summary: 'Start a gift and get the Paystack checkout URL in one call',
+    description:
+      'Public. Does what `supports/intent` then `POST /payments/initialize` do, in one request: creates the gift, opens a Paystack checkout and returns `authorizationUrl`. Redirect the supporter there. After paying, Paystack sends them to `callbackUrl` (we add `supportId`), where you confirm with GET /supports/:supportId/status.',
+  })
+  @ApiParam({ name: 'slug', example: 'adeola' })
+  @ApiBody({ type: CheckoutGiftDto })
+  @ApiResponse({ status: 201, type: CheckoutGiftResponseDto })
+  @ApiErrors(VALIDATION_ERROR, ...CREATOR_UNAVAILABLE_ERRORS, NO_MATERIAL_ERROR)
+  async checkoutGift(
+    @Param('slug') slug: string,
+    @Body() dto: CheckoutGiftDto,
+  ): Promise<CheckoutGiftResponseDto> {
+    // Reject a bad callbackUrl before anything is created
+    resolveCallbackUrl(dto.callbackUrl);
+    const intent = await this.supportsService.createGuestIntent(slug, dto);
+    const payment = await this.paymentsService.initializePayment(
+      intent.supportId,
+      dto.email,
+      dto.callbackUrl,
+    );
+    return {
+      ...intent,
+      paymentId: payment.paymentId,
+      authorizationUrl: payment.authorizationUrl,
+    };
   }
 
   @Public()

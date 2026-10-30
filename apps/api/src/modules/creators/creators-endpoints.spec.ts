@@ -23,6 +23,7 @@ const request = require('supertest');
 import { CreatorsController } from './creators.controller';
 import { CreatorsService } from './creators.service';
 import { SupportsService } from '../supports/supports.service';
+import { PaymentsService } from '../payments/payments.service';
 import { Reflector } from '@nestjs/core';
 
 describe('Creators Endpoints (HTTP Integration)', () => {
@@ -286,6 +287,7 @@ describe('Creators Endpoints (HTTP Integration)', () => {
       providers: [
         { provide: CreatorsService, useValue: creatorsService },
         { provide: SupportsService, useValue: {} },
+        { provide: PaymentsService, useValue: {} },
         Reflector,
       ],
     }).compile();

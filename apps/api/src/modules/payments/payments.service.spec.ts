@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 
 describe('PaymentsService.initializePayment contribution gate', () => {
@@ -84,6 +84,108 @@ describe('PaymentsService.initializePayment contribution gate', () => {
     await service.initializePayment('support-1', 'other@example.com');
     expect(provider.initializePayment).toHaveBeenCalledWith(
       expect.objectContaining({ email: 'other@example.com' }),
+    );
+  });
+});
+
+describe('PaymentsService checkout callback and status', () => {
+  function setup(support: Record<string, unknown> | null) {
+    const prisma = {
+      support: {
+        findUnique: jest.fn().mockResolvedValue(
+          support && {
+            id: 'support-1',
+            status: 'CREATED',
+            totalAmount: 500_000,
+            currency: 'NGN',
+            guestEmail: null,
+            creator: { status: 'ACTIVE' },
+            ...support,
+          },
+        ),
+        update: jest.fn(),
+      },
+      payment: {
+        create: jest.fn().mockResolvedValue({ id: 'payment-1' }),
+        update: jest.fn(),
+      },
+    };
+    const provider = {
+      providerName: 'PAYSTACK',
+      initializePayment: jest.fn().mockResolvedValue({
+        providerReference: 'ref-1',
+        authorizationUrl: 'https://checkout',
+      }),
+    };
+    return {
+      prisma,
+      provider,
+      service: new PaymentsService(
+        prisma as never,
+        provider as never,
+        {} as never,
+        { emit: jest.fn() } as never,
+        {} as never,
+        {} as never,
+      ),
+    };
+  }
+
+  it('sends the supporter back to the callback page with the support id', async () => {
+    process.env.FRONTEND_URL = 'https://buymeayard.com';
+    const { service, provider } = setup({});
+    await service.initializePayment(
+      'support-1',
+      undefined,
+      'https://buymeayard.com/adeola/thanks',
+    );
+    expect(provider.initializePayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callbackUrl: 'https://buymeayard.com/adeola/thanks?supportId=support-1',
+      }),
+    );
+  });
+
+  it('refuses a callback page on another site before creating a payment', async () => {
+    process.env.FRONTEND_URL = 'https://buymeayard.com';
+    const { service, prisma } = setup({});
+    await expect(
+      service.initializePayment('support-1', undefined, 'https://evil.com/x'),
+    ).rejects.toMatchObject({ response: { code: 'VALIDATION_ERROR' } });
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('reports a paid gift with the thank-you message', async () => {
+    const { service } = setup({
+      status: 'PAID',
+      items: [{ quantity: 1.5, materialNameSnapshot: 'Adire' }],
+      creator: { creatorName: 'Adeola', thankYouMessage: ' Thanks! ' },
+    });
+    await expect(service.getSupportStatus('support-1')).resolves.toMatchObject({
+      paid: true,
+      status: 'PAID',
+      amount: 500_000,
+      yards: 1.5,
+      materialName: 'Adire',
+      thankYouMessage: 'Thanks!',
+    });
+  });
+
+  it('is not paid while the webhook is still pending', async () => {
+    const { service } = setup({
+      status: 'PAYMENT_PENDING',
+      items: [],
+      creator: { creatorName: 'Adeola', thankYouMessage: null },
+    });
+    const res = await service.getSupportStatus('support-1');
+    expect(res.paid).toBe(false);
+    expect(res.thankYouMessage).toContain('Thank you');
+  });
+
+  it('404s for an unknown support', async () => {
+    const { service } = setup(null);
+    await expect(service.getSupportStatus('nope')).rejects.toBeInstanceOf(
+      NotFoundException,
     );
   });
 });
