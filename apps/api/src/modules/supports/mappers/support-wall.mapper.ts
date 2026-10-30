@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { SupportWallItemDto } from '../dto/support-wall.dto';
+import { toContributionMaterial } from './contribution-material.mapper';
 import { resolveDisplayName } from '../utils/support-visibility.util';
 
 // The query selects ONLY these columns, so fee and payment data never leave the database.
@@ -32,19 +33,14 @@ type SupportWallRow = Prisma.SupportGetPayload<{
 
 export function toSupportWallItem(row: SupportWallRow): SupportWallItemDto {
   const item = row.items[0];
-  const platformMaterial = item?.creatorMaterial.material;
   // Same shape as the creator dashboard's contribution `material`
   const material = item
-    ? {
-        id: item.creatorMaterial.materialId,
-        name: item.materialNameSnapshot,
-        color: platformMaterial?.color || null,
-        thumbnailUrl:
-          platformMaterial?.thumbnailSmallUrl ||
-          platformMaterial?.imageUrl ||
-          null,
-        quantity: item.quantity.toNumber(),
-      }
+    ? toContributionMaterial(
+        item.creatorMaterial.materialId,
+        item.materialNameSnapshot,
+        item.creatorMaterial.material,
+        item.quantity.toNumber(),
+      )
     : null;
 
   return {

@@ -9,9 +9,20 @@ describe('SupportsService guest gifting', () => {
     price: 200_000, // ₦2,000 per yard
     currency: 'NGN',
     displayName: null,
-    material: { name: 'Adire' },
+    materialId: 'mat-adire',
+    material: {
+      name: 'Adire',
+      color: '#7F3516',
+      thumbnailSmallUrl: 'https://cdn/adire-sm.png',
+      imageUrl: null,
+    },
   };
-  const ankara = { ...adire, id: 'cm-ankara', material: { name: 'Ankara' } };
+  const ankara = {
+    ...adire,
+    id: 'cm-ankara',
+    materialId: 'mat-ankara',
+    material: { ...adire.material, name: 'Ankara' },
+  };
 
   function setup(
     creator: Record<string, unknown> | null = {},
@@ -68,6 +79,13 @@ describe('SupportsService guest gifting', () => {
       amount: 500_000,
       currency: 'NGN',
       yards: 2.5,
+      material: {
+        id: 'mat-adire',
+        name: 'Adire',
+        color: '#7F3516',
+        thumbnailUrl: 'https://cdn/adire-sm.png',
+        quantity: 2.5,
+      },
       materialName: 'Adire',
       thankYouMessage: 'Thank you so much for your support! It means a lot.',
     });
@@ -95,6 +113,7 @@ describe('SupportsService guest gifting', () => {
     const { service } = setup({}, { themed: null, fallback: ankara });
     const res = await service.quoteGift('adeola', { amount: 5000 });
     expect(res.materialName).toBe('Ankara');
+    expect(res.material).toMatchObject({ id: 'mat-ankara', name: 'Ankara' });
   });
 
   it('refuses when the creator has no active material', async () => {

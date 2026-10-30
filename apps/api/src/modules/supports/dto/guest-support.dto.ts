@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsUrl, MaxLength } from 'class-validator';
+import { DashboardContributionMaterialDto } from '../../creators/dto/creator-dashboard.dto';
 import { CreateSupportIntentDto } from '../../creators/dto/create-support-intent.dto';
 
 export class SupportQuoteResponseDto {
@@ -16,8 +17,16 @@ export class SupportQuoteResponseDto {
   yards!: number;
 
   @ApiProperty({
+    type: DashboardContributionMaterialDto,
+    description:
+      "The creator's theme fabric the gift is counted in, same shape as the creator dashboard: id, name, color, thumbnailUrl and yards (quantity)",
+  })
+  material!: DashboardContributionMaterialDto;
+
+  @ApiProperty({
     example: 'Adire',
-    description: "The creator's theme fabric the gift is counted in",
+    deprecated: true,
+    description: 'Use material.name',
   })
   materialName!: string;
 }

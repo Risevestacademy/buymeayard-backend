@@ -18,6 +18,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CONTRIBUTION_EVENTS } from '../notifications/events/notification.events';
 import { PayoutsService, TransferOutcome } from '../payouts/payouts.service';
 import { RefundsService } from './refunds.service';
+import { toContributionMaterial } from '../supports/mappers/contribution-material.mapper';
 import { resolveCallbackUrl } from './utils/callback-url.util';
 import { resolveThankYouMessage } from '../supports/utils/thank-you-message.util';
 
@@ -141,7 +142,24 @@ export class PaymentsService {
         status: true,
         totalAmount: true,
         currency: true,
-        items: { select: { quantity: true, materialNameSnapshot: true } },
+        items: {
+          select: {
+            quantity: true,
+            materialNameSnapshot: true,
+            creatorMaterial: {
+              select: {
+                materialId: true,
+                material: {
+                  select: {
+                    color: true,
+                    thumbnailSmallUrl: true,
+                    imageUrl: true,
+                  },
+                },
+              },
+            },
+          },
+        },
         creator: { select: { creatorName: true, thankYouMessage: true } },
       },
     });
@@ -165,6 +183,14 @@ export class PaymentsService {
       amount: support.totalAmount,
       currency: support.currency,
       yards: yards.toNumber(),
+      material: support.items[0]
+        ? toContributionMaterial(
+            support.items[0].creatorMaterial.materialId,
+            support.items[0].materialNameSnapshot,
+            support.items[0].creatorMaterial.material,
+            yards.toNumber(),
+          )
+        : null,
       materialName: support.items[0]?.materialNameSnapshot ?? null,
       creatorName: support.creator.creatorName,
       thankYouMessage: resolveThankYouMessage(support.creator.thankYouMessage),

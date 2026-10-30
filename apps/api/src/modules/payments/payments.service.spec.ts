@@ -158,7 +158,20 @@ describe('PaymentsService checkout callback and status', () => {
   it('reports a paid gift with the thank-you message', async () => {
     const { service } = setup({
       status: 'PAID',
-      items: [{ quantity: 1.5, materialNameSnapshot: 'Adire' }],
+      items: [
+        {
+          quantity: 1.5,
+          materialNameSnapshot: 'Adire',
+          creatorMaterial: {
+            materialId: 'mat-adire',
+            material: {
+              color: '#7F3516',
+              thumbnailSmallUrl: 'https://cdn/adire-sm.png',
+              imageUrl: null,
+            },
+          },
+        },
+      ],
       creator: { creatorName: 'Adeola', thankYouMessage: ' Thanks! ' },
     });
     await expect(service.getSupportStatus('support-1')).resolves.toMatchObject({
@@ -166,6 +179,13 @@ describe('PaymentsService checkout callback and status', () => {
       status: 'PAID',
       amount: 500_000,
       yards: 1.5,
+      material: {
+        id: 'mat-adire',
+        name: 'Adire',
+        color: '#7F3516',
+        thumbnailUrl: 'https://cdn/adire-sm.png',
+        quantity: 1.5,
+      },
       materialName: 'Adire',
       thankYouMessage: 'Thanks!',
     });
