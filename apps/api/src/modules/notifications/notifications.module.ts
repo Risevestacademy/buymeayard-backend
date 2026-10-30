@@ -16,3 +16,4 @@ import { InfrastructureNotificationsModule } from '../../infrastructure/notifica
   exports: [NotificationsService, NotificationDispatcherService],
 })
 export class NotificationsModule {}
+
