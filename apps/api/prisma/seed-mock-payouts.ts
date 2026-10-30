@@ -141,7 +141,6 @@ async function seedCreator(
 
     const support = await prisma.support.create({
       data: {
-        supporterId: null,
         creatorId: creator.id,
         guestName,
         guestEmail,

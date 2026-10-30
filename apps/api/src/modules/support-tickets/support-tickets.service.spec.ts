@@ -90,7 +90,7 @@ describe('SupportTicketsService', () => {
     expect(prisma.supportTicket.create).not.toHaveBeenCalled();
   });
 
-  it('attaches a contribution the user received or sent', async () => {
+  it('attaches a contribution the user received', async () => {
     const { service, prisma } = setup({
       support: {
         id: 'sup-1',
@@ -108,7 +108,7 @@ describe('SupportTicketsService', () => {
     expect(prisma.support.findFirst).toHaveBeenCalledWith({
       where: {
         id: 'sup-1',
-        OR: [{ creator: { userId: 'user-1' } }, { supporterId: 'user-1' }],
+        creator: { userId: 'user-1' },
       },
     });
     expect(prisma.supportTicket.create).toHaveBeenCalledWith({

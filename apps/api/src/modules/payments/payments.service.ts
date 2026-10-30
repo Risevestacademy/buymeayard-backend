@@ -49,7 +49,7 @@ export class PaymentsService {
   async initializePayment(supportId: string, email?: string) {
     const support = await this.prisma.support.findUnique({
       where: { id: supportId },
-      include: { supporter: true, creator: { select: { status: true } } },
+      include: { creator: { select: { status: true } } },
     });
 
     if (!support) {
@@ -96,11 +96,7 @@ export class PaymentsService {
       supportId: support.id,
       amount: support.totalAmount,
       currency: support.currency,
-      email:
-        email ||
-        support.guestEmail ||
-        support.supporter?.email ||
-        'supporter@buymeayard.com',
+      email: email || support.guestEmail || 'supporter@buymeayard.com',
     });
 
     // Update payment with provider reference
@@ -188,9 +184,6 @@ export class PaymentsService {
               creator: {
                 select: { userId: true },
               },
-              supporter: {
-                select: { name: true, email: true },
-              },
               items: true,
             },
           },
@@ -248,12 +241,10 @@ export class PaymentsService {
             .join(', ') || 'Fabric';
         const supporterName = payment.support.isAnonymous
           ? 'Anonymous'
-          : payment.support.guestName ||
-            payment.support.supporter?.name ||
-            'A supporter';
+          : payment.support.guestName || 'A supporter';
         const supporterEmail = payment.support.isAnonymous
           ? undefined
-          : payment.support.guestEmail || payment.support.supporter?.email;
+          : payment.support.guestEmail || undefined;
 
         this.eventEmitter.emit(CONTRIBUTION_EVENTS.RECEIVED, {
           supportId: payment.support.id,

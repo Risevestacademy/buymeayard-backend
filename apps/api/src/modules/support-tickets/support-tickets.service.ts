@@ -101,12 +101,12 @@ export class SupportTicketsService {
     };
   }
 
-  /** The creator who received the contribution, or the supporter who sent it. */
+  /** The contribution, if the user is the creator who received it. */
   private async getContributionContext(userId: string, supportId: string) {
     const support = await this.prisma.support.findFirst({
       where: {
         id: supportId,
-        OR: [{ creator: { userId } }, { supporterId: userId }],
+        creator: { userId },
       },
     });
     if (!support) {

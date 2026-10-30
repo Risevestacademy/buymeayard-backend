@@ -175,7 +175,7 @@ export class AdminDashboardService {
           _count: true,
         }),
         this.prisma.$queryRaw<{ n: bigint }[]>`
-          SELECT COUNT(DISTINCT COALESCE("supporterId", lower("guestEmail"), id)) AS n
+          SELECT COUNT(DISTINCT COALESCE(lower("guestEmail"), id)) AS n
           FROM supports
           WHERE status IN ('PAID','COMPLETED') AND "createdAt" >= ${gte} AND "createdAt" < ${lt}`,
       ]);

@@ -14,7 +14,6 @@ import {
 
 const SUPPORT_LIST_INCLUDE = {
   creator: { select: { id: true, slug: true, creatorName: true } },
-  supporter: { select: { id: true, email: true, name: true } },
   payment: {
     select: { id: true, status: true, providerReference: true, paidAt: true },
   },

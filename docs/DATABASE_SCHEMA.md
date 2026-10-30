@@ -201,7 +201,6 @@ Represents an intent or completed purchase of yards for a creator.
 | Column | Type | Nullable | Default | Constraints | Description |
 | :--- | :--- | :---: | :---: | :--- | :--- |
 | `id` | `UUID` | No | `uuid()` | `PRIMARY KEY` | Support transaction ID |
-| `supporterId` | `UUID` | No | — | `INDEX, FK -> users(id)` | Supporter user account |
 | `creatorId` | `UUID` | No | — | `INDEX, FK -> creator_profiles(id)` | Recipient creator |
 | `subtotal` | `INT` | No | — | Minor units (Kobo) | Sum of item totals |
 | `platformFee` | `INT` | No | — | Minor units (Kobo) | Platform share (e.g. 10%) |
@@ -305,11 +304,7 @@ Creator updates and supporter-exclusive content.
 
 *Constraint:* `UNIQUE(postId, supporterId)` on `post_entitlements`.
 
-#### `follows`
-Creator followership relationships.
-
-| Column | Type | Constraints | Description |
-| :--- | :--- | :--- | :--- |
+--- | :--- | :--- | :--- |
 | `supporterId` | `UUID` | `FK -> users(id) ON DELETE CASCADE` | Follower |
 | `creatorId` | `UUID` | `FK -> creator_profiles(id) ON DELETE CASCADE` | Creator being followed |
 | `createdAt` | `TIMESTAMPTZ` | Default `now()` | Follow timestamp |

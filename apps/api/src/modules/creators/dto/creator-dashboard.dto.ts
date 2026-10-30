@@ -221,7 +221,7 @@ export class DashboardBalanceDto {
 export class DashboardContributionSupporterDto {
   @ApiPropertyOptional({
     example: 'u-1234',
-    description: 'Supporter user ID, or null if anonymous',
+    description: 'Always null: supporters are guests and have no user ID',
     nullable: true,
   })
   id?: string | null;

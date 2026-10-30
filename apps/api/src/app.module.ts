@@ -19,14 +19,12 @@ import { QueuesModule } from './infrastructure/queues/queues.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { CreatorsModule } from './modules/creators/creators.module';
-import { SupportersModule } from './modules/supporters/supporters.module';
 import { MaterialsModule } from './modules/materials/materials.module';
 import { SupportsModule } from './modules/supports/supports.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { LedgerModule } from './modules/ledger/ledger.module';
 import { PayoutsModule } from './modules/payouts/payouts.module';
 import { ContentModule } from './modules/content/content.module';
-import { FollowsModule } from './modules/follows/follows.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { KycModule } from './modules/kyc/kyc.module';
 import { ModerationModule } from './modules/moderation/moderation.module';
@@ -72,14 +70,12 @@ import { AuditLogInterceptor } from './modules/admin/interceptors/audit-log.inte
     AuthModule,
     UsersModule,
     CreatorsModule,
-    SupportersModule,
     MaterialsModule,
     SupportsModule,
     PaymentsModule,
     LedgerModule,
     PayoutsModule,
     ContentModule,
-    FollowsModule,
     NotificationsModule,
     KycModule,
     ModerationModule,

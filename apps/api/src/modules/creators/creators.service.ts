@@ -43,7 +43,6 @@ import { Prisma } from '@prisma/client';
 import { buildPagination } from '../../common/utils/pagination.util';
 
 const CONTRIBUTION_INCLUDE = {
-  supporter: { select: { id: true, name: true, image: true } },
   payment: { select: { providerReference: true } },
   items: { include: { creatorMaterial: { include: { material: true } } } },
 } satisfies Prisma.SupportInclude;
@@ -1523,7 +1522,6 @@ export class CreatorsService {
     const contains = { contains: term, mode: 'insensitive' as const };
     where.OR = [
       { isAnonymous: false, guestName: contains },
-      { isAnonymous: false, supporter: { name: contains } },
       { message: contains },
     ];
     return where;
@@ -1535,7 +1533,7 @@ export class CreatorsService {
     const isAnonymous = support.isAnonymous;
     const supporterName = isAnonymous
       ? 'Anonymous'
-      : support.guestName?.trim() || support.supporter?.name || 'Supporter';
+      : support.guestName?.trim() || 'Supporter';
 
     const firstItem = support.items[0];
     const material = firstItem
@@ -1555,10 +1553,10 @@ export class CreatorsService {
     return {
       id: support.id,
       supporter: {
-        id: isAnonymous ? null : support.supporter?.id || null,
+        id: null,
         name: supporterName,
         initials: this.extractInitials(supporterName),
-        avatarUrl: isAnonymous ? null : support.supporter?.image || null,
+        avatarUrl: null,
         isAnonymous,
       },
       material,
