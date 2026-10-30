@@ -359,3 +359,83 @@ describe('PaymentsService.handleWebhook refund events', () => {
     },
   );
 });
+
+describe('PaymentsService.handleWebhook charge.success', () => {
+  it('tells the creator which fabric was gifted, in the dashboard material shape', async () => {
+    const payment = {
+      id: 'payment-1',
+      supportId: 'support-1',
+      status: 'PROCESSING',
+      currency: 'NGN',
+      support: {
+        id: 'support-1',
+        creatorId: 'creator-1',
+        creatorAmount: 450_000,
+        platformFee: 50_000,
+        isAnonymous: false,
+        guestName: 'Tomi',
+        guestEmail: 'tomi@example.com',
+        message: 'Keep creating',
+        creator: { userId: 'user-1' },
+        items: [
+          {
+            quantity: 2.5,
+            materialNameSnapshot: 'Adire',
+            creatorMaterial: {
+              materialId: 'mat-adire',
+              material: {
+                color: '#7F3516',
+                thumbnailSmallUrl: 'https://cdn/adire-sm.png',
+                imageUrl: null,
+              },
+            },
+          },
+        ],
+      },
+    };
+    const tx = {
+      payment: { update: jest.fn() },
+      support: { update: jest.fn() },
+      paymentEvent: { create: jest.fn() },
+    };
+    const prisma = {
+      paymentEvent: { findUnique: jest.fn().mockResolvedValue(null) },
+      payment: { findUnique: jest.fn().mockResolvedValue(payment) },
+      $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
+    };
+    const provider = {
+      providerName: 'PAYSTACK',
+      verifyWebhookSignature: jest.fn().mockResolvedValue({ isValid: true }),
+    };
+    const ledger = { recordSupportPayment: jest.fn() };
+    const eventEmitter = { emit: jest.fn() };
+    const service = new PaymentsService(
+      prisma as never,
+      provider as never,
+      ledger as never,
+      eventEmitter as never,
+      {} as never,
+      {} as never,
+    );
+
+    await service.handleWebhook(
+      'sig',
+      { event: 'charge.success', data: { id: 1, reference: 'ref-1' } },
+      'raw',
+    );
+
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      'contribution.received',
+      expect.objectContaining({
+        materialName: 'Adire',
+        material: {
+          id: 'mat-adire',
+          name: 'Adire',
+          color: '#7F3516',
+          thumbnailUrl: 'https://cdn/adire-sm.png',
+          quantity: 2.5,
+        },
+      }),
+    );
+  });
+});

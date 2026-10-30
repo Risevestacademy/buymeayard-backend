@@ -261,7 +261,9 @@ export class PaymentsService {
               creator: {
                 select: { userId: true },
               },
-              items: true,
+              items: {
+                include: { creatorMaterial: { include: { material: true } } },
+              },
             },
           },
         },
@@ -330,6 +332,14 @@ export class PaymentsService {
           supporterEmail,
           yards: yards > 0 ? yards : 1,
           materialName,
+          material: payment.support.items[0]?.creatorMaterial
+            ? toContributionMaterial(
+                payment.support.items[0].creatorMaterial.materialId,
+                payment.support.items[0].materialNameSnapshot,
+                payment.support.items[0].creatorMaterial.material,
+                yards,
+              )
+            : null,
           amount: payment.support.creatorAmount,
           message: payment.support.message,
         });

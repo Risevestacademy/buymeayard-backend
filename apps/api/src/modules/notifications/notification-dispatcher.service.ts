@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import * as nodemailer from 'nodemailer';
 import { renderEmailTemplate } from '../auth/email-templates/render-email-template';
@@ -258,6 +259,7 @@ export class NotificationDispatcherService {
             supporterName: event.supporterName,
             yards: event.yards,
             materialName: event.materialName,
+            material: (event.material ?? null) as Prisma.InputJsonObject | null,
             amount: event.amount,
             message: event.message,
           },
