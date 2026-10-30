@@ -28,8 +28,21 @@ export class SupportWallQueryDto {
 }
 
 export class SupportWallItemDto {
+  @ApiProperty({
+    description: 'The gift id. Use it as the list key.',
+  })
+  id!: string;
+
   @ApiProperty({ example: 'Tomi' })
   displayName!: string;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    description:
+      'The platform fabric (e.g. Adire) the gift was counted in, for picking its swatch. Stays the same if the creator renames it on their menu.',
+  })
+  materialId!: string | null;
 
   @ApiProperty({ example: 'Adire', nullable: true, type: String })
   materialName!: string | null;

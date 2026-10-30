@@ -9,7 +9,13 @@ export const SUPPORT_WALL_SELECT = {
   guestName: true,
   message: true,
   isAnonymous: true,
-  items: { select: { materialNameSnapshot: true }, take: 1 }, // single-material model
+  items: {
+    select: {
+      materialNameSnapshot: true,
+      creatorMaterial: { select: { materialId: true } },
+    },
+    take: 1, // single-material model
+  },
 } satisfies Prisma.SupportSelect;
 
 type SupportWallRow = Prisma.SupportGetPayload<{
@@ -18,7 +24,9 @@ type SupportWallRow = Prisma.SupportGetPayload<{
 
 export function toSupportWallItem(row: SupportWallRow): SupportWallItemDto {
   return {
+    id: row.id,
     displayName: resolveDisplayName(row),
+    materialId: row.items[0]?.creatorMaterial.materialId ?? null,
     materialName: row.items[0]?.materialNameSnapshot ?? null,
     message: row.isAnonymous ? null : row.message || null,
     createdAt: row.createdAt,
