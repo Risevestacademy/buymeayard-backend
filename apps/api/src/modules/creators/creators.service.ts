@@ -1622,29 +1622,58 @@ export class CreatorsService {
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
     );
 
-    const [agg, thisMonth, lastMonth] = await Promise.all([
-      this.prisma.support.aggregate({
-        where: received,
-        _count: { id: true },
-        _sum: {
-          totalAmount: true,
-          creatorAmount: true,
-          platformFee: true,
-        },
-      }),
-      this.prisma.support.aggregate({
-        where: { ...received, createdAt: { gte: startOfMonth } },
-        _count: { id: true },
-        _sum: { totalAmount: true },
-      }),
-      this.prisma.support.aggregate({
-        where: {
-          ...received,
-          createdAt: { gte: startOfLastMonth, lt: startOfMonth },
-        },
-        _sum: { totalAmount: true },
-      }),
-    ]);
+    const [agg, thisMonth, lastMonth, supporterGroups, anonymousThisMonth] =
+      await Promise.all([
+        this.prisma.support.aggregate({
+          where: received,
+          _count: { id: true },
+          _sum: {
+            totalAmount: true,
+            creatorAmount: true,
+            platformFee: true,
+          },
+        }),
+        this.prisma.support.aggregate({
+          where: { ...received, createdAt: { gte: startOfMonth } },
+          _count: { id: true },
+          _sum: { totalAmount: true },
+        }),
+        this.prisma.support.aggregate({
+          where: {
+            ...received,
+            createdAt: { gte: startOfLastMonth, lt: startOfMonth },
+          },
+          _sum: { totalAmount: true },
+        }),
+        // Supporters have no accounts, so one email is one supporter
+        this.prisma.support.groupBy({
+          by: ['guestEmail'],
+          where: received,
+          _count: { _all: true },
+          _min: { createdAt: true },
+        }),
+        this.prisma.support.count({
+          where: {
+            ...received,
+            guestEmail: null,
+            createdAt: { gte: startOfMonth },
+          },
+        }),
+      ]);
+
+    // Gifts left without an email can't be matched, so each counts as one
+    let supporters = 0;
+    let newSupportersThisMonth = anonymousThisMonth;
+    for (const group of supporterGroups) {
+      if (group.guestEmail === null) {
+        supporters += group._count._all;
+      } else {
+        supporters += 1;
+        if (group._min.createdAt && group._min.createdAt >= startOfMonth) {
+          newSupportersThisMonth += 1;
+        }
+      }
+    }
 
     const thisMonthAmount = thisMonth._sum.totalAmount || 0;
     const lastMonthAmount = lastMonth._sum.totalAmount || 0;
@@ -1654,6 +1683,8 @@ export class CreatorsService {
       totalContributionAmount: agg._sum.totalAmount || 0,
       netEarnings: agg._sum.creatorAmount || 0,
       platformFees: agg._sum.platformFee || 0,
+      supporters,
+      newSupportersThisMonth,
       thisMonthContributions: thisMonth._count.id || 0,
       thisMonthAmount,
       lastMonthAmount,

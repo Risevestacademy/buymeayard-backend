@@ -107,6 +107,20 @@ export class DashboardMetricsDto {
   platformFees!: number;
 
   @ApiProperty({
+    example: 18,
+    description:
+      'People who have gifted this creator, counted by email (Supporters card). A gift without an email counts as one person.',
+  })
+  supporters!: number;
+
+  @ApiProperty({
+    example: 4,
+    description:
+      'Supporters whose first gift arrived this month (UTC), not counting people who gifted before ("new this month")',
+  })
+  newSupportersThisMonth!: number;
+
+  @ApiProperty({
     example: 3,
     description: 'Contributions received since the start of this month (UTC)',
   })
