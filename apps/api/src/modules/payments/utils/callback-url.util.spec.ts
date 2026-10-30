@@ -25,7 +25,14 @@ describe('resolveCallbackUrl', () => {
     ).toBe('https://buymeayard.com/adeola/thanks?x=1&supportId=s-1');
   });
 
+  it('accepts the local frontends used in development', () => {
+    expect(
+      resolveCallbackUrl('http://localhost:3000/adeola/thanks', 's-1'),
+    ).toBe('http://localhost:3000/adeola/thanks?supportId=s-1');
+  });
+
   it.each([
+    'http://localhost:4000/thanks',
     'https://evil.example.com/thanks',
     'https://buymeayard.com.evil.com/',
     'javascript:alert(1)',
