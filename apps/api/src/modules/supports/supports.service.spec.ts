@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { SupportsService } from './supports.service';
 
 describe('SupportsService guest gifting', () => {
@@ -147,7 +148,15 @@ describe('SupportsService.getPublicWall', () => {
             items: [
               {
                 materialNameSnapshot: 'Adire',
-                creatorMaterial: { materialId: 'mat-adire' },
+                quantity: new Prisma.Decimal('2.5'),
+                creatorMaterial: {
+                  materialId: 'mat-adire',
+                  material: {
+                    color: '#7F3516',
+                    thumbnailSmallUrl: 'https://cdn/adire-sm.png',
+                    imageUrl: null,
+                  },
+                },
               },
             ],
           },
@@ -175,6 +184,13 @@ describe('SupportsService.getPublicWall', () => {
         displayName: 'Tomi',
         materialId: 'mat-adire',
         materialName: 'Adire',
+        material: {
+          id: 'mat-adire',
+          name: 'Adire',
+          color: '#7F3516',
+          thumbnailUrl: 'https://cdn/adire-sm.png',
+          quantity: 2.5,
+        },
       }),
     ]);
   });
