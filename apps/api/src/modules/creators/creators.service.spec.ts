@@ -56,6 +56,7 @@ describe('CreatorsService', () => {
       findMany: jest.Mock;
       findFirst: jest.Mock;
       count: jest.Mock;
+      groupBy: jest.Mock;
     };
     payout: {
       aggregate: jest.Mock;
@@ -129,6 +130,7 @@ describe('CreatorsService', () => {
         findMany: jest.fn(),
         findFirst: jest.fn(),
         count: jest.fn(),
+        groupBy: jest.fn().mockResolvedValue([]),
       },
       payout: {
         aggregate: jest.fn(),
@@ -1429,6 +1431,37 @@ describe('CreatorsService', () => {
         lastMonthAmount: 1000000,
         thisMonthChangePercent: 12,
       });
+    });
+
+    it('counts supporters by email and flags those new this month', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.aggregate.mockResolvedValue({
+        _count: { id: 0 },
+        _sum: {},
+      });
+      const startOfMonth = new Date(
+        Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1),
+      );
+      const before = new Date(startOfMonth.getTime() - 86_400_000);
+      prisma.support.groupBy.mockResolvedValue([
+        {
+          guestEmail: 'a@x.com',
+          _count: { _all: 3 },
+          _min: { createdAt: before },
+        },
+        {
+          guestEmail: 'b@x.com',
+          _count: { _all: 1 },
+          _min: { createdAt: startOfMonth },
+        },
+        { guestEmail: null, _count: { _all: 2 }, _min: { createdAt: before } },
+      ]);
+      prisma.support.count.mockResolvedValue(1);
+
+      const metrics = await service.getDashboardMetrics('u-1');
+
+      expect(metrics.supporters).toBe(4); // a, b and two emailless gifts
+      expect(metrics.newSupportersThisMonth).toBe(2); // b and one emailless gift
     });
 
     it('has no percentage when nothing was received last month', async () => {
