@@ -1,4 +1,6 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsOptional, IsUrl, MaxLength } from 'class-validator';
+import { CreateSupportIntentDto } from '../../creators/dto/create-support-intent.dto';
 
 export class SupportQuoteResponseDto {
   @ApiProperty({ example: 500000, description: 'Amount in kobo' })
@@ -33,4 +35,31 @@ export class SupportIntentResponseDto extends SupportQuoteResponseDto {
       "The creator's thank-you message (or the platform default) to show after payment",
   })
   thankYouMessage!: string;
+}
+
+export class CheckoutGiftDto extends CreateSupportIntentDto {
+  @ApiPropertyOptional({
+    example: 'https://buymeayard.com/adeola/thanks',
+    description:
+      'Page Paystack sends the supporter back to after paying. Must be on one of our own sites. We add `supportId` to it, and Paystack adds `reference` and `trxref`.',
+  })
+  @IsOptional()
+  @IsUrl({
+    require_tld: false,
+    require_protocol: true,
+    protocols: ['http', 'https'],
+  })
+  @MaxLength(2000)
+  callbackUrl?: string;
+}
+
+export class CheckoutGiftResponseDto extends SupportIntentResponseDto {
+  @ApiProperty({ description: 'The payment record created for this gift' })
+  paymentId!: string;
+
+  @ApiProperty({
+    example: 'https://checkout.paystack.com/abc123',
+    description: 'Send the supporter here to pay',
+  })
+  authorizationUrl!: string;
 }

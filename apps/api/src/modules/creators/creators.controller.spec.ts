@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CreatorsController } from './creators.controller';
 import { CreatorsService } from './creators.service';
 import { SupportsService } from '../supports/supports.service';
+import { PaymentsService } from '../payments/payments.service';
 
 describe('CreatorsController', () => {
   let controller: CreatorsController;
@@ -89,6 +90,10 @@ describe('CreatorsController', () => {
         {
           provide: CreatorsService,
           useValue: creatorsService,
+        },
+        {
+          provide: PaymentsService,
+          useValue: { initializePayment: jest.fn() },
         },
         {
           provide: SupportsService,
