@@ -1,9 +1,17 @@
 import { BadRequestException } from '@nestjs/common';
 import { ErrorCodes } from '../../../common/errors/error-codes';
 
+// Same local origins main.ts allows for CORS, so a frontend running on a
+// developer's machine can test the checkout against a deployed API.
+const LOCAL_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:3002',
+];
+
 /** Origins a Paystack checkout may send the supporter back to. */
 function allowedOrigins(): Set<string> {
-  const origins = new Set<string>();
+  const origins = new Set<string>(LOCAL_ORIGINS);
   for (const url of [
     process.env.FRONTEND_URL,
     process.env.CREATOR_FRONTEND_URL,
