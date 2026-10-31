@@ -165,6 +165,9 @@ export function createBetterAuth(
     return frontendUrls.creator;
   };
 
+  const baseUrl =
+    options?.baseURL || process.env.BETTER_AUTH_URL || 'http://localhost:3000';
+
   const smtpTransport = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
     port: smtpPort,
@@ -267,10 +270,7 @@ export function createBetterAuth(
       options?.secret ||
       process.env.BETTER_AUTH_SECRET ||
       'super-secret-minimum-32-chars-key-for-development-change-me',
-    baseURL:
-      options?.baseURL ||
-      process.env.BETTER_AUTH_URL ||
-      'http://localhost:3000',
+    baseURL: baseUrl,
     basePath: '/api/v1/auth',
     socialProviders: {
       google: {
@@ -414,14 +414,16 @@ export function createBetterAuth(
       updateAge: 60 * 60 * 24, // 1 day
     },
     advanced: {
-      crossSubDomainCookies: {
-        enabled: true,
-        // e.g. ".buymeayard.com" so the frontends and api.* share the session cookie
-        ...(cookieDomain ? { domain: cookieDomain } : {}),
-      },
+      // Only when frontends and the API share a parent domain. Without a
+      // domain better-auth falls back to the host (Domain=localhost locally),
+      // which browsers reject, so local dev keeps host-only cookies.
+      ...(cookieDomain
+        ? { crossSubDomainCookies: { enabled: true, domain: cookieDomain } }
+        : {}),
       defaultCookieAttributes: {
         sameSite: 'lax',
-        secure: true,
+        // http://localhost can't set Secure cookies in every browser
+        secure: baseUrl.startsWith('https://'),
       },
     },
     hooks: {
