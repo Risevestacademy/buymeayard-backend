@@ -33,6 +33,7 @@ import { PayoutMethodsService } from './payout-methods.service';
 import { calculatePayoutFee } from './payout-fees';
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { buildPagination } from '../../common/utils/pagination.util';
+import { MoneyUtil } from '../../common/utils/money.util';
 import {
   ListPayoutsQueryDto,
   PayoutDetailDto,
@@ -117,7 +118,7 @@ export class PayoutsService {
     if (amount < rules.minimumWithdrawal) {
       throw new BadRequestException({
         code: ErrorCodes.BELOW_MINIMUM_WITHDRAWAL,
-        message: `You need at least ₦${(rules.minimumWithdrawal / 100).toLocaleString()} to withdraw`,
+        message: `You need at least ₦${MoneyUtil.toMajorUnits(rules.minimumWithdrawal).toLocaleString()} to withdraw`,
       });
     }
 
@@ -153,7 +154,7 @@ export class PayoutsService {
     if (balance < amount) {
       throw new BadRequestException({
         code: ErrorCodes.INSUFFICIENT_FUNDS,
-        message: `Requested payout (${amount}) exceeds available balance (${balance})`,
+        message: `Requested payout (₦${MoneyUtil.toMajorUnits(amount).toLocaleString()}) exceeds available balance (₦${MoneyUtil.toMajorUnits(balance).toLocaleString()})`,
       });
     }
 
@@ -186,7 +187,7 @@ export class PayoutsService {
         if (lockedBalance < amount) {
           throw new BadRequestException({
             code: ErrorCodes.INSUFFICIENT_FUNDS,
-            message: `Requested payout (${amount}) exceeds available balance (${lockedBalance})`,
+            message: `Requested payout (₦${MoneyUtil.toMajorUnits(amount).toLocaleString()}) exceeds available balance (₦${MoneyUtil.toMajorUnits(lockedBalance).toLocaleString()})`,
           });
         }
 

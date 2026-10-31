@@ -10,7 +10,7 @@ Verify identity (KYC) → Add bank account → "Is this you?" → Save
 
 All endpoints need the usual authenticated creator session (cookie on web, Bearer token on mobile). Responses use the standard envelope: `{ "data": ..., "meta": {} }` on success and `{ "error": { "code", "message" } }` on failure.
 
-**All amounts are in kobo** (₦1 = 100 kobo). `4500000` is ₦45,000.
+**All amounts are in naira**, in requests and responses. `45000` is ₦45,000.
 
 Figma: *Hi-Fi Designs → Section 4* (web, frames `1486:*`) and *Mobile app* (frames `2672:*`).
 
@@ -33,14 +33,14 @@ The Payouts page's "A little setup. Then, you're ready." card, and any screen th
 
 ```json
 {
-  "availableBalance": 4500000,
+  "availableBalance": 45000,
   "pendingBalance": 0,
-  "withdrawnToDate": 2995000,
+  "withdrawnToDate": 29950,
   "currency": "NGN",
   "canWithdraw": true,
   "kycStatus": "VERIFIED",
   "hasPayoutMethod": true,
-  "minimumWithdrawal": 100000,
+  "minimumWithdrawal": 1000,
   "setupStep": "READY",
   "payoutMethod": {
     "id": "7d9ffc2b-…",
@@ -114,17 +114,17 @@ The server never trusts a name from the client. It reuses the lookup from §2.2 
 
 ## 3. Withdraw earnings
 
-### 3.1 Amount and review: `GET /creators/me/payouts/quote?amount=4500000`
+### 3.1 Amount and review: `GET /creators/me/payouts/quote?amount=45000`
 
 Call it as the creator types (debounced), and on the Review screen.
 
 ```json
 {
-  "amount": 4500000,
-  "fee": 5000,
-  "netAmount": 4495000,
-  "minimumWithdrawal": 100000,
-  "availableBalance": 4500000,
+  "amount": 45000,
+  "fee": 50,
+  "netAmount": 44950,
+  "minimumWithdrawal": 1000,
+  "availableBalance": 45000,
   "isValid": true,
   "error": null
 }
@@ -137,7 +137,7 @@ Call it as the creator types (debounced), and on the Review screen.
 ```http
 POST /api/v1/creators/me/payouts
 Idempotency-Key: 3f0c7b8e-…   ← new UUID per withdrawal attempt
-{ "amount": 4500000 }
+{ "amount": 45000 }
 ```
 
 **Always send `Idempotency-Key`.** If the request is retried (double tap, flaky network), the same key returns the same payout instead of withdrawing twice. Generate a new key when the creator starts a new withdrawal.
@@ -201,9 +201,9 @@ The details drawer (web) / sheet (mobile), and the Submitted → Successful/Fail
   "id": "fae82705-…",
   "reference": "PYT-20261017-0001",
   "status": "FAILED",
-  "amount": 1250000,
-  "fee": 5000,
-  "netAmount": 1245000,
+  "amount": 12500,
+  "fee": 50,
+  "netAmount": 12450,
   "currency": "NGN",
   "destination": {
     "bankName": "United Bank For Africa",
@@ -213,10 +213,10 @@ The details drawer (web) / sheet (mobile), and the Submitted → Successful/Fail
   "requestedAt": "2026-10-17T19:43:50.502Z",
   "processedAt": "2026-10-17T19:43:50.534Z",
   "breakdown": {
-    "amountRequested": 1250000,
+    "amountRequested": 12500,
     "transferred": 0,
     "feeCharged": 0,
-    "returnedToBalance": 1250000
+    "returnedToBalance": 12500
   },
   "failureReason": "Your bank declined the transfer."
 }
@@ -346,7 +346,7 @@ Use `transfer.failed` or `transfer.reversed` to test the failure path (balance r
 
 ## 10. Response reference
 
-All success responses are wrapped: `{ "data": <below>, "meta": {} }`. Money is in **kobo**. Dates are ISO 8601 strings in UTC. "nullable" means the field is always present but can be `null`.
+All success responses are wrapped: `{ "data": <below>, "meta": {} }`. Money is in **naira**. Dates are ISO 8601 strings in UTC. "nullable" means the field is always present but can be `null`.
 
 ### Errors
 
@@ -400,14 +400,14 @@ Also returned as `balance` inside `GET /creators/me/overview` and `GET /creators
 
 | Field | Type | Description |
 |---|---|---|
-| `availableBalance` | integer | "Ready to withdraw". Withdrawals in progress are already taken out |
-| `pendingBalance` | integer | "Contributions still processing": checkouts opened in the last hour, not yet confirmed by Paystack |
-| `withdrawnToDate` | integer | "Total sent to your bank account": sum of `netAmount` of successful payouts (after fees) |
+| `availableBalance` | number | "Ready to withdraw". Withdrawals in progress are already taken out |
+| `pendingBalance` | number | "Contributions still processing": checkouts opened in the last hour, not yet confirmed by Paystack |
+| `withdrawnToDate` | number | "Total sent to your bank account": sum of `netAmount` of successful payouts (after fees) |
 | `currency` | string | `NGN` |
 | `canWithdraw` | boolean | Verified + active + verified bank account + `availableBalance ≥ minimumWithdrawal` |
 | `kycStatus` | string | See `/users/me` |
 | `hasPayoutMethod` | boolean | Same as `isBankAccountConnected` |
-| `minimumWithdrawal` | integer | `100000` (₦1,000) |
+| `minimumWithdrawal` | number | `1000` (₦1,000) |
 | `setupStep` | `VERIFY_IDENTITY` \| `CONNECT_BANK` \| `READY` | Which setup card to show |
 | `payoutMethod` | [PayoutMethod](#payoutmethod) \| null | The account card. `null` until a bank account is saved |
 
@@ -445,11 +445,11 @@ Returned by `POST /creators/me/payout-methods`, and as `payoutMethod` in the bal
 
 | Field | Type | Description |
 |---|---|---|
-| `amount` | integer | Amount entered. What leaves the balance |
-| `fee` | integer | Processing fee taken out of `amount` (₦50 up to ₦50,000, ₦100 above). `0` when amount is 0 |
-| `netAmount` | integer | "You'll receive" = `amount − fee` |
-| `minimumWithdrawal` | integer | `100000` |
-| `availableBalance` | integer | Current available balance ("Available to withdraw") |
+| `amount` | number | Amount entered. What leaves the balance |
+| `fee` | number | Processing fee taken out of `amount` (₦50 up to ₦50,000, ₦100 above). `0` when amount is 0 |
+| `netAmount` | number | "You'll receive" = `amount − fee` |
+| `minimumWithdrawal` | number | `1000` |
+| `availableBalance` | number | Current available balance ("Available to withdraw") |
 | `isValid` | boolean | Enable **Continue** only when `true` |
 | `error` | `BELOW_MINIMUM` \| `EXCEEDS_BALANCE` \| null | Why it's invalid; `null` when valid |
 
@@ -462,9 +462,9 @@ History items in `GET /creators/me/payouts` use this shape.
 | `id` | uuid | Payout ID. Use it for details and support |
 | `reference` | string \| null | "PYT-20250925-0041", shown as Reference / Transaction ref. `null` only for payouts made before references existed |
 | `status` | `IN_PROGRESS` \| `SUCCESSFUL` \| `FAILED` | In progress = waiting for the bank ("Awaiting confirmation"); Failed = full amount returned to balance |
-| `amount` | integer | Amount requested ("Withdrawal amount" / "Amount requested") |
-| `fee` | integer | Processing fee |
-| `netAmount` | integer | "You'll receive" / "Net received" |
+| `amount` | number | Amount requested ("Withdrawal amount" / "Amount requested") |
+| `fee` | number | Processing fee |
+| `netAmount` | number | "You'll receive" / "Net received" |
 | `currency` | string | `NGN` |
 | `destination.bankName` | string \| null | Bank it was sent to. A copy taken at request time, so it stays correct after an account change |
 | `destination.accountName` | string \| null | Account name |
@@ -478,10 +478,10 @@ Returned by `GET /creators/me/payouts/:id` and `POST /creators/me/payouts`: [Pay
 
 | Field | Type | Description |
 |---|---|---|
-| `breakdown.amountRequested` | integer | Same as `amount` |
-| `breakdown.transferred` | integer | `netAmount`, or `0` if failed |
-| `breakdown.feeCharged` | integer | `fee`, or `0` if failed |
-| `breakdown.returnedToBalance` | integer | `amount` if failed, otherwise `0` |
+| `breakdown.amountRequested` | number | Same as `amount` |
+| `breakdown.transferred` | number | `netAmount`, or `0` if failed |
+| `breakdown.feeCharged` | number | `fee`, or `0` if failed |
+| `breakdown.returnedToBalance` | number | `amount` if failed, otherwise `0` |
 | `failureReason` | string \| null | Safe to show, e.g. "Your bank declined the transfer." `null` unless failed |
 
 ### Payout list: `GET /creators/me/payouts`
@@ -512,8 +512,8 @@ Returned by `GET /creators/me/payouts/:id` and `POST /creators/me/payouts`: [Pay
 | `body` | string | Ready-to-show text, e.g. "₦44,950 has been sent to your GTBank account (••••4589)." |
 | `data.payoutId` | uuid | Open `GET /creators/me/payouts/:id` |
 | `data.reference` | string | Payout reference |
-| `data.amount` | integer | Amount requested |
-| `data.netAmount` | integer | Amount sent to the bank |
+| `data.amount` | number | Amount requested |
+| `data.netAmount` | number | Amount sent to the bank |
 | `data.bankName` | string | Bank name |
 | `data.accountNumberMasked` | string | e.g. `••••4589` |
 | `actionUrl` | string | `/dashboard/payouts?payoutId=<id>` |

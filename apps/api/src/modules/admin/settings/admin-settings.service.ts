@@ -5,7 +5,29 @@ import {
 } from '../../platform-settings/platform-settings.service';
 import { AuditLogService } from '../../analytics/audit-log.service';
 import { ErrorCodes } from '../../../common/errors/error-codes';
+import { MoneyUtil } from '../../../common/utils/money.util';
 import { AdminUpdateSettingsDto } from './admin-settings.dto';
+
+const MONEY_KEYS = [
+  'minimumWithdrawal',
+  'payoutFeeTierLimit',
+  'payoutFeeUpToLimit',
+  'payoutFeeAboveLimit',
+] as const;
+
+/** Rules are stored in kobo; admins read and write naira. */
+function toNaira(settings: PlatformSettings): PlatformSettings {
+  return MoneyUtil.toMajorDeep(settings, MONEY_KEYS);
+}
+
+function toKobo(patch: Partial<PlatformSettings>): Partial<PlatformSettings> {
+  const out = { ...patch };
+  for (const key of MONEY_KEYS) {
+    const value = out[key];
+    if (value !== undefined) out[key] = MoneyUtil.toMinorUnits(value);
+  }
+  return out;
+}
 
 @Injectable()
 export class AdminSettingsService {
@@ -16,8 +38,8 @@ export class AdminSettingsService {
 
   async get() {
     return {
-      settings: await this.settings.get(),
-      defaults: this.settings.defaults(),
+      settings: toNaira(await this.settings.get()),
+      defaults: toNaira(this.settings.defaults()),
     };
   }
 
@@ -27,9 +49,11 @@ export class AdminSettingsService {
    */
   async update(adminId: string, dto: AdminUpdateSettingsDto) {
     const previous = await this.settings.get();
-    const patch = Object.fromEntries(
-      Object.entries(dto).filter(([, v]) => v !== undefined),
-    ) as Partial<PlatformSettings>;
+    const patch = toKobo(
+      Object.fromEntries(
+        Object.entries(dto).filter(([, v]) => v !== undefined),
+      ),
+    );
     const next = { ...previous, ...patch };
 
     const highestFee = Math.max(
@@ -53,6 +77,9 @@ export class AdminSettingsService {
       previousState: { ...previous },
       newState: { ...saved },
     });
-    return { settings: saved, defaults: this.settings.defaults() };
+    return {
+      settings: toNaira(saved),
+      defaults: toNaira(this.settings.defaults()),
+    };
   }
 }

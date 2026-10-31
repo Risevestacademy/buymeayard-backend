@@ -57,8 +57,8 @@ describe('AdminDashboardService', () => {
       newContributionsToday: 34,
     });
     expect(res.kpis.contributionsReceived).toMatchObject({
-      value: 600,
-      previous: 400,
+      value: 6,
+      previous: 4,
       changePercent: 50,
       count: 3,
     });
@@ -69,7 +69,7 @@ describe('AdminDashboardService', () => {
     ]);
     expect(res.recentCreators.items[0]).toMatchObject({
       slug: 'maya',
-      contributed: 900,
+      contributed: 9,
     });
     expect(res.kpis.pendingPayouts.lateAfterHours).toBe(48);
   });

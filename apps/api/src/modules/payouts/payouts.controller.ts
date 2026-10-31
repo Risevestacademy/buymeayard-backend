@@ -9,7 +9,9 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  UseInterceptors,
 } from '@nestjs/common';
+import { NairaResponseInterceptor } from '../../common/interceptors/naira-response.interceptor';
 import {
   ApiTags,
   ApiOperation,
@@ -93,6 +95,7 @@ const IDEMPOTENCY_KEY_HEADER = {
 @ApiTags('payouts')
 @ApiBearerAuth()
 @ApiCookieAuth('better-auth.session_token')
+@UseInterceptors(NairaResponseInterceptor)
 @Controller()
 export class PayoutsController {
   constructor(
@@ -247,7 +250,7 @@ Requires verified identity, an active creator, a saved bank account, and \`amoun
       status: 400,
       code: 'INSUFFICIENT_FUNDS',
       message:
-        'Requested payout (45500000) exceeds available balance (4500000)',
+        'Requested payout (₦455,000) exceeds available balance (₦45,000)',
       when: 'Amount is more than the available balance (it may have changed since the quote). Refresh the balance.',
     },
     {

@@ -2,6 +2,7 @@ import { PageQueryDto } from '../../../common/dto/page-query.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Type } from 'class-transformer';
+import { NairaToKobo } from '../../../common/decorators/naira-to-kobo.decorator';
 import { IsIn, IsInt, IsOptional, Min } from 'class-validator';
 
 /** The three statuses the Payouts screens show. */
@@ -21,19 +22,21 @@ export type PayoutStatusFilter = (typeof PAYOUT_STATUS_FILTERS)[number];
 
 export class RequestPayoutDto {
   @ApiProperty({
-    example: 4500000,
+    example: 45000,
     description:
-      'Amount to withdraw in kobo (₦45,000). The fee is taken out of it.',
+      'Amount to withdraw in naira (₦45,000). The fee is taken out of it.',
   })
   @Type(() => Number)
+  @NairaToKobo()
   @IsInt()
   @Min(1)
   amount!: number;
 }
 
 export class QuotePayoutQueryDto {
-  @ApiProperty({ example: 4500000, description: 'Amount in kobo' })
+  @ApiProperty({ example: 45000, description: 'Amount in naira' })
   @Type(() => Number)
+  @NairaToKobo()
   @IsInt()
   @Min(0)
   amount!: number;
@@ -61,36 +64,36 @@ export class ListPayoutsQueryDto extends PageQueryDto {
 
 export class PayoutQuoteDto {
   @ApiProperty({
-    example: 4500000,
+    example: 45000,
     description:
-      'The amount entered, in kobo. This is what leaves the balance.',
+      'The amount entered, in naira. This is what leaves the balance.',
   })
   amount!: number;
 
   @ApiProperty({
-    example: 5000,
+    example: 50,
     description:
-      'Processing fee in kobo, taken out of `amount`: ₦50 up to ₦50,000, ₦100 above. 0 when amount is 0.',
+      'Processing fee in naira, taken out of `amount`: ₦50 up to ₦50,000, ₦100 above. 0 when amount is 0.',
   })
   fee!: number;
 
   @ApiProperty({
-    example: 4495000,
+    example: 44950,
     description:
-      '"You’ll receive": amount − fee, in kobo. What reaches the bank.',
+      '"You’ll receive": amount − fee, in naira. What reaches the bank.',
   })
   netAmount!: number;
 
   @ApiProperty({
-    example: 100000,
-    description: 'Minimum withdrawal in kobo (₦1,000)',
+    example: 1000,
+    description: 'Minimum withdrawal in naira (₦1,000)',
   })
   minimumWithdrawal!: number;
 
   @ApiProperty({
-    example: 4500000,
+    example: 45000,
     description:
-      'Available balance right now, in kobo ("Available to withdraw")',
+      'Available balance right now, in naira ("Available to withdraw")',
   })
   availableBalance!: number;
 
@@ -156,22 +159,22 @@ export class PayoutDto {
   status!: PayoutDisplayStatus;
 
   @ApiProperty({
-    example: 4500000,
+    example: 45000,
     description:
-      'Amount requested ("Withdrawal amount" / "Amount requested"), in kobo. This left the balance.',
+      'Amount requested ("Withdrawal amount" / "Amount requested"), in naira. This left the balance.',
   })
   amount!: number;
 
   @ApiProperty({
-    example: 5000,
-    description: 'Processing fee in kobo ("Processing fee −₦50")',
+    example: 50,
+    description: 'Processing fee in naira ("Processing fee −₦50")',
   })
   fee!: number;
 
   @ApiProperty({
-    example: 4495000,
+    example: 44950,
     description:
-      'amount − fee, in kobo. "You’ll receive" / "Net received" / "Net payout".',
+      'amount − fee, in naira. "You’ll receive" / "Net received" / "Net payout".',
   })
   netAmount!: number;
 
@@ -201,7 +204,7 @@ export class PayoutDto {
 }
 
 export class PayoutBreakdownDto {
-  @ApiProperty({ example: 4500000, description: 'Same as `amount`' })
+  @ApiProperty({ example: 45000, description: 'Same as `amount`' })
   amountRequested!: number;
 
   @ApiProperty({ example: 4495000, description: '0 when the payout failed' })

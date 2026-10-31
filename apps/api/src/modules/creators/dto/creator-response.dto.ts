@@ -95,9 +95,8 @@ export class PlatformMaterialDto {
   color?: string | null;
 
   @ApiProperty({
-    example: 500000,
-    description:
-      'Default baseline price per yard in kobo (minor units). 500000 = ₦5,000',
+    example: 5000,
+    description: 'Default baseline price per yard in naira. 5000 = ₦5,000',
   })
   basePrice: number;
 
@@ -133,9 +132,8 @@ export class CreatorMaterialResponseDto {
   materialId: string;
 
   @ApiProperty({
-    example: 500000,
-    description:
-      'Creator-set price per yard in kobo (minor units). 500000 = ₦5,000',
+    example: 5000,
+    description: 'Creator-set price per yard in naira. 5000 = ₦5,000',
   })
   price: number;
 

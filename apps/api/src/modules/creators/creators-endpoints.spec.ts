@@ -322,7 +322,7 @@ describe('Creators Endpoints (HTTP Integration)', () => {
       );
       expect(response.body).toBeInstanceOf(Array);
       expect(response.body[0]).toHaveProperty('materialId', 'mat-1');
-      expect(response.body[0]).toHaveProperty('price', 500000);
+      expect(response.body[0]).toHaveProperty('price', 5000);
       expect(response.body[0]).toHaveProperty('material');
     });
   });
@@ -333,7 +333,7 @@ describe('Creators Endpoints (HTTP Integration)', () => {
         materials: [
           {
             materialId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-            price: 600000,
+            price: 6000, // naira in, kobo to the service
             displayName: 'Special Ankara',
           },
         ],
@@ -346,10 +346,12 @@ describe('Creators Endpoints (HTTP Integration)', () => {
 
       expect(creatorsService.saveCreatorMaterials).toHaveBeenCalledWith(
         mockUser.id,
-        payload,
+        {
+          materials: [{ ...payload.materials[0], price: 600000 }],
+        },
       );
       expect(response.body).toHaveLength(1);
-      expect(response.body[0].price).toBe(600000);
+      expect(response.body[0].price).toBe(6000);
     });
 
     it('should return 400 when materialId is not a valid UUID', async () => {
@@ -368,12 +370,12 @@ describe('Creators Endpoints (HTTP Integration)', () => {
         .expect(400);
     });
 
-    it('should return 400 when price is less than minimum allowed (100 kobo)', async () => {
+    it('should return 400 when price is less than minimum allowed (₦1)', async () => {
       const invalidPayload = {
         materials: [
           {
             materialId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-            price: 50, // below 100 kobo minimum
+            price: 0.5, // below the ₦1 minimum
           },
         ],
       };
@@ -554,10 +556,10 @@ describe('Creators Endpoints (HTTP Integration)', () => {
       expect(response.body.metrics).toHaveProperty('totalContributions', 24);
       expect(response.body.metrics).toHaveProperty(
         'totalContributionAmount',
-        12000000,
+        120000,
       );
       expect(response.body).toHaveProperty('balance');
-      expect(response.body.balance).toHaveProperty('availableBalance', 9800000);
+      expect(response.body.balance).toHaveProperty('availableBalance', 98000);
       expect(response.body.balance).toHaveProperty('canWithdraw', true);
       expect(response.body).toHaveProperty('recentContributions');
       expect(response.body.recentContributions).toHaveLength(1);
@@ -596,7 +598,7 @@ describe('Creators Endpoints (HTTP Integration)', () => {
         expect.objectContaining({ period: '30d' }),
       );
       expect(response.body).toHaveProperty('period', '30d');
-      expect(response.body).toHaveProperty('totalGross', 12000000);
+      expect(response.body).toHaveProperty('totalGross', 120000);
     });
   });
 
@@ -624,7 +626,7 @@ describe('Creators Endpoints (HTTP Integration)', () => {
       expect(creatorsService.getDashboardBalance).toHaveBeenCalledWith(
         mockUser.id,
       );
-      expect(response.body).toHaveProperty('availableBalance', 9800000);
+      expect(response.body).toHaveProperty('availableBalance', 98000);
       expect(response.body).toHaveProperty('canWithdraw', true);
     });
   });
@@ -639,8 +641,8 @@ describe('Creators Endpoints (HTTP Integration)', () => {
         mockUser.id,
       );
       expect(response.body).toHaveProperty('totalContributions', 24);
-      expect(response.body).toHaveProperty('totalContributionAmount', 12000000);
-      expect(response.body).toHaveProperty('netEarnings', 11400000);
+      expect(response.body).toHaveProperty('totalContributionAmount', 120000);
+      expect(response.body).toHaveProperty('netEarnings', 114000);
 
       const aliasResponse = await request(app.getHttpServer())
         .get('/creators/me/metrics')
@@ -679,7 +681,7 @@ describe('Creators Endpoints (HTTP Integration)', () => {
       expect(creatorsService.getDashboardBalance).toHaveBeenCalledWith(
         mockUser.id,
       );
-      expect(response.body).toHaveProperty('availableBalance', 9800000);
+      expect(response.body).toHaveProperty('availableBalance', 98000);
     });
 
     it('should route /creators/me/analytics/earnings to earnings endpoint', async () => {
@@ -691,7 +693,7 @@ describe('Creators Endpoints (HTTP Integration)', () => {
         mockUser.id,
         expect.objectContaining({ period: '30d' }),
       );
-      expect(response.body).toHaveProperty('totalGross', 12000000);
+      expect(response.body).toHaveProperty('totalGross', 120000);
     });
   });
 });

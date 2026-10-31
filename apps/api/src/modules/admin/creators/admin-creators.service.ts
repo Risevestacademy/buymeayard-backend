@@ -9,6 +9,7 @@ import { AuditLogService } from '../../analytics/audit-log.service';
 import { LedgerService } from '../../ledger/ledger.service';
 import { ErrorCodes } from '../../../common/errors/error-codes';
 import { buildPagination } from '../../../common/utils/pagination.util';
+import { MoneyUtil } from '../../../common/utils/money.util';
 import { AccountType, CreatorStatus, KycStatus } from '@buymeayard/types';
 import { IN_FLIGHT_PAYOUT_STATUSES } from '../../payouts/payouts.service';
 import {
@@ -78,7 +79,9 @@ export class AdminCreatorsService {
     return {
       items: creators.map((c) => ({
         ...c,
-        contributed: byCreator.get(c.id)?._sum.totalAmount ?? 0,
+        contributed: MoneyUtil.toMajorUnits(
+          byCreator.get(c.id)?._sum.totalAmount ?? 0,
+        ),
         contributionCount: byCreator.get(c.id)?._count ?? 0,
       })),
       pagination: buildPagination(query.page, query.limit, total),
@@ -163,20 +166,22 @@ export class AdminCreatorsService {
         : null,
       latestKycSubmission: kycSubmissions[0] ?? null,
       balance: {
-        available: balance,
-        inFlightPayouts: inFlight._sum.amount ?? 0,
+        available: MoneyUtil.toMajorUnits(balance),
+        inFlightPayouts: MoneyUtil.toMajorUnits(inFlight._sum.amount ?? 0),
         currency: 'NGN',
       },
       contributions: {
         count: contributions._count,
-        gross: contributions._sum.totalAmount ?? 0,
-        net: contributions._sum.creatorAmount ?? 0,
-        platformFees: contributions._sum.platformFee ?? 0,
+        gross: MoneyUtil.toMajorUnits(contributions._sum.totalAmount ?? 0),
+        net: MoneyUtil.toMajorUnits(contributions._sum.creatorAmount ?? 0),
+        platformFees: MoneyUtil.toMajorUnits(
+          contributions._sum.platformFee ?? 0,
+        ),
       },
       payouts: payoutsByStatus.map((p) => ({
         status: p.status,
         count: p._count,
-        netAmount: p._sum.netAmount ?? 0,
+        netAmount: MoneyUtil.toMajorUnits(p._sum.netAmount ?? 0),
       })),
       history,
     };

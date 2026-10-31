@@ -87,23 +87,23 @@ export class DashboardMetricsDto {
   totalContributions!: number;
 
   @ApiProperty({
-    example: 12000000,
+    example: 120000,
     description:
-      'Total contribution amount before charges in minor units / kobo (e.g. 12000000 kobo = ₦120,000)',
+      'Total contribution amount before charges in naira (e.g. 120000 = ₦120,000)',
   })
   totalContributionAmount!: number;
 
   @ApiProperty({
-    example: 11400000,
+    example: 114000,
     description:
-      'Total net earnings after platform charges in minor units / kobo (e.g. 11400000 kobo = ₦114,000)',
+      'Total net earnings after platform charges in naira (e.g. 114000 = ₦114,000)',
   })
   netEarnings!: number;
 
   @ApiProperty({
-    example: 600000,
+    example: 6000,
     description:
-      'Total platform processing and service fees deducted in minor units / kobo (e.g. 600000 kobo = ₦6,000)',
+      'Total platform processing and service fees deducted in naira (e.g. 6000 = ₦6,000)',
   })
   platformFees!: number;
 
@@ -128,14 +128,14 @@ export class DashboardMetricsDto {
   thisMonthContributions!: number;
 
   @ApiProperty({
-    example: 6850000,
-    description: 'Amount contributed this month, in kobo ("This month" card)',
+    example: 68500,
+    description: 'Amount contributed this month, in naira ("This month" card)',
   })
   thisMonthAmount!: number;
 
   @ApiProperty({
-    example: 6100000,
-    description: 'Amount contributed last month, in kobo',
+    example: 61000,
+    description: 'Amount contributed last month, in naira',
   })
   lastMonthAmount!: number;
 
@@ -161,23 +161,23 @@ export class DashboardMetricsDto {
 
 export class DashboardBalanceDto {
   @ApiProperty({
-    example: 7200000,
+    example: 72000,
     description:
-      '"Available balance / Ready to withdraw", in kobo (e.g. 7200000 = ₦72,000). Withdrawals in progress are already taken out.',
+      '"Available balance / Ready to withdraw", in naira (e.g. 72000 = ₦72,000). Withdrawals in progress are already taken out.',
   })
   availableBalance!: number;
 
   @ApiProperty({
-    example: 1200000,
+    example: 12000,
     description:
-      'Contributions still processing (checkout opened in the last hour, not yet confirmed by Paystack), in kobo',
+      'Contributions still processing (checkout opened in the last hour, not yet confirmed by Paystack), in naira',
   })
   pendingBalance!: number;
 
   @ApiProperty({
-    example: 3000000,
+    example: 30000,
     description:
-      'Total sent to the bank account to date, after processing fees, in kobo (e.g. 3000000 kobo = ₦30,000)',
+      'Total sent to the bank account to date, after processing fees, in naira (e.g. 30000 = ₦30,000)',
   })
   withdrawnToDate!: number;
 
@@ -208,8 +208,8 @@ export class DashboardBalanceDto {
   hasPayoutMethod!: boolean;
 
   @ApiProperty({
-    example: 100000,
-    description: 'Minimum withdrawal in kobo (₦1,000)',
+    example: 1000,
+    description: 'Minimum withdrawal in naira (₦1,000)',
   })
   minimumWithdrawal!: number;
 
@@ -329,22 +329,21 @@ export class DashboardContributionDto {
   message?: string | null;
 
   @ApiProperty({
-    example: 500000,
+    example: 5000,
     description:
-      'Gross contribution amount before charges in minor units / kobo (e.g. 500000 kobo = ₦5,000)',
+      'Gross contribution amount before charges in naira (e.g. 5000 = ₦5,000)',
   })
   amount!: number;
 
   @ApiProperty({
-    example: 25000,
-    description: 'Platform fee deducted from the amount, in minor units / kobo',
+    example: 250,
+    description: 'Platform fee deducted from the amount, in naira',
   })
   platformFee!: number;
 
   @ApiProperty({
-    example: 475000,
-    description:
-      'Net amount credited to creator in minor units / kobo (e.g. 475000 kobo = ₦4,750)',
+    example: 4750,
+    description: 'Net amount credited to creator in naira (e.g. 4750 = ₦4,750)',
   })
   creatorAmount!: number;
 
@@ -394,15 +393,14 @@ export class DashboardEarningsPointDto {
   label!: string;
 
   @ApiProperty({
-    example: 2000000,
-    description:
-      'Gross contribution amount in minor units / kobo in this bucket',
+    example: 20000,
+    description: 'Gross contribution amount in naira in this bucket',
   })
   grossAmount!: number;
 
   @ApiProperty({
-    example: 1900000,
-    description: 'Net creator earnings in minor units / kobo in this bucket',
+    example: 19000,
+    description: 'Net creator earnings in naira in this bucket',
   })
   netAmount!: number;
 
@@ -421,22 +419,20 @@ export class DashboardEarningsChartDto {
   period!: string;
 
   @ApiProperty({
-    example: 12000000,
-    description:
-      'Total gross earnings within this period in minor units / kobo',
+    example: 120000,
+    description: 'Total gross earnings within this period in naira',
   })
   totalGross!: number;
 
   @ApiProperty({
-    example: 600000,
-    description:
-      'Total platform fees deducted within this period in minor units / kobo',
+    example: 6000,
+    description: 'Total platform fees deducted within this period in naira',
   })
   totalFees!: number;
 
   @ApiProperty({
-    example: 11400000,
-    description: 'Total net earnings within this period in minor units / kobo',
+    example: 114000,
+    description: 'Total net earnings within this period in naira',
   })
   totalNet!: number;
 

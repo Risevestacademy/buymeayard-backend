@@ -7,7 +7,9 @@ import {
   Param,
   ParseUUIDPipe,
   Req,
+  UseInterceptors,
 } from '@nestjs/common';
+import { NairaResponseInterceptor } from '../../common/interceptors/naira-response.interceptor';
 import { ApiTags, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
 import {
   ApiErrors,
@@ -22,6 +24,7 @@ import {
 import { SupportStatusResponseDto } from './dto/support-status.dto';
 
 @ApiTags('payments')
+@UseInterceptors(NairaResponseInterceptor)
 @Controller()
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}

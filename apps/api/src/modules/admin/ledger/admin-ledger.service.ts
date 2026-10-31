@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { MoneyUtil } from '../../../common/utils/money.util';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import { buildPagination } from '../../../common/utils/pagination.util';
 import { lagosDayEnd, lagosDayStart } from '../dto/admin-query.dto';
@@ -42,7 +43,7 @@ export class AdminLedgerService {
       }),
     ]);
     return {
-      items,
+      items: items.map((e) => MoneyUtil.toMajorDeep(e, ['amount'])),
       pagination: buildPagination(query.page, query.limit, total),
     };
   }
@@ -107,15 +108,15 @@ export class AdminLedgerService {
     const checks = {
       creatorAccountsBelowZero: negative.map((n) => ({
         creatorId: n.ownerId,
-        balance: Number(n.balance),
+        balance: MoneyUtil.toMajorUnits(Number(n.balance)),
       })),
       paidContributionsWithoutLedger: paidWithoutLedger.map((r) => r.id),
       failedPayoutsWithoutReversal: failedWithoutReversal.map((r) => r.id),
       payoutsWithoutReservation: payoutsWithoutReservation.map((r) => r.id),
       refundsWithoutDebit: processedRefundsWithoutDebit.map((r) => r.id),
       platformFeeMismatch: {
-        expected: Number(feeCheck[0]?.expected ?? 0),
-        recorded: Number(feeCheck[0]?.recorded ?? 0),
+        expected: MoneyUtil.toMajorUnits(Number(feeCheck[0]?.expected ?? 0)),
+        recorded: MoneyUtil.toMajorUnits(Number(feeCheck[0]?.recorded ?? 0)),
       },
     };
     const feeOk =
@@ -127,7 +128,7 @@ export class AdminLedgerService {
       balances: balances.map((b) => ({
         ownerType: b.ownerType,
         accounts: Number(b.accounts),
-        balance: Number(b.balance ?? 0),
+        balance: MoneyUtil.toMajorUnits(Number(b.balance ?? 0)),
       })),
       checks,
       healthy:

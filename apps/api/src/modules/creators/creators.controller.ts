@@ -34,6 +34,7 @@ import {
   ApiConsumes,
 } from '@nestjs/swagger';
 import { CreatorsService } from './creators.service';
+import { NairaResponseInterceptor } from '../../common/interceptors/naira-response.interceptor';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
@@ -104,6 +105,7 @@ const NO_MATERIAL_ERROR: ApiErrorDoc = {
 };
 
 @ApiTags('creators')
+@UseInterceptors(NairaResponseInterceptor)
 @Controller('creators')
 export class CreatorsController {
   constructor(
@@ -460,7 +462,7 @@ export class CreatorsController {
 - \`CONNECT_BANK\` → "Where should your money land?", **Add bank account** button.
 - \`READY\` → hide the setup card and show the account card (\`payoutMethod\`: "•••• 4589 Guaranty Trust Bank", **Change account**) and **Withdraw**.
 
-**Balance cards:** \`availableBalance\` ("Ready to withdraw"), \`pendingBalance\` ("Contributions still processing"), \`withdrawnToDate\` ("Total sent to your bank account"). All in kobo.
+**Balance cards:** \`availableBalance\` ("Ready to withdraw"), \`pendingBalance\` ("Contributions still processing"), \`withdrawnToDate\` ("Total sent to your bank account"). All in naira.
 
 **Withdraw button:** if \`canWithdraw\` is false only because \`availableBalance < minimumWithdrawal\`, show the "You’re below the minimum" modal.
 
@@ -709,7 +711,7 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
   @ApiOperation({
     summary: 'Save creator material menu',
     description:
-      "Sets the creator's yard menu. Provide the full list of materials with custom prices. Materials not included will be deactivated. Prices are in minor units (kobo).",
+      "Sets the creator's yard menu. Provide the full list of materials with custom prices. Materials not included will be deactivated. Prices are in naira.",
   })
   @ApiBody({
     type: SaveCreatorMaterialsDto,
@@ -718,7 +720,7 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
         summary: 'Set two materials',
         value: {
           materials: [
-            { materialId: 'uuid-ankara', price: 500000 },
+            { materialId: 'uuid-ankara', price: 5000 },
             {
               materialId: 'uuid-lace',
               price: 1000000,

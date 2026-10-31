@@ -28,7 +28,7 @@ Everything an admin can see and do. Base URL `/api/v1`. Built for the admin dash
 - **Auth:** the normal session (cookie on web, Bearer token on mobile). Every `/admin/*` route needs the **`ADMIN`** role, otherwise `403 FORBIDDEN`. There is no super admin; the seeded admin has `ADMIN` (and an unused `SUPER_ADMIN`).
 - **Envelope:** success is `{ "data": ..., "meta": {} }`, errors are `{ "error": { "code", "message" } }`.
 - **Lists:** `data: { items, pagination: { page, limit, total, totalPages } }`. Every list takes `page` (default 1), `limit` (default 20, max 100) and `search`. Where it says *date range*, the list also takes `from` and `to` as `YYYY-MM-DD`, inclusive, in Lagos time.
-- **Money:** integers in **kobo** (₦1 = 100). Format in the UI.
+- **Money:** naira (₦1,000 is `1000`), as a number that can carry 2 decimals. Format in the UI.
 - **Reasons:** every action that changes someone's standing or moves money needs a `reason` (1 to 500 characters). It is stored in the audit log.
 - **Audit:** every admin write is recorded with who, what, the previous state, the new state and the reason. See [Audit log](#audit-log).
 - **Self-protection:** an admin cannot suspend or ban themselves or another admin.
@@ -82,23 +82,23 @@ The "change" objects look like `{ value, previous, changePercent }`; `changePerc
     "range": { "from": "2026-10-01", "to": "2026-10-22" },
     "currency": "NGN",
     "kpis": {
-      "totalCreators": { "value": 1284, "newInRange": 38, "series": [{ "day": "2026-10-01", "value": 2 }] },
-      "contributionsReceived": { "value": 28492000, "previous": 25350000, "changePercent": 12.4, "count": 410, "series": [] },
-      "pendingPayouts": { "count": 12, "amount": 41200000, "lateCount": 3, "lateAfterHours": 48, "series": [] },
-      "paidOutToDate": { "amount": 194000000, "paidOnTimePercent": 98.6, "series": [] }
+      "totalCreators": { "value": 12.84, "newInRange": 38, "series": [{ "day": "2026-10-01", "value": 2 }] },
+      "contributionsReceived": { "value": 284920, "previous": 253500, "changePercent": 12.4, "count": 410, "series": [] },
+      "pendingPayouts": { "count": 12, "amount": 412000, "lateCount": 3, "lateAfterHours": 48, "series": [] },
+      "paidOutToDate": { "amount": 1940000, "paidOnTimePercent": 98.6, "series": [] }
     },
     "contributionVolume": {
-      "weekly": [{ "weekStart": "2026-09-28", "contributions": 11500000, "payouts": 16736000 }],
-      "thisWeek": { "value": 7248000, "previous": 6446000, "changePercent": 12.4 },
-      "averageContribution": { "value": 4210, "previous": 4080, "changePercent": 3.1 },
-      "uniqueSupporters": { "value": 1712, "previous": 1576, "changePercent": 8.6 }
+      "weekly": [{ "weekStart": "2026-09-28", "contributions": 115000, "payouts": 167360 }],
+      "thisWeek": { "value": 72480, "previous": 64460, "changePercent": 12.4 },
+      "averageContribution": { "value": 42.1, "previous": 40.8, "changePercent": 3.1 },
+      "uniqueSupporters": { "value": 17.12, "previous": 15.76, "changePercent": 8.6 }
     },
     "payoutQueue": {
       "count": 12,
-      "totalAmount": 1846000,
+      "totalAmount": 18460,
       "items": [{
         "id": "…", "reference": "PYT-20261022-0041", "status": "PENDING",
-        "amount": 248000, "netAmount": 243000, "bankName": "GTBank", "accountNumberLast4": "4412",
+        "amount": 2480, "netAmount": 2430, "bankName": "GTBank", "accountNumberLast4": "4412",
         "requestedAt": "2026-10-19T08:00:00.000Z", "ageHours": 74, "isLate": true,
         "creator": { "id": "…", "slug": "mayabuilds", "creatorName": "Maya Okonkwo", "avatarUrl": null }
       }]
@@ -107,7 +107,7 @@ The "change" objects look like `{ value, previous, changePercent }`; `changePerc
       "total": 1284,
       "items": [{
         "id": "…", "slug": "mayabuilds", "name": "Maya Okonkwo", "avatarUrl": null,
-        "status": "ACTIVE", "kycStatus": "VERIFIED", "joinedAt": "2026-01-14T09:00:00.000Z", "contributed": 7248000
+        "status": "ACTIVE", "kycStatus": "VERIFIED", "joinedAt": "2026-01-14T09:00:00.000Z", "contributed": 72480
       }]
     }
   },
@@ -271,10 +271,10 @@ Tickets are raised by creators about a payout or contribution (`POST /support-ti
 | Field | Meaning | Default |
 |---|---|---|
 | `platformFeePercent` | Share of each contribution the platform keeps, 0 to 50 (up to 2 decimals) | `PLATFORM_FEE_PERCENTAGE` env, else 10 |
-| `minimumWithdrawal` | Smallest withdrawal, kobo | 100000 (₦1,000) |
-| `payoutFeeTierLimit` | Withdrawals up to this amount pay the lower fee, kobo | 5000000 (₦50,000) |
-| `payoutFeeUpToLimit` | Fee up to the tier limit, kobo | 5000 (₦50) |
-| `payoutFeeAboveLimit` | Fee above the tier limit, kobo | 10000 (₦100) |
+| `minimumWithdrawal` | Smallest withdrawal, naira | 1000 (₦1,000) |
+| `payoutFeeTierLimit` | Withdrawals up to this amount pay the lower fee, naira | 50000 (₦50,000) |
+| `payoutFeeUpToLimit` | Fee up to the tier limit, naira | 50 (₦50) |
+| `payoutFeeAboveLimit` | Fee above the tier limit, naira | 100 (₦100) |
 
 - The minimum withdrawal must be **higher than both payout fees**, otherwise `400 INVALID_SETTINGS`.
 - A change applies to **new** contributions and withdrawals. Existing contributions keep the fee they were created with, and payouts keep their stored fee.

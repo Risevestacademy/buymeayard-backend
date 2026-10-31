@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { MoneyUtil } from '../../../common/utils/money.util';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import { AuditLogService } from '../../analytics/audit-log.service';
 import { ErrorCodes } from '../../../common/errors/error-codes';
@@ -69,7 +70,7 @@ export class AdminTicketsService {
       },
     });
     if (!ticket) this.notFound();
-    return ticket;
+    return MoneyUtil.toMajorDeep(ticket, ['amount', 'totalAmount']);
   }
 
   async update(id: string, adminId: string, dto: AdminUpdateTicketDto) {

@@ -28,7 +28,7 @@ export class AdminController {
     summary:
       'Overview screen: KPIs, contribution volume, payout queue, recent creators',
     description:
-      'One call for the whole Overview page. Money is in kobo. `from`/`to` (Lagos days) drive the KPI cards and their change against the previous period of the same length; the weekly chart always ends this week.',
+      'One call for the whole Overview page. Money is in naira. `from`/`to` (Lagos days) drive the KPI cards and their change against the previous period of the same length; the weekly chart always ends this week.',
   })
   getSummary(
     @CurrentUser('id') adminId: string,
