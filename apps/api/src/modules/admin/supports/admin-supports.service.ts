@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
+import { toContributionMaterial } from '../../supports/mappers/contribution-material.mapper';
 import { AuditLogService } from '../../analytics/audit-log.service';
 import { RefundsService } from '../../payments/refunds.service';
 import { ErrorCodes } from '../../../common/errors/error-codes';
@@ -17,8 +18,34 @@ const SUPPORT_LIST_INCLUDE = {
   payment: {
     select: { id: true, status: true, providerReference: true, paidAt: true },
   },
-  items: { select: { materialNameSnapshot: true, quantity: true } },
+  items: { include: { creatorMaterial: { include: { material: true } } } },
 } satisfies Prisma.SupportInclude;
+
+type SupportWithItems = Prisma.SupportGetPayload<{
+  include: typeof SUPPORT_LIST_INCLUDE;
+}>;
+
+/**
+ * Adds `material` (same shape as the creator dashboard's contribution) and
+ * drops the nested catalogue rows the lookup needed from each item.
+ */
+function withMaterial<T extends SupportWithItems>(support: T) {
+  const first = support.items[0];
+  const yards = support.items.reduce((sum, i) => sum + Number(i.quantity), 0);
+  const material = first
+    ? toContributionMaterial(
+        first.creatorMaterial.materialId,
+        first.materialNameSnapshot,
+        first.creatorMaterial.material,
+        yards,
+      )
+    : null;
+  return {
+    ...support,
+    items: support.items.map(({ creatorMaterial: _omit, ...item }) => item),
+    material,
+  };
+}
 
 function dateFilter(from?: string, to?: string) {
   if (!from && !to) return undefined;
@@ -65,7 +92,7 @@ export class AdminSupportsService {
       }),
     ]);
     return {
-      items: supports,
+      items: supports.map(withMaterial),
       pagination: buildPagination(query.page, query.limit, total),
     };
   }
@@ -75,7 +102,6 @@ export class AdminSupportsService {
       where: { id },
       include: {
         ...SUPPORT_LIST_INCLUDE,
-        items: true,
         payment: { include: { refunds: { orderBy: { createdAt: 'desc' } } } },
         tickets: { select: { id: true, status: true, createdAt: true } },
       },
@@ -96,7 +122,7 @@ export class AdminSupportsService {
           orderBy: { createdAt: 'asc' },
         })
       : [];
-    return { ...support, ledgerEntries };
+    return { ...withMaterial(support), ledgerEntries };
   }
 
   async refund(id: string, adminId: string, dto: AdminRefundDto) {

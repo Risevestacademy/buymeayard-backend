@@ -1,3 +1,4 @@
+import { DashboardContributionMaterialDto } from '../../creators/dto/creator-dashboard.dto';
 /** Sent once per confirmed status change, as in the Payout notifications design. */
 export const PAYOUT_EVENTS = {
   SUCCESS: 'payout.success',
@@ -29,6 +30,8 @@ export interface ContributionNotificationEvent {
   supporterEmail?: string;
   yards: number;
   materialName: string;
+  /** Same shape as the dashboard's contribution `material` */
+  material?: DashboardContributionMaterialDto | null;
   amount: number;
   message?: string | null;
 }

@@ -23,6 +23,7 @@ import {
   SupportIntentResponseDto,
   SupportQuoteResponseDto,
 } from './dto/guest-support.dto';
+import { toContributionMaterial } from './mappers/contribution-material.mapper';
 import { resolveThankYouMessage } from './utils/thank-you-message.util';
 import {
   decodeWallCursor,
@@ -128,11 +129,18 @@ export class SupportsService {
     );
     const { amountMinor, yards } = this.priceGift(query.amount, material.price);
 
+    const materialName = material.displayName || material.material.name;
     return {
       amount: amountMinor,
       currency: material.currency,
       yards: yards.toNumber(),
-      materialName: material.displayName || material.material.name,
+      material: toContributionMaterial(
+        material.materialId,
+        materialName,
+        material.material,
+        yards.toNumber(),
+      ),
+      materialName,
     };
   }
 
@@ -189,6 +197,12 @@ export class SupportsService {
       amount: amountMinor,
       currency: material.currency,
       yards: yards.toNumber(),
+      material: toContributionMaterial(
+        material.materialId,
+        materialName,
+        material.material,
+        yards.toNumber(),
+      ),
       materialName,
       thankYouMessage: resolveThankYouMessage(creator.thankYouMessage),
     };
