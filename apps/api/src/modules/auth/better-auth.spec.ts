@@ -2,6 +2,7 @@ import {
   createBetterAuth,
   generateAppleClientSecret,
   resolveAppleClientSecret,
+  resolveCookieAttributes,
 } from './better-auth';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { USER_EVENTS } from '../analytics/events/user.events';
@@ -538,5 +539,37 @@ describe('createBetterAuth', () => {
 
       await expect(passedConfig.hooks.before(strongCtx)).resolves.not.toThrow();
     });
+  });
+});
+
+describe('resolveCookieAttributes', () => {
+  it('is Lax and host-only on http://localhost', () => {
+    expect(resolveCookieAttributes('http://localhost:8000', undefined)).toEqual(
+      {
+        sameSite: 'lax',
+        secure: false,
+      },
+    );
+  });
+
+  it('is Lax and Secure on an https API', () => {
+    expect(
+      resolveCookieAttributes('https://api.buymeayard.com', undefined),
+    ).toEqual({ sameSite: 'lax', secure: true });
+  });
+
+  it.each(['none', ' NONE '])(
+    'COOKIE_SAME_SITE=%s allows cross-site cookies and forces Secure',
+    (value) => {
+      expect(
+        resolveCookieAttributes('https://api.buymeayard.com', value),
+      ).toEqual({ sameSite: 'none', secure: true });
+    },
+  );
+
+  it('ignores any other value', () => {
+    expect(
+      resolveCookieAttributes('https://api.buymeayard.com', 'strict'),
+    ).toEqual({ sameSite: 'lax', secure: true });
   });
 });
