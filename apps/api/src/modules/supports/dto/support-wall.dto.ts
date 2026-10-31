@@ -1,32 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { CursorQueryDto } from '../../../common/dto/page-query.dto';
+import { CursorPaginationDto } from '../../../common/dto/pagination.dto';
+import { ApiProperty } from '@nestjs/swagger';
 import { DashboardContributionMaterialDto } from '../../creators/dto/creator-dashboard.dto';
-import {
-  IsInt,
-  IsOptional,
-  IsString,
-  Max,
-  MaxLength,
-  Min,
-} from 'class-validator';
 
-export class SupportWallQueryDto {
-  @ApiPropertyOptional({
-    description: "The previous page's nextCursor, passed back unchanged",
-  })
-  @IsOptional()
-  @IsString()
-  @MaxLength(200)
-  cursor?: string;
-
-  @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 50 })
-  @IsOptional()
-  @Type(() => Number) // query params arrive as strings
-  @IsInt()
-  @Min(1)
-  @Max(50)
-  limit?: number;
-}
+export class SupportWallQueryDto extends CursorQueryDto {}
 
 export class SupportWallItemDto {
   @ApiProperty({
@@ -74,9 +51,17 @@ export class SupportWallResponseDto {
   items!: SupportWallItemDto[];
 
   @ApiProperty({
+    type: CursorPaginationDto,
+    description:
+      'Page size and the cursor for the next page, same block as every other list',
+  })
+  pagination!: CursorPaginationDto;
+
+  @ApiProperty({
     nullable: true,
     type: String,
-    description: 'Null when there are no more pages',
+    deprecated: true,
+    description: 'Use pagination.nextCursor',
   })
   nextCursor!: string | null;
 

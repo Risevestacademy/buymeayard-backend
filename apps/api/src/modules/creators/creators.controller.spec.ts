@@ -192,7 +192,9 @@ describe('CreatorsController', () => {
       ];
       creatorsService.findAll.mockResolvedValue(mockCreators);
 
-      const result = await controller.getCreators({ search: 'adeola' });
+      const result = await controller.getCreators({
+        search: 'adeola',
+      } as never);
 
       expect(creatorsService.findAll).toHaveBeenCalledWith({
         search: 'adeola',

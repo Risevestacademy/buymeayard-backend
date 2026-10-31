@@ -1,3 +1,4 @@
+import { PageQueryDto } from '../../../common/dto/page-query.dto';
 import { PayoutMethodDto } from '../../payouts/dto/payout-method.dto';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -505,30 +506,7 @@ export class DashboardEarningsQueryDto {
   period?: '7d' | '30d' | '90d' | '12m' | 'all' = '30d';
 }
 
-export class DashboardContributionsQueryDto {
-  @ApiPropertyOptional({
-    example: 1,
-    description: 'Page number for pagination',
-    default: 1,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({
-    example: 10,
-    description: 'Number of items per page',
-    default: 10,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(50)
-  limit?: number = 10;
-
+export class DashboardContributionsQueryDto extends PageQueryDto {
   @ApiPropertyOptional({
     example: 'ada',
     description:

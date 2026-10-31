@@ -1,7 +1,8 @@
+import { PageQueryDto } from '../../../common/dto/page-query.dto';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationDto } from '../../../common/dto/pagination.dto';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, Min } from 'class-validator';
 
 /** The three statuses the Payouts screens show. */
 export enum PayoutDisplayStatus {
@@ -38,22 +39,7 @@ export class QuotePayoutQueryDto {
   amount!: number;
 }
 
-export class ListPayoutsQueryDto {
-  @ApiPropertyOptional({ default: 1, minimum: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page: number = 1;
-
-  @ApiPropertyOptional({ default: 10, minimum: 1, maximum: 50 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(50)
-  limit: number = 10;
-
+export class ListPayoutsQueryDto extends PageQueryDto {
   @ApiPropertyOptional({
     enum: PAYOUT_STATUS_FILTERS,
     default: 'all',

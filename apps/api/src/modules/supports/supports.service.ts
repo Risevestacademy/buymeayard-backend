@@ -7,6 +7,8 @@ import {
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { CreatorStatus } from '@buymeayard/types';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { DEFAULT_PAGE_LIMIT } from '../../common/dto/page-query.dto';
+import { buildCursorPagination } from '../../common/utils/pagination.util';
 import { MoneyUtil } from '../../common/utils/money.util';
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { Prisma } from '@prisma/client';
@@ -34,7 +36,6 @@ import {
   SUPPORT_WALL_SELECT,
   toSupportWallItem,
 } from './mappers/support-wall.mapper';
-const SUPPORT_PAGE_DEFAULT_LIMIT = 20;
 const RECEIVED_SUPPORT_STATUSES = [SupportStatus.PAID, SupportStatus.COMPLETED];
 
 // Yards are stored with 2 decimals (support_items.quantity is DECIMAL(10,2)).
@@ -224,11 +225,17 @@ export class SupportsService {
       });
     }
 
+    const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
+
     if (!creator.showSupportersOnPage) {
-      return { items: [], nextCursor: null, supporterCount: null };
+      return {
+        items: [],
+        pagination: buildCursorPagination(limit, null),
+        nextCursor: null,
+        supporterCount: null,
+      };
     }
 
-    const limit = query.limit ?? SUPPORT_PAGE_DEFAULT_LIMIT;
     const cursor = query.cursor ? decodeWallCursor(query.cursor) : null;
 
     const received = {
@@ -245,8 +252,11 @@ export class SupportsService {
       this.prisma.support.count({ where: received }),
     ]);
 
+    const { items, nextCursor } = toCursorPage(rows, limit, toSupportWallItem);
     return {
-      ...toCursorPage(rows, limit, toSupportWallItem),
+      items,
+      pagination: buildCursorPagination(limit, nextCursor),
+      nextCursor,
       supporterCount,
     };
   }

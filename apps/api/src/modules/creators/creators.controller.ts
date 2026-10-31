@@ -54,6 +54,8 @@ import {
   SupportQuoteQueryDto,
 } from './dto/create-support-intent.dto';
 import { SupportsService } from '../supports/supports.service';
+import { DiscoverCreatorsQueryDto } from './dto/discover-creators-query.dto';
+import { DiscoverCreatorsResponseDto } from './dto/discover-creators-response.dto';
 import { PaymentsService } from '../payments/payments.service';
 import { resolveCallbackUrl } from '../payments/utils/callback-url.util';
 import {
@@ -115,21 +117,14 @@ export class CreatorsController {
   @ApiOperation({
     summary: 'Discover active creators',
     description:
-      'Fetches a list of active creator profiles. Supports optional search filter by creator name or slug.',
-  })
-  @ApiQuery({
-    name: 'search',
-    required: false,
-    type: String,
-    description: 'Filter creators by name or handle',
-    example: 'adeola',
+      'Fetches a page of active creator profiles, newest first. Supports optional search filter by creator name or slug. Page with `page` + `limit`.',
   })
   @ApiResponse({
     status: 200,
-    description: 'List of active creator profiles returned successfully.',
-    type: [CreatorProfileDataDto],
+    description: 'A page of active creator profiles: `{ items, pagination }`.',
+    type: DiscoverCreatorsResponseDto,
   })
-  async getCreators(@Query() query: any) {
+  async getCreators(@Query() query: DiscoverCreatorsQueryDto) {
     return this.creatorsService.findAll(query);
   }
 

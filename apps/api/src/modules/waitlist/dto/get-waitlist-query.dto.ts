@@ -1,28 +1,8 @@
+import { PageQueryDto } from '../../../common/dto/page-query.dto';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
-export class GetWaitlistQueryDto {
-  @ApiPropertyOptional({ default: 1, minimum: 1, description: 'Page number' })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({
-    default: 50,
-    minimum: 1,
-    maximum: 100,
-    description: 'Number of entries per page',
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 50;
-
+export class GetWaitlistQueryDto extends PageQueryDto {
   @ApiPropertyOptional({
     description: 'Search waitlist by email keyword',
   })

@@ -1,21 +1,19 @@
-import { Transform, Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
   IsEnum,
-  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
-  Max,
   MaxLength,
-  Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { PageQueryDto } from '../../../common/dto/page-query.dto';
 import { KycSubmissionStatus } from '@buymeayard/types';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
-export class KycQueueQueryDto {
+export class KycQueueQueryDto extends PageQueryDto {
   @ApiPropertyOptional({
     enum: KycSubmissionStatus,
     default: KycSubmissionStatus.NEEDS_REVIEW,
@@ -23,22 +21,6 @@ export class KycQueueQueryDto {
   @IsOptional()
   @IsEnum(KycSubmissionStatus)
   status?: KycSubmissionStatus;
-
-  @ApiPropertyOptional({ default: 1, minimum: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(10_000)
-  page?: number;
-
-  @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number;
 }
 
 export class AdminKycApproveDto {
