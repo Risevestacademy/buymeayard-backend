@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_LIMIT } from '../../common/dto/page-query.dto';
 import {
   ConflictException,
   Inject,
@@ -63,7 +64,7 @@ export class KycAdminService {
   async listQueue(query: KycQueueQueryDto) {
     const status = query.status ?? S.NEEDS_REVIEW;
     const page = query.page ?? 1;
-    const limit = query.limit ?? 20;
+    const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
 
     const [total, items] = await Promise.all([
       this.prisma.kycSubmission.count({ where: { status } }),

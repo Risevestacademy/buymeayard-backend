@@ -1309,7 +1309,7 @@ describe('CreatorsService', () => {
       await service.getDashboardContributions('u-1', {
         search: ' ada ',
         order: 'asc',
-      });
+      } as never);
 
       const contains = { contains: 'ada', mode: 'insensitive' };
       expect(prisma.support.findMany).toHaveBeenCalledWith(
@@ -1373,6 +1373,28 @@ describe('CreatorsService', () => {
         creatorAmount: 1245000,
         reference: 'BMY-1',
         supporter: { name: 'Ada Okafor' },
+      });
+    });
+  });
+
+  describe('findAll (discover)', () => {
+    it('returns a page of creators with the shared pagination block', async () => {
+      (prisma.creatorProfile as unknown as { count: jest.Mock }).count = jest
+        .fn()
+        .mockResolvedValue(45);
+      prisma.creatorProfile.findMany.mockResolvedValue([{ id: 'c-1' }]);
+      jest
+        .spyOn(service as never, 'formatCreatorProfile')
+        .mockImplementation((c: { id: string }) => ({ id: c.id }) as never);
+
+      const res = await service.findAll({ page: 2, limit: 20 });
+
+      expect(prisma.creatorProfile.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 20, take: 20 }),
+      );
+      expect(res).toEqual({
+        items: [{ id: 'c-1' }],
+        pagination: { page: 2, limit: 20, total: 45, totalPages: 3 },
       });
     });
   });

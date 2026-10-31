@@ -176,8 +176,10 @@ describe('SupportsService.getPublicWall', () => {
       isPublished: true,
       showSupportersOnPage: true,
     });
-    const wall = await service.getPublicWall('adeola', {});
+    const wall = await service.getPublicWall('adeola', {} as never);
     expect(wall.supporterCount).toBe(128);
+    expect(wall.pagination).toEqual({ limit: 20, nextCursor: null });
+    expect(wall.nextCursor).toBeNull();
     expect(wall.items).toEqual([
       expect.objectContaining({
         id: 's-1',
@@ -201,11 +203,14 @@ describe('SupportsService.getPublicWall', () => {
       isPublished: true,
       showSupportersOnPage: false,
     });
-    await expect(service.getPublicWall('adeola', {})).resolves.toEqual({
-      items: [],
-      nextCursor: null,
-      supporterCount: null,
-    });
+    await expect(service.getPublicWall('adeola', {} as never)).resolves.toEqual(
+      {
+        items: [],
+        pagination: { limit: 20, nextCursor: null },
+        nextCursor: null,
+        supporterCount: null,
+      },
+    );
     expect(prisma.support.findMany).not.toHaveBeenCalled();
   });
 });

@@ -1,3 +1,4 @@
+import { DEFAULT_PAGE_LIMIT } from '../../common/dto/page-query.dto';
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
@@ -44,9 +45,8 @@ export class WaitlistService {
   }
 
   async getWaitlist(query: GetWaitlistQueryDto) {
-    const page = query.page && query.page > 0 ? query.page : 1;
-    const limit =
-      query.limit && query.limit > 0 ? Math.min(query.limit, 100) : 50;
+    const page = query.page ?? 1;
+    const limit = query.limit ?? DEFAULT_PAGE_LIMIT;
     const skip = (page - 1) * limit;
 
     const where: Prisma.WaitlistEntryWhereInput = {};

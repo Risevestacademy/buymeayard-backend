@@ -296,7 +296,7 @@ Requires verified identity, an active creator, a saved bank account, and \`amoun
 - **Tabs:** \`status=all | successful | failed | in_progress\`.
 - **Sort:** \`sort=newest\` (default, "Newest first") or \`oldest\`.
 - **Count badge** next to "Payout history": \`pagination.total\` (it follows the selected tab).
-- **Web pagination:** \`page\` + \`limit\` (default 10, max 50). **Mobile infinite scroll:** keep increasing \`page\` until \`page >= totalPages\`.
+- **Web pagination:** \`page\` + \`limit\` (default 20, max 50). **Mobile infinite scroll:** keep increasing \`page\` until \`page >= totalPages\`.
 - **Empty state** ("Your first payout starts here"): \`items\` is empty and \`total\` is 0 on the \`all\` tab.
 
 Each row: date = \`requestedAt\`, bank account = \`destination\` ("GTBank ••••4589"), status, amount. Show \`amount\` (requested) or \`netAmount\` (received) as the design requires; both are returned.`,

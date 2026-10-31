@@ -935,7 +935,7 @@ describe('KycService', () => {
       ]);
       expect(creator.kycStatus).toBe('NEEDS_REVIEW');
       expect(creator.status).toBe('KYC_PENDING');
-      const queue = await admin.listQueue({});
+      const queue = await admin.listQueue({} as never);
       expect(queue.items.map((s) => s.id)).toEqual([submission.id]);
       expect(queue.pagination).toEqual({
         page: 1,

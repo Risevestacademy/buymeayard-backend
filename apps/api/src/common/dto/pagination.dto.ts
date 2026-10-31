@@ -20,3 +20,21 @@ export class PaginationDto {
   })
   totalPages!: number;
 }
+
+/**
+ * The pagination block every cursor-based feed returns, as
+ * `data: { items, pagination }`.
+ */
+export class CursorPaginationDto {
+  @ApiProperty({ example: 20, description: 'Page size' })
+  limit!: number;
+
+  @ApiProperty({
+    nullable: true,
+    type: String,
+    example: 'eyJ0IjoiMjAyNi0xMC0wNlQxMDowMDowMFoifQ',
+    description:
+      'Pass as `cursor` to get the next page. Null when there are no more.',
+  })
+  nextCursor!: string | null;
+}

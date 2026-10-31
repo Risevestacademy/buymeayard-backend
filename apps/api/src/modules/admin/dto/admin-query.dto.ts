@@ -1,37 +1,20 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import {
-  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   Matches,
-  Max,
   MaxLength,
-  Min,
 } from 'class-validator';
+
+import { PageQueryDto } from '../../../common/dto/page-query.dto';
 
 const trim = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
 
 /** Shared `page` / `limit` / `search` for admin lists. */
-export class AdminListQueryDto {
-  @ApiPropertyOptional({ default: 1, minimum: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(10_000)
-  page: number = 1;
-
-  @ApiPropertyOptional({ default: 20, minimum: 1, maximum: 100 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit: number = 20;
-
+export class AdminListQueryDto extends PageQueryDto {
   @ApiPropertyOptional({ description: 'Free-text search' })
   @IsOptional()
   @Transform(trim)

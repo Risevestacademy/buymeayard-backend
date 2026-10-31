@@ -24,6 +24,11 @@ const PENDING_CONTRIBUTION_WINDOW_MS = 60 * 60 * 1000;
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import {
+  DEFAULT_PAGE_LIMIT,
+  MAX_PAGE_LIMIT,
+} from '../../common/dto/page-query.dto';
+import { DiscoverCreatorsQueryDto } from './dto/discover-creators-query.dto';
 import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
 import { CreateCustomMaterialDto } from './dto/create-custom-material.dto';
 import { CreatorShareLinkDataDto } from './dto/share-link.dto';
@@ -69,7 +74,7 @@ export class CreatorsService {
     this.ledger = ledgerService || new LedgerService(this.prisma);
   }
 
-  async findAll(_query?: { search?: string }) {
+  async findAll(_query?: DiscoverCreatorsQueryDto) {
     const where: any = {
       status: 'ACTIVE',
     };
@@ -82,31 +87,43 @@ export class CreatorsService {
       ];
     }
 
-    const creators = await this.prisma.creatorProfile.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
-          },
-        },
-        socialLinks: true,
-        themeMaterial: true,
-        materials: {
-          where: {
-            status: 'ACTIVE',
-          },
-          include: {
-            material: true,
-          },
-        },
-      },
-    });
+    const page = _query?.page ?? 1;
+    const limit = _query?.limit ?? DEFAULT_PAGE_LIMIT;
 
-    return creators.map((creator) => this.formatCreatorProfile(creator));
+    const [total, creators] = await Promise.all([
+      this.prisma.creatorProfile.count({ where }),
+      this.prisma.creatorProfile.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
+            },
+          },
+          socialLinks: true,
+          themeMaterial: true,
+          materials: {
+            where: {
+              status: 'ACTIVE',
+            },
+            include: {
+              material: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      items: creators.map((creator) => this.formatCreatorProfile(creator)),
+      pagination: buildPagination(page, limit, total),
+    };
   }
 
   async findBySlug(slug: string) {
@@ -1449,7 +1466,10 @@ export class CreatorsService {
     }
 
     const page = Math.max(1, query?.page || 1);
-    const limit = Math.min(50, Math.max(1, query?.limit || 10));
+    const limit = Math.min(
+      MAX_PAGE_LIMIT,
+      Math.max(1, query?.limit || DEFAULT_PAGE_LIMIT),
+    );
     const skip = (page - 1) * limit;
     const where = this.contributionsWhere(creator.id, query?.search);
 
