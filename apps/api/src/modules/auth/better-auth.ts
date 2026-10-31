@@ -34,6 +34,25 @@ export async function getOAuthStateFromContext(
   }
 }
 
+/**
+ * Session cookie attributes. `Lax` by default. A frontend on another site
+ * (e.g. http://localhost calling the deployed API) only gets the cookie with
+ * `SameSite=None`, which browsers accept only together with `Secure`, so set
+ * COOKIE_SAME_SITE=none on that API deployment only.
+ */
+export function resolveCookieAttributes(
+  baseUrl: string,
+  sameSiteEnv = process.env.COOKIE_SAME_SITE,
+): { sameSite: 'lax' | 'none'; secure: boolean } {
+  const sameSite =
+    sameSiteEnv?.trim().toLowerCase() === 'none' ? 'none' : 'lax';
+  return {
+    sameSite,
+    // http://localhost can't set Secure cookies in every browser
+    secure: sameSite === 'none' || baseUrl.startsWith('https://'),
+  };
+}
+
 export interface BetterAuthOptions {
   secret?: string;
   baseURL?: string;
@@ -420,11 +439,7 @@ export function createBetterAuth(
       ...(cookieDomain
         ? { crossSubDomainCookies: { enabled: true, domain: cookieDomain } }
         : {}),
-      defaultCookieAttributes: {
-        sameSite: 'lax',
-        // http://localhost can't set Secure cookies in every browser
-        secure: baseUrl.startsWith('https://'),
-      },
+      defaultCookieAttributes: resolveCookieAttributes(baseUrl),
     },
     hooks: {
       before: async (ctx: any) => {
