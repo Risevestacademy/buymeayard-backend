@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { MoneyUtil } from '../../../common/utils/money.util';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import { ErrorCodes } from '../../../common/errors/error-codes';
 import { IN_FLIGHT_PAYOUT_STATUSES } from '../../payouts/payouts.service';
@@ -16,11 +17,17 @@ const RECENT_CREATORS = 5;
 
 type DayRow = { day: string; value: bigint | number | null };
 
+const toNairaPoint = (p: { day: string; value: number }) => ({
+  day: p.day,
+  value: MoneyUtil.toMajorUnits(p.value),
+});
+
 /** Value with its change against the previous period of the same length. */
-function withChange(current: number, previous: number) {
+function withChange(current: number, previous: number, naira = false) {
+  const out = (n: number) => (naira ? MoneyUtil.toMajorUnits(n) : n);
   return {
-    value: current,
-    previous,
+    value: out(current),
+    previous: out(previous),
     changePercent:
       previous === 0
         ? null
@@ -34,7 +41,7 @@ export class AdminDashboardService {
 
   /**
    * Everything the admin Overview screen shows, in one call. Money is in
-   * kobo; days and weeks are in Lagos time.
+   * naira; days and weeks are in Lagos time.
    */
   async getSummary(adminId: string, query: AdminSummaryQueryDto) {
     const now = new Date();
@@ -122,29 +129,38 @@ export class AdminDashboardService {
           series: creatorSeries,
         },
         contributionsReceived: {
-          ...withChange(contribution.current.sum, contribution.previous.sum),
+          ...withChange(
+            contribution.current.sum,
+            contribution.previous.sum,
+            true,
+          ),
           count: contribution.current.count,
-          series: contributionSeries,
+          series: contributionSeries.map(toNairaPoint),
         },
         pendingPayouts: {
           count: pending.count,
-          amount: pending.amount,
+          amount: MoneyUtil.toMajorUnits(pending.amount),
           lateCount: pending.lateCount,
           lateAfterHours: LATE_AFTER_MS / 3600 / 1000,
           series: pendingSeries,
         },
         paidOutToDate: {
-          amount: paidOut.amount,
+          amount: MoneyUtil.toMajorUnits(paidOut.amount),
           paidOnTimePercent: paidOut.onTimePercent,
-          series: paidSeries,
+          series: paidSeries.map(toNairaPoint),
         },
       },
       contributionVolume: {
-        weekly: weekly.weeks,
-        thisWeek: withChange(weekly.thisWeek, weekly.lastWeek),
+        weekly: weekly.weeks.map((w) => ({
+          weekStart: w.weekStart,
+          contributions: MoneyUtil.toMajorUnits(w.contributions),
+          payouts: MoneyUtil.toMajorUnits(w.payouts),
+        })),
+        thisWeek: withChange(weekly.thisWeek, weekly.lastWeek, true),
         averageContribution: withChange(
           contribution.current.average,
           contribution.previous.average,
+          true,
         ),
         uniqueSupporters: withChange(
           contribution.current.supporters,
@@ -295,15 +311,15 @@ export class AdminDashboardService {
     ]);
     return {
       count: agg._count,
-      totalAmount: agg._sum.amount ?? 0,
+      totalAmount: MoneyUtil.toMajorUnits(agg._sum.amount ?? 0),
       items: items.map((p) => {
         const ageMs = now.getTime() - p.requestedAt.getTime();
         return {
           id: p.id,
           reference: p.reference,
           status: p.status,
-          amount: p.amount,
-          netAmount: p.netAmount,
+          amount: MoneyUtil.toMajorUnits(p.amount),
+          netAmount: MoneyUtil.toMajorUnits(p.netAmount),
           bankName: p.bankName,
           accountNumberLast4: p.accountNumberLast4,
           requestedAt: p.requestedAt,
@@ -353,7 +369,7 @@ export class AdminDashboardService {
         status: c.status,
         kycStatus: c.kycStatus,
         joinedAt: c.createdAt,
-        contributed: contributed.get(c.id) ?? 0,
+        contributed: MoneyUtil.toMajorUnits(contributed.get(c.id) ?? 0),
       })),
     };
   }

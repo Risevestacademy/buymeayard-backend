@@ -1,4 +1,5 @@
 import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { MoneyUtil } from '../../common/utils/money.util';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { NOTIFICATION_PROVIDER } from '../../infrastructure/notifications/notification-provider.interface';
 import type { NotificationProvider } from '../../infrastructure/notifications/notification-provider.interface';
@@ -56,7 +57,12 @@ export class NotificationsService {
       type: item.type,
       title: item.title,
       body: item.body,
-      data: (item.data as Record<string, any>) || null,
+      data: item.data
+        ? MoneyUtil.toMajorDeep(item.data as Record<string, any>, [
+            'amount',
+            'netAmount',
+          ])
+        : null,
       actionUrl: item.actionUrl,
       readAt: item.readAt,
       isRead: Boolean(item.readAt),

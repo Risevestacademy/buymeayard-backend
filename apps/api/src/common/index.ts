@@ -10,3 +10,5 @@ export * from './guards/roles.guard';
 export * from './utils/money.util';
 export * from './dto/pagination.dto';
 export * from './utils/pagination.util';
+export * from './interceptors/naira-response.interceptor';
+export * from './decorators/naira-to-kobo.decorator';

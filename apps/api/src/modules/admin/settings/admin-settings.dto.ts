@@ -1,8 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsNumber, IsOptional, Max, Min } from 'class-validator';
+import { IsNumber, IsOptional, Max, Min } from 'class-validator';
 
-/** Every field is optional; only the ones sent change. Money is in kobo. */
+/** Every field is optional; only the ones sent change. Money is in naira. */
 export class AdminUpdateSettingsDto {
   @ApiPropertyOptional({
     example: 10,
@@ -16,42 +16,42 @@ export class AdminUpdateSettingsDto {
   platformFeePercent?: number;
 
   @ApiPropertyOptional({
-    example: 100000,
-    description: 'Minimum withdrawal in kobo',
+    example: 1000,
+    description: 'Minimum withdrawal in naira',
   })
   @IsOptional()
   @Type(() => Number)
-  @IsInt()
-  @Min(1)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
   minimumWithdrawal?: number;
 
   @ApiPropertyOptional({
-    example: 5000000,
-    description: 'Withdrawals up to this amount pay the lower fee (kobo)',
+    example: 50000,
+    description: 'Withdrawals up to this amount pay the lower fee (naira)',
   })
   @IsOptional()
   @Type(() => Number)
-  @IsInt()
-  @Min(1)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
   payoutFeeTierLimit?: number;
 
   @ApiPropertyOptional({
-    example: 5000,
-    description: 'Fee up to the tier limit (kobo)',
+    example: 50,
+    description: 'Fee up to the tier limit (naira)',
   })
   @IsOptional()
   @Type(() => Number)
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   payoutFeeUpToLimit?: number;
 
   @ApiPropertyOptional({
-    example: 10000,
-    description: 'Fee above the tier limit (kobo)',
+    example: 100,
+    description: 'Fee above the tier limit (naira)',
   })
   @IsOptional()
   @Type(() => Number)
-  @IsInt()
+  @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   payoutFeeAboveLimit?: number;
 }

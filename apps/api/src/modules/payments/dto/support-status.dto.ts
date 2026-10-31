@@ -19,7 +19,7 @@ export class SupportStatusResponseDto {
   })
   paid!: boolean;
 
-  @ApiProperty({ example: 500000, description: 'Amount in kobo' })
+  @ApiProperty({ example: 5000, description: 'Amount in naira' })
   amount!: number;
 
   @ApiProperty({ example: 'NGN' })

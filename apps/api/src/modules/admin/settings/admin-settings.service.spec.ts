@@ -48,7 +48,7 @@ describe('AdminSettingsService', () => {
     const { service, settings } = setup();
 
     await expect(
-      service.update('admin-1', { minimumWithdrawal: 10_000 }),
+      service.update('admin-1', { minimumWithdrawal: 100 }),
     ).rejects.toThrow('must be higher than the payout fee');
     expect(settings.save).not.toHaveBeenCalled();
   });

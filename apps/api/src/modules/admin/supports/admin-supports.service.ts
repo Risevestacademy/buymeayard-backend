@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { MoneyUtil } from '../../../common/utils/money.util';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import { toContributionMaterial } from '../../supports/mappers/contribution-material.mapper';
 import { AuditLogService } from '../../analytics/audit-log.service';
@@ -47,6 +48,18 @@ function withMaterial<T extends SupportWithItems>(support: T) {
   };
 }
 
+const MONEY_KEYS = [
+  'totalAmount',
+  'platformFee',
+  'creatorAmount',
+  'unitPrice',
+  'totalPrice',
+  'amount',
+];
+
+/** Admin screens show naira; the database stores kobo. */
+const inNaira = <T>(row: T): T => MoneyUtil.toMajorDeep(row, MONEY_KEYS);
+
 function dateFilter(from?: string, to?: string) {
   if (!from && !to) return undefined;
   return {
@@ -92,7 +105,7 @@ export class AdminSupportsService {
       }),
     ]);
     return {
-      items: supports.map(withMaterial),
+      items: supports.map((s) => inNaira(withMaterial(s))),
       pagination: buildPagination(query.page, query.limit, total),
     };
   }
@@ -122,7 +135,7 @@ export class AdminSupportsService {
           orderBy: { createdAt: 'asc' },
         })
       : [];
-    return { ...withMaterial(support), ledgerEntries };
+    return inNaira({ ...withMaterial(support), ledgerEntries });
   }
 
   async refund(id: string, adminId: string, dto: AdminRefundDto) {
@@ -146,7 +159,7 @@ export class AdminSupportsService {
         allowNegativeBalance: !!dto.allowNegativeBalance,
       },
     });
-    return refund;
+    return inNaira(refund);
   }
 
   async listRefunds(query: AdminRefundsQueryDto) {
@@ -180,7 +193,7 @@ export class AdminSupportsService {
       }),
     ]);
     return {
-      items: refunds,
+      items: refunds.map(inNaira),
       pagination: buildPagination(query.page, query.limit, total),
     };
   }

@@ -27,7 +27,7 @@ export class AdminSettingsController {
   @ApiOperation({
     summary: 'Update the platform fee and withdrawal rules',
     description:
-      'Send only the fields to change. Applies to new contributions and withdrawals; existing ones keep their fee. Money is in kobo.',
+      'Send only the fields to change. Applies to new contributions and withdrawals; existing ones keep their fee. Money is in naira.',
   })
   update(
     @CurrentUser('id') adminId: string,

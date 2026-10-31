@@ -4,7 +4,7 @@ import {
 } from '../platform-settings/platform-settings.service';
 
 /**
- * Withdrawal rules shown on the Payouts screens. Amounts are in kobo. The
+ * Withdrawal rules shown on the Payouts screens. Amounts are in kobo internally (the API shows naira). The
  * values are admin-editable (see PlatformSettingsService); these are the
  * built-in defaults.
  */

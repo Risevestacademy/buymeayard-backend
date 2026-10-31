@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { MoneyUtil } from '../../../common/utils/money.util';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 import { AuditLogService } from '../../analytics/audit-log.service';
 import { PayoutsService } from '../../payouts/payouts.service';
@@ -14,6 +15,11 @@ const CREATOR_SELECT = {
   creatorName: true,
   avatarUrl: true,
 } satisfies Prisma.CreatorProfileSelect;
+
+const MONEY_KEYS = ['amount', 'fee', 'netAmount'];
+
+/** Admin screens show naira; the database stores kobo. */
+const inNaira = <T>(row: T): T => MoneyUtil.toMajorDeep(row, MONEY_KEYS);
 
 @Injectable()
 export class AdminPayoutsService {
@@ -54,7 +60,7 @@ export class AdminPayoutsService {
       }),
     ]);
     return {
-      items,
+      items: items.map(inNaira),
       pagination: buildPagination(query.page, query.limit, total),
     };
   }
@@ -78,7 +84,7 @@ export class AdminPayoutsService {
       where: { transactionId: id },
       orderBy: { createdAt: 'asc' },
     });
-    return { ...payout, ledgerEntries };
+    return inNaira({ ...payout, ledgerEntries });
   }
 
   async reconcile(id: string, adminId: string) {

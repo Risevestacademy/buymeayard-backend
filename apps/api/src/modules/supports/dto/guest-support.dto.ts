@@ -4,7 +4,7 @@ import { DashboardContributionMaterialDto } from '../../creators/dto/creator-das
 import { CreateSupportIntentDto } from '../../creators/dto/create-support-intent.dto';
 
 export class SupportQuoteResponseDto {
-  @ApiProperty({ example: 500000, description: 'Amount in kobo' })
+  @ApiProperty({ example: 5000, description: 'Amount in naira' })
   amount!: number;
 
   @ApiProperty({ example: 'NGN' })

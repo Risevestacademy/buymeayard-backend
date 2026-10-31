@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { Prisma } from '@prisma/client';
 
-/** Money values are in kobo. */
+/** Money values are in kobo (the admin API converts to and from naira). */
 export interface PlatformSettings {
   /** Share of each contribution kept by the platform, 0-100. */
   platformFeePercent: number;
