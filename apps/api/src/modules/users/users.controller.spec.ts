@@ -59,8 +59,6 @@ describe('UsersController', () => {
       expect(result).toEqual(mockProfile);
       expect(result.isOnboardingCompleted).toBe(true);
       expect(result.isProfileSetupCompleted).toBe(true);
-      // Strictly verify no obsolete redundant aliases are present
-      expect((result as any).isOnboarded).toBeUndefined();
       expect((result as any).isProfileCompleted).toBeUndefined();
       expect((result.creatorProfile as any)?.username).toBeUndefined();
       expect((result.creatorProfile as any)?.personalizedLink).toBeUndefined();
@@ -82,7 +80,6 @@ describe('UsersController', () => {
       const result = await controller.getProfile('user-2');
       expect(result.isOnboardingCompleted).toBe(false);
       expect(result.isProfileSetupCompleted).toBe(false);
-      expect((result as any).isOnboarded).toBeUndefined();
       expect((result as any).isProfileCompleted).toBeUndefined();
     });
   });

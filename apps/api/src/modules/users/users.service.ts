@@ -63,6 +63,7 @@ export class UsersService {
       emailVerified: user.emailVerified,
       status: user.status,
       roles: user.roles.map((r) => r.role.name),
+      isOnboarded: isCompleted,
       isOnboardingCompleted: isCompleted,
       isProfileSetupCompleted: isCompleted,
       isKycCompleted: user.creatorProfile?.kycStatus === 'VERIFIED',
