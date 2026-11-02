@@ -75,6 +75,7 @@ describe('AuthController', () => {
       userHasRole: jest.fn(),
       getIsOnboarded: jest.fn().mockResolvedValue(false),
       getUserAuthFlags: jest.fn().mockResolvedValue({
+        isOnboarded: false,
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
       }),
@@ -126,9 +127,11 @@ describe('AuthController', () => {
         user: {
           id: 'u1',
           email: 'alice@example.com',
+          isOnboarded: false,
           isOnboardingCompleted: false,
           isProfileSetupCompleted: false,
         },
+        isOnboarded: false,
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
       });
@@ -227,10 +230,12 @@ describe('AuthController', () => {
       expect(result).toEqual({
         user: {
           id: 'u1',
+          isOnboarded: false,
           isOnboardingCompleted: false,
           isProfileSetupCompleted: false,
         },
         token: 'token456',
+        isOnboarded: false,
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
       });

@@ -28,7 +28,7 @@ export class UsersController {
 
 | Flag | true when |
 |---|---|
-| \`isOnboardingCompleted\` / \`isProfileSetupCompleted\` | The creator finished onboarding |
+| \`isOnboarded\` / \`isOnboardingCompleted\` / \`isProfileSetupCompleted\` | The creator finished onboarding |
 | \`isKycCompleted\` | Identity verification approved (\`creatorProfile.kycStatus = VERIFIED\`) |
 | \`isBankAccountConnected\` | A verified payout bank account is saved |
 

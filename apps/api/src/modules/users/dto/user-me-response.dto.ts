@@ -56,6 +56,12 @@ export class UserMeResponseDto {
 
   @ApiProperty({
     example: true,
+    description: 'Same as isOnboardingCompleted',
+  })
+  isOnboarded!: boolean;
+
+  @ApiProperty({
+    example: true,
     description: 'The creator finished onboarding',
   })
   isOnboardingCompleted!: boolean;

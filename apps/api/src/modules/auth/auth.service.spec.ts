@@ -448,11 +448,10 @@ describe('AuthService', () => {
 
       const result = await service.getUserAuthFlags('u-creator');
       expect(result).toEqual({
+        isOnboarded: true,
         isOnboardingCompleted: true,
         isProfileSetupCompleted: true,
       });
-      // Verify no obsolete keys
-      expect((result as any).isOnboarded).toBeUndefined();
       expect((result as any).isProfileCompleted).toBeUndefined();
     });
 
@@ -461,6 +460,7 @@ describe('AuthService', () => {
 
       const result = await service.getUserAuthFlags('u-new');
       expect(result).toEqual({
+        isOnboarded: false,
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
       });
