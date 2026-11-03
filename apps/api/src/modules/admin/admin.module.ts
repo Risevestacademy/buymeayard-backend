@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { AuditLogInterceptor } from './interceptors/audit-log.interceptor';
 import { AnalyticsModule } from '../analytics/analytics.module';
+import { MaterialsModule } from '../materials/materials.module';
 import { LedgerModule } from '../ledger/ledger.module';
 import { PayoutsModule } from '../payouts/payouts.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -25,6 +26,8 @@ import { AdminSettingsController } from './settings/admin-settings.controller';
 import { AdminSettingsService } from './settings/admin-settings.service';
 import { AdminAuditController } from './audit/admin-audit.controller';
 import { AdminAuditService } from './audit/admin-audit.service';
+import { AdminMaterialsController } from './materials/admin-materials.controller';
+import { AdminMaterialsService } from './materials/admin-materials.service';
 
 @Module({
   imports: [
@@ -33,6 +36,7 @@ import { AdminAuditService } from './audit/admin-audit.service';
     PayoutsModule,
     PaymentsModule,
     WaitlistModule,
+    MaterialsModule,
   ],
   controllers: [
     AdminController,
@@ -45,6 +49,7 @@ import { AdminAuditService } from './audit/admin-audit.service';
     AdminTicketsController,
     AdminSettingsController,
     AdminAuditController,
+    AdminMaterialsController,
   ],
   providers: [
     AuditLogInterceptor,
@@ -58,6 +63,7 @@ import { AdminAuditService } from './audit/admin-audit.service';
     AdminTicketsService,
     AdminSettingsService,
     AdminAuditService,
+    AdminMaterialsService,
   ],
   exports: [AuditLogInterceptor],
 })
