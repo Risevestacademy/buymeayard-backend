@@ -43,7 +43,7 @@ describe('RolesGuard', () => {
     reflector.getAllAndOverride.mockReturnValue([UserRole.ADMIN]);
     const context = createMockContext({
       id: 'user-1',
-      roles: [UserRole.SUPPORTER],
+      roles: [UserRole.CREATOR],
     });
 
     expect(() => rolesGuard.canActivate(context)).toThrow(ForbiddenException);

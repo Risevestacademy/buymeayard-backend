@@ -1,11 +1,6 @@
 export enum UserRole {
-  SUPPORTER = 'SUPPORTER',
   CREATOR = 'CREATOR',
   ADMIN = 'ADMIN',
-  SUPER_ADMIN = 'SUPER_ADMIN',
-  MODERATOR = 'MODERATOR',
-  FINANCE = 'FINANCE',
-  SUPPORT = 'SUPPORT',
 }
 
 export enum UserStatus {

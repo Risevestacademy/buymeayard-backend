@@ -65,9 +65,7 @@ Non-creators get \`false\` for the creator flags. For balances and the payout ac
   })
   async getUserById(@Param('id') id: string, @CurrentUser() currentUser: any) {
     const isSelf = currentUser?.id === id;
-    const isAdmin =
-      currentUser?.roles?.includes(UserRole.ADMIN) ||
-      currentUser?.roles?.includes(UserRole.SUPER_ADMIN);
+    const isAdmin = currentUser?.roles?.includes(UserRole.ADMIN);
 
     if (isSelf || isAdmin) {
       return this.usersService.findByIdWithRoles(id);

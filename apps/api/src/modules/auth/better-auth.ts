@@ -13,6 +13,7 @@ import { isPasswordValid } from '../../common/decorators/is-valid-password.decor
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { USER_EVENTS } from '../analytics/events/user.events';
+import { primaryRole } from './role.util';
 
 /**
  * Safely resolves OAuth state during OAuth callback flows.
@@ -126,6 +127,14 @@ function isEventEmitter(val: unknown): val is EventEmitter2 {
   );
 }
 
+/** Better Auth responses that carry a user and get role + onboarding flags. */
+const AUTH_RESPONSE_PATHS = [
+  '/sign-in/email',
+  '/sign-up/email',
+  '/sign-in/social',
+  '/get-session',
+];
+
 export function createBetterAuth(
   prisma: PrismaClient,
   eventEmitterOrOptions?: EventEmitter2 | BetterAuthOptions,
@@ -178,7 +187,7 @@ export function createBetterAuth(
       include: { role: true },
     });
     const roleNames = userRoles.map((r) => r.role.name);
-    if (roleNames.includes('ADMIN') || roleNames.includes('SUPER_ADMIN')) {
+    if (roleNames.includes('ADMIN')) {
       return frontendUrls.admin;
     }
     return frontendUrls.creator;
@@ -443,10 +452,13 @@ export function createBetterAuth(
     },
     hooks: {
       // Native Better Auth endpoints (used by the Better Auth client) bypass
-      // AuthController, so add the same onboarding flags the controller adds.
+      // AuthController, so add the same role and onboarding flags the
+      // controller adds. A social OAuth sign-in ends in a browser redirect
+      // with no body, so its client gets them from /get-session afterwards;
+      // /sign-in/social only has a user in the native id-token flow.
       after: async (ctx: any) => {
         const path: string | undefined = ctx?.path;
-        if (path !== '/sign-in/email' && path !== '/sign-up/email') return {};
+        if (!path || !AUTH_RESPONSE_PATHS.includes(path)) return {};
         const body = ctx?.context?.returned;
         const userId = body?.user?.id;
         if (!body || typeof body !== 'object' || !userId) return {};
@@ -455,10 +467,17 @@ export function createBetterAuth(
           select: { status: true },
         });
         const isCompleted = profile !== null && profile.status !== 'REGISTERED';
+        const roleRows = await prisma.userRole.findMany({
+          where: { userId },
+          select: { role: { select: { name: true } } },
+        });
+        const roles = roleRows.map((r) => r.role.name);
         const flags = {
           isOnboarded: isCompleted,
           isOnboardingCompleted: isCompleted,
           isProfileSetupCompleted: isCompleted,
+          role: primaryRole(roles),
+          roles,
         };
         return {
           response: { ...body, ...flags, user: { ...body.user, ...flags } },

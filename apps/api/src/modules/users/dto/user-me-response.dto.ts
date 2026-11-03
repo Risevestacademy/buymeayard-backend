@@ -51,6 +51,14 @@ export class UserMeResponseDto {
   @ApiProperty({ example: 'ACTIVE', description: 'User account status' })
   status!: string;
 
+  @ApiProperty({
+    example: 'CREATOR',
+    nullable: true,
+    description:
+      'The role to treat the user as: ADMIN or CREATOR. ADMIN wins if the user has both.',
+  })
+  role!: string | null;
+
   @ApiProperty({ example: ['CREATOR'], type: [String] })
   roles!: string[];
 

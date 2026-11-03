@@ -47,6 +47,7 @@ describe('AuthService', () => {
       userRole: {
         upsert: jest.fn(),
         findFirst: jest.fn(),
+        findMany: jest.fn(),
       },
       creatorProfile: {
         findUnique: jest.fn(),
@@ -463,6 +464,29 @@ describe('AuthService', () => {
         isOnboarded: false,
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
+      });
+    });
+  });
+
+  describe('getUserRoleInfo', () => {
+    it('returns every role and ADMIN as the primary one', async () => {
+      prismaService.userRole.findMany.mockResolvedValue([
+        { role: { name: 'CREATOR' } },
+        { role: { name: 'ADMIN' } },
+      ]);
+
+      await expect(service.getUserRoleInfo('u-admin')).resolves.toEqual({
+        role: 'ADMIN',
+        roles: ['CREATOR', 'ADMIN'],
+      });
+    });
+
+    it('returns a null role when the user has none', async () => {
+      prismaService.userRole.findMany.mockResolvedValue([]);
+
+      await expect(service.getUserRoleInfo('u-none')).resolves.toEqual({
+        role: null,
+        roles: [],
       });
     });
   });

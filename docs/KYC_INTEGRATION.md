@@ -123,7 +123,7 @@ Until a creator is verified (`creatorStatus: "ACTIVE"`), `POST /api/v1/supports`
 
 ## 6. Admin portal
 
-Requires the `ADMIN` or `SUPER_ADMIN` role.
+Requires the `ADMIN` role.
 
 | Endpoint | Purpose |
 |---|---|

@@ -34,7 +34,7 @@ pnpm install
 pnpm --filter @buymeayard/types build
 pnpm db:up                    # Postgres + Redis in Docker
 pnpm db:migrate               # applies all migrations, including 20261001120000_kyc_didit_integration
-cd apps/api && pnpm prisma db seed && cd ../..   # roles + super admin
+cd apps/api && pnpm prisma db seed && cd ../..   # roles + admin
 ```
 
 > **Check the KYC migration is applied.** If `npx prisma migrate status` (run in `apps/api`) lists `20261001120000_kyc_didit_integration` as not yet applied, every KYC request will fail with a 500.
@@ -90,7 +90,7 @@ Wait for `🚀 Buy Me a Yard API running at http://localhost:8000/api/v1`. Resta
 | :--- | :--- |
 | `creatorToken` | The creator registered in this run |
 | `supporterToken` | The supporter registered in this run |
-| `adminToken` | The seeded super admin (`admin@buymeayard.com` / `AdminPassword123!`, the **development-only** default; `prisma/seed.ts` refuses it when `NODE_ENV=production`, where `ADMIN_PASSWORD` must be set) |
+| `adminToken` | The seeded admin (`admin@buymeayard.com` / `AdminPassword123!`, the **development-only** default; `prisma/seed.ts` refuses it when `NODE_ENV=production`, where `ADMIN_PASSWORD` must be set) |
 
 **Chaining.** Test scripts save IDs as collection variables for later requests to use: `creatorId`, `creatorMaterialId`, `supportId`, `paymentReference`, `kycSubmissionId`, `payoutId` and others. **Run folders in order.** A request run on its own fails if an earlier request hasn't set what it needs.
 
@@ -191,7 +191,7 @@ Each subsection lists what the folder does and what to look for. Negative tests 
 ### 03 · Creator fixtures, supporter & admin
 
 1. **Public creator profile (after SQL fixtures)** — `GET /creators/<username>` now includes the yard menu. The request saves the cheapest ACTIVE item as `creatorMaterialId` and the INACTIVE Adire item as `inactiveCreatorMaterialId`. *If this fails, the fixtures SQL wasn't run for this username.*
-2. **Register supporter**, **Login admin**. The admin has `SUPER_ADMIN`.
+2. **Register supporter**, **Login admin**. The admin has `ADMIN`.
 3. **User privacy:** a supporter viewing the creator's `GET /users/:id` gets no `email` field. The admin gets the full record.
 4. **Access control:**
    - no token on `/users/me` **(→ 401)**

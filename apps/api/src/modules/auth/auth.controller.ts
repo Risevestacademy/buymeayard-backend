@@ -108,7 +108,10 @@ export class AuthController {
       HttpStatus.CREATED,
     );
     if (body && typeof body === 'object' && body.user?.id) {
-      const authFlags = await this.authService.getUserAuthFlags(body.user.id);
+      const authFlags = {
+        ...(await this.authService.getUserAuthFlags(body.user.id)),
+        ...(await this.authService.getUserRoleInfo(body.user.id)),
+      };
       Object.assign(body, authFlags);
       if (body.user && typeof body.user === 'object') {
         Object.assign(body.user, authFlags);
@@ -167,7 +170,10 @@ export class AuthController {
     }
 
     if (body && typeof body === 'object' && body.user?.id) {
-      const authFlags = await this.authService.getUserAuthFlags(body.user.id);
+      const authFlags = {
+        ...(await this.authService.getUserAuthFlags(body.user.id)),
+        ...(await this.authService.getUserRoleInfo(body.user.id)),
+      };
       Object.assign(body, authFlags);
       if (body.user && typeof body.user === 'object') {
         Object.assign(body.user, authFlags);
