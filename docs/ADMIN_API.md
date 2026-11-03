@@ -8,18 +8,19 @@ Everything an admin can see and do. Base URL `/api/v1`. Built for the admin dash
 2. [Overview (summary)](#overview-summary)
 3. [Users](#users)
 4. [Creators](#creators)
-5. [KYC](#kyc)
-6. [Contributions and refunds](#contributions-and-refunds)
-7. [Payouts](#payouts)
-8. [Ledger](#ledger)
-9. [Moderation (reports)](#moderation-reports)
-10. [Support tickets](#support-tickets)
-11. [Waitlist](#waitlist)
-12. [Settings (fee and withdrawal rules)](#settings-fee-and-withdrawal-rules)
-13. [Audit log](#audit-log)
-14. [Error codes](#error-codes)
-15. [Deploying this change](#deploying-this-change)
-16. [Known limits](#known-limits)
+5. [Materials](#materials)
+6. [KYC](#kyc)
+7. [Contributions and refunds](#contributions-and-refunds)
+8. [Payouts](#payouts)
+9. [Ledger](#ledger)
+10. [Moderation (reports)](#moderation-reports)
+11. [Support tickets](#support-tickets)
+12. [Waitlist](#waitlist)
+13. [Settings (fee and withdrawal rules)](#settings-fee-and-withdrawal-rules)
+14. [Audit log](#audit-log)
+15. [Error codes](#error-codes)
+16. [Deploying this change](#deploying-this-change)
+17. [Known limits](#known-limits)
 
 ---
 
@@ -38,6 +39,7 @@ Everything an admin can see and do. Base URL `/api/v1`. Built for the admin dash
 | Overview | `GET /admin/summary` |
 | Users | `/admin/users` |
 | Creators | `/admin/creators` |
+| Materials | `/admin/materials` |
 | KYC | `/admin/kyc` |
 | Contributions, refunds | `/admin/supports`, `/admin/refunds` |
 | Payouts | `/admin/payouts` |
@@ -155,6 +157,75 @@ Granting and removing roles is not an endpoint yet (there is no super admin). Ad
 | `POST /admin/creators/:id/unpublish` | Body `{ "reason" }`. Takes the page offline without changing the status. |
 
 `:id` is the creator **profile** id. Setting `ACTIVE` only works when KYC is `VERIFIED` and there is no KYC block, otherwise `400 INVALID_STATUS_CHANGE`.
+
+---
+
+## Materials
+
+Platform catalogue materials and creator-made ones, in one place.
+
+| Method and path | What it does |
+|---|---|
+| `GET /admin/materials` | List with a `summary`. Filters: `status` (`ACTIVE`, `INACTIVE`), `source` (`PLATFORM`, `CREATOR`), `search` (name or slug), `sort=recently_updated\|newest\|oldest\|name` (default `recently_updated`). |
+| `GET /admin/materials/:id` | One material, same fields as a list item, plus `creators[]`: every creator using it. |
+| `POST /admin/materials` | Create. Body below. |
+| `PATCH /admin/materials/:id` | Edit. Send only the fields to change. `creatorId` cannot be changed. |
+| `DELETE /admin/materials/:id` | Deletes it, or deactivates it when it has contribution history. |
+
+`:id` is the material id (UUID).
+
+**List response**
+
+```jsonc
+{
+  "data": {
+    "summary": {
+      "totalMaterials": 9,
+      "active": 6,
+      "inactive": 3,
+      "platformMaterials": 4,
+      "creatorMaterials": 5,
+      "lastUpdatedAt": "2026-11-03T10:12:00.000Z"
+    },
+    "items": [
+      {
+        "id": "…", "name": "Ankara", "slug": "ankara", "description": "…",
+        "imageUrl": null, "thumbnailSmallUrl": "…", "thumbnailLargeUrl": "…",
+        "color": "#7F3516",
+        "defaultPrice": 1000, "currency": "NGN", "status": "ACTIVE",
+        "source": "PLATFORM",          // PLATFORM or CREATOR
+        "creatorId": null,
+        "creator": null,               // { id, slug, creatorName, isPublished } for creator materials
+        "visibleOnCreatorPages": 8,    // see below
+        "createdAt": "…", "updatedAt": "…"
+      }
+    ],
+    "pagination": { "page": 1, "limit": 20, "total": 9, "totalPages": 1 }
+  }
+}
+```
+
+`summary` covers all materials and ignores the list filters. `defaultPrice` is naira.
+
+**`visibleOnCreatorPages`** is the number of creators whose link to the material is `ACTIVE`, whose page is published, while the material itself is `ACTIVE`. In the detail response each `creators[]` entry has `creator`, `price` (naira), `displayName`, `description`, `status`, `visibleOnPage` (same rule, per creator) and `updatedAt`.
+
+**Create body**
+
+| Field | Notes |
+|---|---|
+| `name` | Required, up to 100 characters. |
+| `slug` | Optional. Generated from the name; must be unique (`409` if taken). |
+| `description`, `imageUrl`, `thumbnailSmallUrl`, `thumbnailLargeUrl` | Optional. |
+| `color` | Optional hex code, e.g. `#7F3516`. |
+| `defaultPrice` | Optional, naira. Defaults to the platform base price. |
+| `status` | Optional, `ACTIVE` (default) or `INACTIVE`. |
+| `creatorId` | Optional creator profile id. Omit for a platform material; set it to create one owned by that creator (`404` if the creator does not exist). |
+
+On `PATCH`, an empty string clears an optional text field.
+
+**Delete.** A material that has contribution history is set to `INACTIVE` instead of removed, and the response says which: `{ "success": true, "materialId", "deleted": true | false, "status": null | "INACTIVE", "message" }`. Otherwise it is deleted for good, along with its creator links.
+
+Audit actions: `admin.material.created`, `.updated`, `.deleted`, `.deactivated`.
 
 ---
 
@@ -302,6 +373,7 @@ Actions recorded:
 | `admin.payout.reconciled`, `.retried`, `.cancelled` | `Payout` |
 | `admin.report.updated` | `ContentReport` |
 | `admin.support_ticket.updated` | `SupportTicket` |
+| `admin.material.created`, `.updated`, `.deleted`, `.deactivated` | `Material` |
 | `admin.settings.updated` | `PlatformSettings` |
 | `admin.dashboard.view` | `AdminDashboard` |
 | KYC actions | recorded in the KYC events, as before |
