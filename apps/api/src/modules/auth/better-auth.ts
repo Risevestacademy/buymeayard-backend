@@ -442,6 +442,28 @@ export function createBetterAuth(
       defaultCookieAttributes: resolveCookieAttributes(baseUrl),
     },
     hooks: {
+      // Native Better Auth endpoints (used by the Better Auth client) bypass
+      // AuthController, so add the same onboarding flags the controller adds.
+      after: async (ctx: any) => {
+        const path: string | undefined = ctx?.path;
+        if (path !== '/sign-in/email' && path !== '/sign-up/email') return {};
+        const body = ctx?.context?.returned;
+        const userId = body?.user?.id;
+        if (!body || typeof body !== 'object' || !userId) return {};
+        const profile = await prisma.creatorProfile.findUnique({
+          where: { userId },
+          select: { status: true },
+        });
+        const isCompleted = profile !== null && profile.status !== 'REGISTERED';
+        const flags = {
+          isOnboarded: isCompleted,
+          isOnboardingCompleted: isCompleted,
+          isProfileSetupCompleted: isCompleted,
+        };
+        return {
+          response: { ...body, ...flags, user: { ...body.user, ...flags } },
+        };
+      },
       before: async (ctx: any) => {
         if (
           (ctx?.path === '/sign-in/social' ||
