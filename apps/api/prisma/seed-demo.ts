@@ -113,7 +113,8 @@ async function main() {
     ];
     for (const [j, p] of posts.entries()) {
       const id = `demo-post-${n}-${p.key}`;
-      const publishedAt = p.status === 'PUBLISHED' ? ago((j + 1) * 3 * DAY) : null;
+      const publishedAt =
+        p.status === 'PUBLISHED' ? ago((j + 1) * 3 * DAY) : null;
       await prisma.post.upsert({
         where: { id },
         update: {},
@@ -296,7 +297,8 @@ async function main() {
           status: 'RESOLVED',
           resolvedBy: admin?.id ?? null,
           resolvedAt: ago(DAY / 2),
-          resolutionNote: 'Checked: the amount shown is after the platform fee.',
+          resolutionNote:
+            'Checked: the amount shown is after the platform fee.',
           createdAt: ago(3 * DAY),
         },
       });
@@ -359,21 +361,147 @@ async function main() {
     });
   }
 
-  // Admin activity
-  if (admin) {
-    await prisma.auditLog.upsert({
-      where: { id: 'demo-audit-admin-1' },
+  // Materials for the admin materials page: an inactive platform material,
+  // plus creator-owned ones (one active, one inactive), each linked to its
+  // owner so visibility counts are non-zero.
+  const demoMaterials = [
+    {
+      id: 'demo-material-platform-inactive',
+      slug: 'demo-damask',
+      name: 'Damask (retired)',
+      status: 'INACTIVE',
+      color: '#8A8A8A',
+      owner: null as (typeof creators)[number] | null,
+      age: 20 * DAY,
+    },
+    {
+      id: 'demo-material-creator-1',
+      slug: 'demo-hand-dyed-adire',
+      name: 'Hand-dyed Adire',
+      status: 'ACTIVE',
+      color: '#1F3A93',
+      owner: creators[0],
+      age: 9 * DAY,
+    },
+    {
+      id: 'demo-material-creator-2',
+      slug: 'demo-indigo-batik',
+      name: 'Indigo Batik',
+      status: 'INACTIVE',
+      color: '#2C2A5A',
+      owner: creators[1] ?? creators[0],
+      age: 4 * DAY,
+    },
+  ];
+  for (const m of demoMaterials) {
+    const material = await prisma.material.upsert({
+      where: { id: m.id },
       update: {},
       create: {
-        id: 'demo-audit-admin-1',
-        actorId: admin.id,
-        action: 'PLATFORM_SETTINGS_UPDATED',
-        resourceType: 'PlatformSetting',
-        resourceId: 'platform',
-        newState: { platformFeePercent: 10 },
-        createdAt: ago(10 * DAY),
+        id: m.id,
+        slug: m.slug,
+        name: m.name,
+        description: `${m.name}, seeded for the admin dashboard.`,
+        color: m.color,
+        defaultPrice: 100_000,
+        status: m.status,
+        creatorId: m.owner?.id ?? null,
+        createdAt: ago(m.age),
       },
     });
+    if (m.owner) {
+      await prisma.creatorMaterial.upsert({
+        where: {
+          creatorId_materialId: {
+            creatorId: m.owner.id,
+            materialId: material.id,
+          },
+        },
+        update: {},
+        create: {
+          creatorId: m.owner.id,
+          materialId: material.id,
+          price: 120_000,
+          status: m.status,
+        },
+      });
+    }
+  }
+
+  // Admin activity, using the same action names the endpoints write
+  if (admin) {
+    const entries = [
+      {
+        id: 'demo-audit-admin-1',
+        action: 'admin.settings.updated',
+        resourceType: 'PlatformSettings',
+        resourceId: 'platform',
+        previousState: { platformFeePercent: 8 },
+        newState: { platformFeePercent: 10 },
+        age: 10 * DAY,
+      },
+      {
+        id: 'demo-audit-admin-2',
+        action: 'admin.creator.status_changed',
+        resourceType: 'CreatorProfile',
+        resourceId: creators[0].id,
+        previousState: { status: 'ACTIVE' },
+        newState: { status: 'SUSPENDED' },
+        metadata: { reason: 'Under review' },
+        age: 6 * DAY,
+      },
+      {
+        id: 'demo-audit-admin-3',
+        action: 'admin.creator.status_changed',
+        resourceType: 'CreatorProfile',
+        resourceId: creators[0].id,
+        previousState: { status: 'SUSPENDED' },
+        newState: { status: 'ACTIVE' },
+        metadata: { reason: 'Review cleared' },
+        age: 5 * DAY,
+      },
+      {
+        id: 'demo-audit-admin-4',
+        action: 'admin.material.created',
+        resourceType: 'Material',
+        resourceId: 'demo-material-platform-inactive',
+        newState: {
+          name: 'Damask (retired)',
+          slug: 'demo-damask',
+          status: 'ACTIVE',
+        },
+        age: 20 * DAY,
+      },
+      {
+        id: 'demo-audit-admin-5',
+        action: 'admin.material.updated',
+        resourceType: 'Material',
+        resourceId: 'demo-material-platform-inactive',
+        previousState: { status: 'ACTIVE' },
+        newState: { status: 'INACTIVE' },
+        age: 3 * DAY,
+      },
+      {
+        id: 'demo-audit-admin-6',
+        action: 'admin.dashboard.view',
+        resourceType: 'AdminDashboard',
+        resourceId: admin.id,
+        age: 2 * HOUR,
+      },
+    ];
+    for (const e of entries) {
+      const { age, ...data } = e;
+      await prisma.auditLog.upsert({
+        where: { id: e.id },
+        update: {},
+        create: {
+          ...data,
+          actorId: admin.id,
+          ipAddress: '102.89.23.10',
+          createdAt: ago(age),
+        },
+      });
+    }
   }
 
   console.log(`🌱 Demo data seeded for ${creators.length} creators.`);
