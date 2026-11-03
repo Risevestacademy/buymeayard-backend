@@ -64,9 +64,9 @@ Admin portal ─────────────────────▶ 
 | `GET /api/v1/creators/me/kyc` | `CREATOR` | Status, prefill, latest attempt |
 | `POST /api/v1/creators/me/kyc/session` | `CREATOR` | Start or resume verification |
 | `POST /webhooks/didit` | Public, HMAC signature | Didit results |
-| `GET /api/v1/admin/kyc`, `GET /api/v1/admin/kyc/:id` | `ADMIN`/`SUPER_ADMIN` | Queue, detail |
-| `POST /api/v1/admin/kyc/:id/approve`, `POST /api/v1/admin/kyc/:id/reject` | `ADMIN`/`SUPER_ADMIN` | Review decisions |
-| `POST /api/v1/admin/kyc/creators/:creatorId/revoke`, `POST /api/v1/admin/kyc/creators/:creatorId/unblock` | `ADMIN`/`SUPER_ADMIN` | Revoke (and block), lift the block |
+| `GET /api/v1/admin/kyc`, `GET /api/v1/admin/kyc/:id` | `ADMIN` | Queue, detail |
+| `POST /api/v1/admin/kyc/:id/approve`, `POST /api/v1/admin/kyc/:id/reject` | `ADMIN` | Review decisions |
+| `POST /api/v1/admin/kyc/creators/:creatorId/revoke`, `POST /api/v1/admin/kyc/creators/:creatorId/unblock` | `ADMIN` | Revoke (and block), lift the block |
 
 The old `POST /creators/me/kyc` (which stored arbitrary JSON) is removed. Creator and admin detail responses carry `Cache-Control: no-store`.
 
@@ -194,7 +194,7 @@ Every change writes, in one transaction: the submission, the creator, `audit_log
 - **No session tokens are stored.** Resuming works by calling Didit again.
 - **Log redaction**: `HttpExceptionFilter` used to log every failing request body, including passwords on failed logins. It now omits bodies on `/webhooks/*` and every `/kyc` route, and masks `password`, `newPassword`, `currentPassword`, `token`, `secret` and `dateOfBirth` everywhere.
 - **Rejection messages** are user-safe and deliberately vague about fraud signals (duplicates, tampering). Raw codes are shown to admins only.
-- **Authorization**: creator routes need `CREATOR`; admin routes need `ADMIN`/`SUPER_ADMIN`. `RolesGuard` isn't global, so it's applied per controller.
+- **Authorization**: creator routes need `CREATOR`; admin routes need `ADMIN`. `RolesGuard` isn't global, so it's applied per controller.
 
 ## 8. Concurrency
 

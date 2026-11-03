@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import { primaryRole } from '../auth/role.util';
 
 @Injectable()
 export class UsersService {
@@ -62,6 +63,7 @@ export class UsersService {
       image: user.image,
       emailVerified: user.emailVerified,
       status: user.status,
+      role: primaryRole(user.roles.map((r) => r.role.name)),
       roles: user.roles.map((r) => r.role.name),
       isOnboarded: isCompleted,
       isOnboardingCompleted: isCompleted,

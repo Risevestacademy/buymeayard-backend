@@ -17,15 +17,7 @@ const auth = betterAuth({
   },
 });
 
-const DEFAULT_ROLES = [
-  'SUPPORTER',
-  'CREATOR',
-  'ADMIN',
-  'SUPER_ADMIN',
-  'MODERATOR',
-  'FINANCE',
-  'SUPPORT',
-];
+const DEFAULT_ROLES = ['CREATOR', 'ADMIN'];
 
 // Development-only defaults. Never valid in production.
 const DEV_ADMIN_EMAIL = 'admin@buymeayard.com';
@@ -77,14 +69,14 @@ async function main() {
   }
   console.log('✅ Roles seeded.');
 
-  // 2. Seed Super Admin User
+  // 2. Seed Admin User
 
   let adminUser = await prisma.user.findUnique({
     where: { email: adminEmail },
   });
 
   if (!adminUser) {
-    console.log(`Creating super admin user (${adminEmail})...`);
+    console.log(`Creating admin user (${adminEmail})...`);
     
     // We use Better Auth's native API to handle the password hashing and account creation
     const res = await auth.api.signUpEmail({
@@ -105,19 +97,16 @@ async function main() {
     adminUser = await prisma.user.findUnique({
       where: { email: adminEmail },
     });
-    console.log('✅ Super admin user created.');
+    console.log('✅ Admin user created.');
   } else {
-    console.log('⚡ Super admin user already exists. Skipping creation.');
+    console.log('⚡ Admin user already exists. Skipping creation.');
   }
 
-  // 3. Attach SUPER_ADMIN and ADMIN roles to the user
+  // 3. Attach the ADMIN role to the user
   if (adminUser) {
     const adminRole = await prisma.role.findUnique({ where: { name: 'ADMIN' } });
-    const superAdminRole = await prisma.role.findUnique({ where: { name: 'SUPER_ADMIN' } });
-    const supporterRole = await prisma.role.findUnique({ where: { name: 'SUPPORTER' } });
 
-    if (adminRole && superAdminRole) {
-      // Upsert UserRole for ADMIN
+    if (adminRole) {
       await prisma.userRole.upsert({
         where: {
           userId_roleId: {
@@ -131,40 +120,7 @@ async function main() {
           roleId: adminRole.id,
         },
       });
-
-      // Upsert UserRole for SUPER_ADMIN
-      await prisma.userRole.upsert({
-        where: {
-          userId_roleId: {
-            userId: adminUser.id,
-            roleId: superAdminRole.id,
-          },
-        },
-        update: {},
-        create: {
-          userId: adminUser.id,
-          roleId: superAdminRole.id,
-        },
-      });
-      console.log('✅ Super Admin roles attached to user.');
-    }
-
-    // Every user is a supporter by default
-    if (supporterRole) {
-      await prisma.userRole.upsert({
-        where: {
-          userId_roleId: {
-            userId: adminUser.id,
-            roleId: supporterRole.id,
-          },
-        },
-        update: {},
-        create: {
-          userId: adminUser.id,
-          roleId: supporterRole.id,
-        },
-      });
-      console.log('✅ SUPPORTER role attached to admin user.');
+      console.log('✅ ADMIN role attached to user.');
     }
   }
 

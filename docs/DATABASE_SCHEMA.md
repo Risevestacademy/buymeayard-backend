@@ -137,7 +137,7 @@ Role-Based Access Control (RBAC) model.
 | Table | Column | Type | Constraints | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | `roles` | `id` | `UUID` | `PRIMARY KEY` | Unique role identifier |
-| `roles` | `name` | `VARCHAR` | `UNIQUE` | `SUPPORTER`, `CREATOR`, `ADMIN`, `SUPER_ADMIN`, `MODERATOR`, `FINANCE`, `SUPPORT` |
+| `roles` | `name` | `VARCHAR` | `UNIQUE` | `CREATOR`, `ADMIN` |
 | `user_roles` | `userId` | `UUID` | `FK -> users(id) ON DELETE CASCADE` | Assigned user |
 | `user_roles` | `roleId` | `UUID` | `FK -> roles(id) ON DELETE CASCADE` | Assigned role |
 

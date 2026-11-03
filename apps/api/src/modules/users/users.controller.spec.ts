@@ -70,7 +70,7 @@ describe('UsersController', () => {
         id: 'user-2',
         name: 'Bob',
         email: 'bob@example.com',
-        roles: ['SUPPORTER'],
+        roles: ['CREATOR'],
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
         creatorProfile: null,
@@ -120,7 +120,7 @@ describe('UsersController', () => {
         id: 'user-2',
         name: 'Bob',
         email: 'bob@example.com',
-        roles: ['SUPPORTER'],
+        roles: ['CREATOR'],
       };
       usersService.findByIdWithRoles.mockResolvedValue(mockUser);
 
@@ -143,7 +143,7 @@ describe('UsersController', () => {
 
       const result = await controller.getUserById('user-2', {
         id: 'user-1',
-        roles: ['SUPPORTER'],
+        roles: ['CREATOR'],
       });
       expect(result).toEqual(mockPublicUser);
       expect(usersService.getPublicProfile).toHaveBeenCalledWith('user-2');

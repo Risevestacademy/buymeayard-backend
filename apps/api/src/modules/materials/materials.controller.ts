@@ -95,7 +95,7 @@ export class MaterialsController {
   @Post()
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.ADMIN)
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Add a new platform material (Admin only)',
@@ -113,7 +113,7 @@ export class MaterialsController {
   @Patch('base-price')
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
     summary: 'Update universal platform base price per yard (Admin only)',
     description:
@@ -130,7 +130,7 @@ export class MaterialsController {
   @Patch(':id')
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
     summary: 'Edit an existing material (Admin only)',
     description:
@@ -151,7 +151,7 @@ export class MaterialsController {
   @Delete(':id')
   @ApiBearerAuth()
   @UseGuards(RolesGuard)
-  @Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+  @Roles(UserRole.ADMIN)
   @ApiOperation({
     summary: 'Delete or deactivate a material (Admin only)',
     description:

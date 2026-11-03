@@ -26,7 +26,7 @@ import {
 @ApiTags('admin')
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)
+@Roles(UserRole.ADMIN)
 @Controller('admin/kyc')
 export class KycAdminController {
   constructor(private readonly kycAdminService: KycAdminService) {}

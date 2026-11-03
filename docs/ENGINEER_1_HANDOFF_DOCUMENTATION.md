@@ -70,7 +70,7 @@ In the Figma UI, yard gifting revolves around a standard base price per yard (â‚
   - Returns major units (`basePrice: 1000`), minor units (`basePriceMinor: 100000`), currency, and an array of all active platform materials with their prices.
   - Self-healing: Automatically provisions default materials if database is empty.
 - **Update Universal Base Price (`PATCH /api/v1/materials/base-price`):**
-  - Protected: Admin and Super Admin only (`@Roles(UserRole.ADMIN, UserRole.SUPER_ADMIN)`).
+  - Protected: Admin only (`@Roles(UserRole.ADMIN)`).
   - Accepts `price` (supports both major and minor units; converts amounts `< 10000` from major to kobo automatically).
   - Optional flag `updateCreatorMaterials: true`: When enabled, executes a bulk update across all active `creator_materials` in the database, resetting creator offerings to the new base price.
 

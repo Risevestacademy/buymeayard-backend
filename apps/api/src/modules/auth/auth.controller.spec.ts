@@ -30,6 +30,7 @@ describe('AuthController', () => {
     userHasRole: jest.Mock;
     getIsOnboarded: jest.Mock;
     getUserAuthFlags: jest.Mock;
+    getUserRoleInfo: jest.Mock;
     revokeSessionByToken: jest.Mock;
     getSessionByToken: jest.Mock;
   };
@@ -79,6 +80,9 @@ describe('AuthController', () => {
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
       }),
+      getUserRoleInfo: jest
+        .fn()
+        .mockResolvedValue({ role: 'CREATOR', roles: ['CREATOR'] }),
       revokeSessionByToken: jest.fn().mockResolvedValue(null),
       getSessionByToken: jest.fn().mockResolvedValue(null),
     };
@@ -105,7 +109,7 @@ describe('AuthController', () => {
   // --------------------------------------------------------
 
   describe('register', () => {
-    it('should register user with SUPPORTER role on web', async () => {
+    it('should register user on web', async () => {
       const dto = {
         email: 'alice@example.com',
         password: 'Password123!',
@@ -130,10 +134,14 @@ describe('AuthController', () => {
           isOnboarded: false,
           isOnboardingCompleted: false,
           isProfileSetupCompleted: false,
+          role: 'CREATOR',
+          roles: ['CREATOR'],
         },
         isOnboarded: false,
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
+        role: 'CREATOR',
+        roles: ['CREATOR'],
       });
     });
 
@@ -233,11 +241,15 @@ describe('AuthController', () => {
           isOnboarded: false,
           isOnboardingCompleted: false,
           isProfileSetupCompleted: false,
+          role: 'CREATOR',
+          roles: ['CREATOR'],
         },
         token: 'token456',
         isOnboarded: false,
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
+        role: 'CREATOR',
+        roles: ['CREATOR'],
       });
     });
 

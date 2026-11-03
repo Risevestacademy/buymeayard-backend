@@ -25,7 +25,7 @@ Everything an admin can see and do. Base URL `/api/v1`. Built for the admin dash
 
 ## Access and conventions
 
-- **Auth:** the normal session (cookie on web, Bearer token on mobile). Every `/admin/*` route needs the **`ADMIN`** role, otherwise `403 FORBIDDEN`. There is no super admin; the seeded admin has `ADMIN` (and an unused `SUPER_ADMIN`).
+- **Auth:** the normal session (cookie on web, Bearer token on mobile). Every `/admin/*` route needs the **`ADMIN`** role, otherwise `403 FORBIDDEN`.
 - **Envelope:** success is `{ "data": ..., "meta": {} }`, errors are `{ "error": { "code", "message" } }`.
 - **Lists:** `data: { items, pagination: { page, limit, total, totalPages } }`. Every list takes `page` (default 1), `limit` (default 20, max 100) and `search`. Where it says *date range*, the list also takes `from` and `to` as `YYYY-MM-DD`, inclusive, in Lagos time.
 - **Money:** naira (₦1,000 is `1000`), as a number that can carry 2 decimals. Format in the UI.
@@ -141,7 +141,7 @@ What a status change does:
 - **Reactivated (`ACTIVE`):** sign-in works again. A creator with verified, unblocked KYC returns to `ACTIVE`; otherwise `PROFILE_CREATED`. The page is **not** re-published; the creator does that.
 - Blocked with `CANNOT_MODIFY_ADMIN`: your own account, or any account with the `ADMIN` role.
 
-Granting and removing roles is not an endpoint yet (there is no super admin). Add admins through the seed or the database.
+Granting and removing roles is not an endpoint yet. Add admins through the seed or the database.
 
 ---
 
@@ -341,7 +341,7 @@ Audit writes never fail the request they belong to: if the write fails it is log
 ## Known limits
 
 - **Full refunds only.** Partial refunds are not supported.
-- **No role management.** With no super admin, granting the `ADMIN` role is done in the database or the seed.
+- **No role management.** Granting the `ADMIN` role is done in the database or the seed.
 - **No category** on creators, so the Overview table cannot show one.
 - **Refund status** is settled by webhook. An unknown-outcome refund waits for the webhook; there is no polling of Paystack's refund status.
 - **Cancel and retry** need a live Paystack key to check the transfer. With the mock key, the transfer check always says "pending" and both refuse.

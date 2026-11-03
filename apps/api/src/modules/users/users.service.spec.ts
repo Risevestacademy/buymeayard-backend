@@ -44,6 +44,7 @@ describe('UsersService', () => {
 
       const result = await usersService.findByIdWithRoles('user-1');
       expect(result.id).toBe('user-1');
+      expect(result.role).toBe('CREATOR');
       expect(result.roles).toEqual(['CREATOR']);
       expect(result.isOnboarded).toBe(true);
       expect(result.isOnboardingCompleted).toBe(true);

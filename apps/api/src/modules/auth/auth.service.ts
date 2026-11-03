@@ -5,6 +5,7 @@ import type { IncomingHttpHeaders } from 'http';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { createBetterAuth, AuthInstance } from './better-auth';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { primaryRole } from './role.util';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -243,6 +244,20 @@ export class AuthService implements OnModuleInit {
       isOnboardingCompleted: isCompleted,
       isProfileSetupCompleted: isCompleted,
     };
+  }
+
+  /**
+   * Returns the user's roles and the primary one (`role`) for clients.
+   */
+  async getUserRoleInfo(
+    userId: string,
+  ): Promise<{ role: string | null; roles: string[] }> {
+    const rows = await this.prisma.userRole.findMany({
+      where: { userId },
+      select: { role: { select: { name: true } } },
+    });
+    const roles = rows.map((r) => r.role.name);
+    return { role: primaryRole(roles), roles };
   }
 
   /**

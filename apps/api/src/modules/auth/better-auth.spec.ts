@@ -485,6 +485,81 @@ describe('createBetterAuth', () => {
       ).resolves.not.toThrow();
     });
 
+    it('should add role, roles and onboarding flags to the native /sign-in/email response', async () => {
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+      mockPrisma.creatorProfile.findUnique.mockResolvedValue(null);
+      mockPrisma.userRole.findMany.mockResolvedValue([
+        { role: { name: 'CREATOR' } },
+        { role: { name: 'ADMIN' } },
+      ]);
+
+      const result = await passedConfig.hooks.after({
+        path: '/sign-in/email',
+        context: { returned: { token: 't', user: { id: 'u-admin' } } },
+      });
+
+      const expected = {
+        isOnboarded: false,
+        isOnboardingCompleted: false,
+        isProfileSetupCompleted: false,
+        role: 'ADMIN',
+        roles: ['CREATOR', 'ADMIN'],
+      };
+      expect(result.response).toEqual({
+        token: 't',
+        ...expected,
+        user: { id: 'u-admin', ...expected },
+      });
+    });
+
+    it('should add role and flags to the user on /get-session (the social sign-in follow-up)', async () => {
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+      mockPrisma.creatorProfile.findUnique.mockResolvedValue({
+        status: 'PROFILE_CREATED',
+      });
+      mockPrisma.userRole.findMany.mockResolvedValue([
+        { role: { name: 'CREATOR' } },
+      ]);
+
+      const result = await passedConfig.hooks.after({
+        path: '/get-session',
+        context: {
+          returned: { session: { id: 's1' }, user: { id: 'u-creator' } },
+        },
+      });
+
+      expect(result.response.user).toMatchObject({
+        id: 'u-creator',
+        role: 'CREATOR',
+        roles: ['CREATOR'],
+        isOnboarded: true,
+      });
+      expect(result.response.session).toEqual({ id: 's1' });
+    });
+
+    it('should skip /get-session when there is no session', async () => {
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      await expect(
+        passedConfig.hooks.after({
+          path: '/get-session',
+          context: { returned: null },
+        }),
+      ).resolves.toEqual({});
+    });
+
+    it('should leave other endpoints untouched in hooks.after', async () => {
+      createBetterAuth(mockPrisma);
+      const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
+
+      await expect(
+        passedConfig.hooks.after({ path: '/get-session', context: {} }),
+      ).resolves.toEqual({});
+    });
+
     it('should automatically set errorCallbackURL in hooks.before when social sign-in has a mobile callbackURL', async () => {
       createBetterAuth(mockPrisma);
       const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];

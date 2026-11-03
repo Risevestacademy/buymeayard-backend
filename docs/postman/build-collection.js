@@ -521,7 +521,7 @@ pm.test('Includes the catalogue material', () => pm.expect(items[0].material).to
       as: 'admin',
       test: `
 ${status(200).trim()}
-pm.test('SUPER_ADMIN role', () => pm.expect(pm.response.json().data.roles).to.include('SUPER_ADMIN'));`,
+pm.test('ADMIN role', () => pm.expect(pm.response.json().data.roles).to.include('ADMIN'));`,
     }),
     req('Supporter views creator user (public view)', 'GET', '/users/{{creatorUserId}}', {
       as: 'supporter',
