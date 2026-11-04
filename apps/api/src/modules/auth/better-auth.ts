@@ -593,64 +593,6 @@ export function createBetterAuth(
           },
         },
       },
-      account: {
-        create: {
-          after: async (account) => {
-            try {
-              if (
-                account.providerId === 'email' ||
-                account.providerId === 'google' ||
-                account.providerId === 'apple'
-              ) {
-                return; // We don't link these as public social links for now (unless Google is for YouTube)
-              }
-
-              let url = '';
-              const provider = account.providerId;
-              const accountId = account.accountId; // The user ID on the social platform
-
-              switch (provider) {
-                case 'twitter':
-                  url = `https://x.com/intent/user?user_id=${accountId}`;
-                  break;
-                case 'facebook':
-                  url = `https://facebook.com/${accountId}`;
-                  break;
-                case 'instagram':
-                  url = `https://instagram.com/${accountId}`;
-                  break;
-                case 'tiktok':
-                  url = `https://tiktok.com/@${accountId}`;
-                  break;
-                case 'youtube':
-                  url = `https://youtube.com/channel/${accountId}`;
-                  break;
-                default:
-                  url = `https://${provider}.com/${accountId}`;
-              }
-
-              const profile = await prisma.creatorProfile.findUnique({
-                where: { userId: account.userId },
-              });
-
-              if (profile) {
-                await prisma.creatorSocialLink.create({
-                  data: {
-                    creatorId: profile.id,
-                    platform: provider,
-                    url: url,
-                  },
-                });
-                console.log(
-                  `[Auth] Synced ${provider} social link for user ${account.userId}`,
-                );
-              }
-            } catch (err) {
-              console.error(`[Auth] Failed to sync social link:`, err);
-            }
-          },
-        },
-      },
     },
     plugins: [
       bearer(),

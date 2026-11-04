@@ -33,8 +33,11 @@ describe('CreatorsService', () => {
     };
     creatorSocialLink: {
       findFirst: jest.Mock;
+      findMany: jest.Mock;
       create: jest.Mock;
+      createMany: jest.Mock;
       update: jest.Mock;
+      deleteMany: jest.Mock;
     };
     authAccount: {
       findMany: jest.Mock;
@@ -107,8 +110,11 @@ describe('CreatorsService', () => {
       },
       creatorSocialLink: {
         findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn(),
+        createMany: jest.fn(),
         update: jest.fn(),
+        deleteMany: jest.fn(),
       },
       authAccount: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -239,7 +245,7 @@ describe('CreatorsService', () => {
       expect(prisma.creatorSocialLink.create).toHaveBeenCalledWith({
         data: {
           creatorId: 'creator-1',
-          platform: 'twitter',
+          platform: 'x',
           url: 'https://x.com/adeola',
         },
       });
@@ -487,6 +493,92 @@ describe('CreatorsService', () => {
       expect(res.available).toBe(true);
       expect(res.slug).toBe('aesthetefisayo');
       expect(res.message).toBe('Handle is available');
+    });
+  });
+
+  describe('social links', () => {
+    beforeEach(() => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'creator-1' });
+    });
+
+    it('replaces the whole set with canonical urls in one transaction', async () => {
+      await service.saveSocialLinks('user-1', {
+        links: [
+          { platform: 'instagram', url: '@adeola' },
+          { platform: 'twitter', url: 'https://twitter.com/adeola' },
+        ],
+      });
+
+      expect(prisma.creatorSocialLink.deleteMany).toHaveBeenCalledWith({
+        where: { creatorId: 'creator-1' },
+      });
+      expect(prisma.creatorSocialLink.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            creatorId: 'creator-1',
+            platform: 'instagram',
+            url: 'https://instagram.com/adeola',
+          },
+          {
+            creatorId: 'creator-1',
+            platform: 'x',
+            url: 'https://x.com/adeola',
+          },
+        ],
+      });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears every link when given an empty list', async () => {
+      await service.saveSocialLinks('user-1', { links: [] });
+      expect(prisma.creatorSocialLink.deleteMany).toHaveBeenCalled();
+      expect(prisma.creatorSocialLink.createMany).toHaveBeenCalledWith({
+        data: [],
+      });
+    });
+
+    it('rejects an unsupported platform, a bad link and a duplicate platform', async () => {
+      for (const links of [
+        [{ platform: 'linkedin', url: 'ada' }],
+        [{ platform: 'instagram', url: 'https://x.com/ada' }],
+        [
+          { platform: 'x', url: '@ada' },
+          { platform: 'twitter', url: '@ada2' },
+        ],
+      ]) {
+        await expect(
+          service.saveSocialLinks('user-1', { links }),
+        ).rejects.toThrow(BadRequestException);
+      }
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('404s when the user has no creator profile', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(service.getSocialLinks('user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('removes one platform, accepting the twitter alias', async () => {
+      await service.deleteSocialLink('user-1', 'Twitter');
+      expect(prisma.creatorSocialLink.deleteMany).toHaveBeenCalledWith({
+        where: { creatorId: 'creator-1', platform: 'x' },
+      });
+      await expect(
+        service.deleteSocialLink('user-1', 'linkedin'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects a bad onboarding link before creating anything', async () => {
+      await expect(
+        service.onboardCreator('user-1', {
+          creatorName: 'Adeola',
+          slug: 'adeola',
+          socialLinks: [{ platform: 'instagram', url: 'https://x.com/ada' }],
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.creatorProfile.create).not.toHaveBeenCalled();
     });
   });
 
