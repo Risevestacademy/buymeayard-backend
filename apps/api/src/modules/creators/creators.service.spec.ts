@@ -518,15 +518,49 @@ describe('CreatorsService', () => {
             creatorId: 'creator-1',
             platform: 'instagram',
             url: 'https://instagram.com/adeola',
+            verified: false,
           },
           {
             creatorId: 'creator-1',
             platform: 'x',
             url: 'https://x.com/adeola',
+            verified: false,
           },
         ],
       });
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a connected link verified when it is sent back unchanged', async () => {
+      prisma.creatorSocialLink.findMany.mockResolvedValueOnce([
+        {
+          platform: 'discord',
+          url: 'https://discord.com/users/123',
+          verified: true,
+        },
+      ]);
+      await service.saveSocialLinks('user-1', {
+        links: [
+          { platform: 'discord', url: 'https://discord.com/users/123' },
+          { platform: 'instagram', url: '@adeola' },
+        ],
+      });
+      expect(prisma.creatorSocialLink.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            creatorId: 'creator-1',
+            platform: 'discord',
+            url: 'https://discord.com/users/123',
+            verified: true,
+          },
+          {
+            creatorId: 'creator-1',
+            platform: 'instagram',
+            url: 'https://instagram.com/adeola',
+            verified: false,
+          },
+        ],
+      });
     });
 
     it('clears every link when given an empty list', async () => {

@@ -150,6 +150,7 @@ model CreatorSocialLink {
   creatorId String
   platform  String // youtube, twitch, x, facebook, instagram, tiktok, discord
   url       String
+  verified  Boolean  @default(false) // true when connected through the platform's OAuth
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

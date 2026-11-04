@@ -578,7 +578,7 @@ export class CreatorsService {
       if (existing) {
         await this.prisma.creatorSocialLink.update({
           where: { id: existing.id },
-          data: { url },
+          data: existing.url === url ? {} : { url, verified: false },
         });
       } else {
         await this.prisma.creatorSocialLink.create({
@@ -605,14 +605,46 @@ export class CreatorsService {
     });
   }
 
-  /** Replaces the creator's links with exactly the given set. */
+  /**
+   * Replaces the creator's links with exactly the given set. A link that was
+   * connected through OAuth keeps its verified flag when it is sent back
+   * unchanged; anything typed in is stored as unverified.
+   */
   async saveSocialLinks(userId: string, dto: SaveSocialLinksDto) {
     const creatorId = await this.getProfileId(userId);
-    const links = this.toValidLinks(dto.links);
+    const connected = await this.prisma.creatorSocialLink.findMany({
+      where: { creatorId, verified: true },
+    });
+    const isConnected = (l: { platform: string; url: string }) =>
+      connected.some(
+        (c) =>
+          c.platform === resolveSocialPlatform(l.platform) &&
+          c.url === l.url?.trim(),
+      );
+
+    const kept = dto.links.filter(isConnected).map((l) => ({
+      platform: resolveSocialPlatform(l.platform) as string,
+      url: l.url.trim(),
+      verified: true,
+    }));
+    const typed = this.toValidLinks(
+      dto.links.filter((l) => !isConnected(l)),
+    ).map((l) => ({ ...l, verified: false }));
+
+    const clash = typed.find((t) =>
+      kept.some((k) => k.platform === t.platform),
+    );
+    if (clash) {
+      throw new BadRequestException({
+        code: ErrorCodes.VALIDATION_ERROR,
+        message: `Only one ${clash.platform} link is allowed`,
+      });
+    }
+
     await this.prisma.$transaction(async (tx) => {
       await tx.creatorSocialLink.deleteMany({ where: { creatorId } });
       await tx.creatorSocialLink.createMany({
-        data: links.map((l) => ({ creatorId, ...l })),
+        data: [...kept, ...typed].map((l) => ({ creatorId, ...l })),
       });
     });
     return this.getSocialLinks(userId);
