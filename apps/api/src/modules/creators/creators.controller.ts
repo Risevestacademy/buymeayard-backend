@@ -15,6 +15,8 @@ import {
   Body,
   Param,
   Query,
+  Sse,
+  MessageEvent,
   UploadedFile,
   UseInterceptors,
   ParseFilePipe,
@@ -81,6 +83,8 @@ import {
   DashboardContributionDto,
   DashboardRecentContributionsQueryDto,
 } from './dto/creator-dashboard.dto';
+import { Observable,interval, map, merge } from 'rxjs';
+import { SupportAlertsService } from '../supports/support-alerts.service';
 
 const CREATOR_UNAVAILABLE_ERRORS: ApiErrorDoc[] = [
   {
@@ -112,6 +116,7 @@ export class CreatorsController {
     private readonly creatorsService: CreatorsService,
     private readonly supportsService: SupportsService,
     private readonly paymentsService: PaymentsService,
+    private readonly supportAlerts: SupportAlertsService,
   ) {}
 
   @Public()
