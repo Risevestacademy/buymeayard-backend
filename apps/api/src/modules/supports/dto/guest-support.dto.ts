@@ -19,7 +19,7 @@ export class SupportQuoteResponseDto {
   @ApiProperty({
     type: DashboardContributionMaterialDto,
     description:
-      "The creator's theme fabric the gift is counted in, same shape as the creator dashboard: id, name, color, thumbnailUrl and yards (quantity)",
+      "The creator's theme fabric the gift is counted in, same shape as the creator dashboard: id, name, color, thumbnailSmallUrl, thumbnailLargeUrl and yards (quantity)",
   })
   material!: DashboardContributionMaterialDto;
 

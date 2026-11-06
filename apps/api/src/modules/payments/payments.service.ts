@@ -152,8 +152,8 @@ export class PaymentsService {
                 material: {
                   select: {
                     color: true,
+                    thumbnailLargeUrl: true,
                     thumbnailSmallUrl: true,
-                    imageUrl: true,
                   },
                 },
               },

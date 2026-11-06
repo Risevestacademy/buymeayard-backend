@@ -2,8 +2,8 @@ import { DashboardContributionMaterialDto } from '../../creators/dto/creator-das
 
 interface PlatformMaterialLook {
   color: string | null;
+  thumbnailLargeUrl: string | null;
   thumbnailSmallUrl: string | null;
-  imageUrl: string | null;
 }
 
 /**
@@ -20,7 +20,8 @@ export function toContributionMaterial(
     id: materialId,
     name,
     color: look?.color || null,
-    thumbnailUrl: look?.thumbnailSmallUrl || look?.imageUrl || null,
+    thumbnailSmallUrl: look?.thumbnailSmallUrl || null,
+    thumbnailLargeUrl: look?.thumbnailLargeUrl || null,
     quantity: yards,
   };
 }
