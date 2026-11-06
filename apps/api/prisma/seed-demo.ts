@@ -75,7 +75,7 @@ async function main() {
     // Social links
     for (const [platform, handle] of [
       ['instagram', `https://instagram.com/${c.slug}`],
-      ['twitter', `https://x.com/${c.slug}`],
+      ['x', `https://x.com/${c.slug}`],
     ]) {
       const exists = await prisma.creatorSocialLink.findFirst({
         where: { creatorId: c.id, platform },

@@ -148,13 +148,15 @@ model CreatorProfile {
 model CreatorSocialLink {
   id        String   @id @default(uuid())
   creatorId String
-  platform  String // twitter, instagram, youtube, tiktok, etc.
+  platform  String // youtube, twitch, x, facebook, instagram, tiktok, discord
   url       String
+  verified  Boolean  @default(false) // true when connected through the platform's OAuth
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
+  @@unique([creatorId, platform])
   @@map("creator_social_links")
 }
 

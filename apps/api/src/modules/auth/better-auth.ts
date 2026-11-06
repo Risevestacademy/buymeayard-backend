@@ -1,6 +1,7 @@
 import { betterAuth, APIError } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, genericOAuth } from 'better-auth/plugins';
+import { syncSocialLink } from './social-link-sync';
 import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
 import { renderEmailTemplate } from './email-templates/render-email-template';
@@ -286,6 +287,8 @@ export function createBetterAuth(
         enabled: true,
         trustedProviders: ['google', 'apple'],
         requireLocalEmailVerified: false,
+        // Creators connect social accounts whose email differs from their own.
+        allowDifferentEmails: true,
       },
     } as any,
     onAPIError: {
@@ -319,6 +322,23 @@ export function createBetterAuth(
       facebook: {
         clientId: process.env.FACEBOOK_CLIENT_ID || '',
         clientSecret: process.env.FACEBOOK_CLIENT_SECRET || '',
+        // user_link returns the profile URL; Facebook must approve it for the app.
+        scope: ['public_profile', 'user_link'],
+        disableSignUp: true,
+      },
+      discord: {
+        clientId: process.env.DISCORD_CLIENT_ID || '',
+        clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
+        disableSignUp: true,
+      },
+      twitch: {
+        clientId: process.env.TWITCH_CLIENT_ID || '',
+        clientSecret: process.env.TWITCH_CLIENT_SECRET || '',
+        disableSignUp: true,
+      },
+      tiktok: {
+        clientKey: process.env.TIKTOK_CLIENT_KEY || '',
+        clientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
         disableSignUp: true,
       },
     },
@@ -615,57 +635,13 @@ export function createBetterAuth(
       account: {
         create: {
           after: async (account) => {
-            try {
-              if (
-                account.providerId === 'email' ||
-                account.providerId === 'google' ||
-                account.providerId === 'apple'
-              ) {
-                return; // We don't link these as public social links for now (unless Google is for YouTube)
-              }
-
-              let url = '';
-              const provider = account.providerId;
-              const accountId = account.accountId; // The user ID on the social platform
-
-              switch (provider) {
-                case 'twitter':
-                  url = `https://x.com/intent/user?user_id=${accountId}`;
-                  break;
-                case 'facebook':
-                  url = `https://facebook.com/${accountId}`;
-                  break;
-                case 'instagram':
-                  url = `https://instagram.com/${accountId}`;
-                  break;
-                case 'tiktok':
-                  url = `https://tiktok.com/@${accountId}`;
-                  break;
-                case 'youtube':
-                  url = `https://youtube.com/channel/${accountId}`;
-                  break;
-                default:
-                  url = `https://${provider}.com/${accountId}`;
-              }
-
-              const profile = await prisma.creatorProfile.findUnique({
-                where: { userId: account.userId },
-              });
-
-              if (profile) {
-                await prisma.creatorSocialLink.create({
-                  data: {
-                    creatorId: profile.id,
-                    platform: provider,
-                    url: url,
-                  },
-                });
-                console.log(
-                  `[Auth] Synced ${provider} social link for user ${account.userId}`,
-                );
-              }
-            } catch (err) {
-              console.error(`[Auth] Failed to sync social link:`, err);
+            await syncSocialLink(prisma, account);
+          },
+        },
+        update: {
+          after: async (account) => {
+            if (account?.userId && account.providerId) {
+              await syncSocialLink(prisma, account);
             }
           },
         },
@@ -676,23 +652,55 @@ export function createBetterAuth(
       genericOAuth({
         config: [
           {
+            // Instagram API with Instagram Login (business and creator accounts).
             providerId: 'instagram',
             clientId: process.env.INSTAGRAM_CLIENT_ID || '',
             clientSecret: process.env.INSTAGRAM_CLIENT_SECRET || '',
-            authorizationUrl: 'https://api.instagram.com/oauth/authorize',
+            authorizationUrl: 'https://www.instagram.com/oauth/authorize',
             tokenUrl: 'https://api.instagram.com/oauth/access_token',
-            userInfoUrl: 'https://graph.instagram.com/me?fields=id,username',
-            scopes: ['user_profile'],
+            scopes: ['instagram_business_basic'],
+            getUserInfo: async (tokens) => {
+              const res = await fetch(
+                `https://graph.instagram.com/me?fields=user_id,username&access_token=${encodeURIComponent(tokens.accessToken ?? '')}`,
+              );
+              if (!res.ok) return null;
+              const body = (await res.json()) as {
+                user_id?: string;
+                username?: string;
+              };
+              if (!body.user_id) return null;
+              return {
+                id: body.user_id,
+                name: body.username,
+                emailVerified: false,
+              };
+            },
             disableSignUp: true,
           },
           {
-            providerId: 'tiktok',
-            clientId: process.env.TIKTOK_CLIENT_KEY || '',
-            clientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
-            authorizationUrl: 'https://www.tiktok.com/v2/auth/authorize/',
-            tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
-            userInfoUrl: 'https://open.tiktokapis.com/v2/user/info/',
-            scopes: ['user.info.basic'],
+            providerId: 'youtube',
+            clientId: process.env.GOOGLE_CLIENT_ID || '',
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+            discoveryUrl:
+              'https://accounts.google.com/.well-known/openid-configuration',
+            scopes: ['https://www.googleapis.com/auth/youtube.readonly'],
+            getUserInfo: async (tokens) => {
+              const res = await fetch(
+                'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
+                { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
+              );
+              if (!res.ok) return null;
+              const body = (await res.json()) as {
+                items?: { id: string; snippet?: { title?: string } }[];
+              };
+              const channel = body.items?.[0];
+              if (!channel) return null;
+              return {
+                id: channel.id,
+                name: channel.snippet?.title,
+                emailVerified: false,
+              };
+            },
             disableSignUp: true,
           },
         ],

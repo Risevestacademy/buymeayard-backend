@@ -24,6 +24,12 @@ const PENDING_CONTRIBUTION_WINDOW_MS = 60 * 60 * 1000;
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { SaveSocialLinksDto } from './dto/social-links.dto';
+import {
+  normalizeSocialLink,
+  resolveSocialPlatform,
+  SocialLinkError,
+} from './social-links.util';
 import {
   DEFAULT_PAGE_LIMIT,
   MAX_PAGE_LIMIT,
@@ -366,6 +372,8 @@ export class CreatorsService {
   }
 
   async onboardCreator(userId: string, dto: OnboardCreatorDto) {
+    // Reject a bad link before anything is created.
+    const socialLinks = this.toValidLinks(dto.socialLinks ?? []);
     // 1. Resolve Creator Name
     const creatorName = (
       dto.creatorName ||
@@ -493,89 +501,9 @@ export class CreatorsService {
       });
     }
 
-    // 5. Sync social links if passed in DTO
-    if (dto.socialLinks && dto.socialLinks.length > 0) {
-      for (const link of dto.socialLinks) {
-        if (link.platform && link.url) {
-          const platform = link.platform.toLowerCase().trim();
-          const existing = await this.prisma.creatorSocialLink.findFirst({
-            where: { creatorId: profile.id, platform },
-          });
-
-          if (existing) {
-            await this.prisma.creatorSocialLink.update({
-              where: { id: existing.id },
-              data: { url: link.url.trim() },
-            });
-          } else {
-            await this.prisma.creatorSocialLink.create({
-              data: {
-                creatorId: profile.id,
-                platform,
-                url: link.url.trim(),
-              },
-            });
-          }
-        }
-      }
-    }
-
-    // 6. Also sync any OAuth social accounts connected via Better Auth
-    try {
-      const authAccounts = await this.prisma.authAccount.findMany({
-        where: {
-          userId,
-          providerId: { notIn: ['credential', 'email'] },
-        },
-      });
-
-      for (const acc of authAccounts) {
-        let url = '';
-        const provider = acc.providerId.toLowerCase();
-        switch (provider) {
-          case 'twitter':
-            url = `https://x.com/intent/user?user_id=${acc.accountId}`;
-            break;
-          case 'facebook':
-            url = `https://facebook.com/${acc.accountId}`;
-            break;
-          case 'instagram':
-            url = `https://instagram.com/${acc.accountId}`;
-            break;
-          case 'tiktok':
-            url = `https://tiktok.com/@${acc.accountId}`;
-            break;
-          case 'youtube':
-            url = `https://youtube.com/channel/${acc.accountId}`;
-            break;
-          default:
-            if (provider !== 'google' && provider !== 'apple') {
-              url = `https://${provider}.com/${acc.accountId}`;
-            }
-        }
-
-        if (url) {
-          const existing = await this.prisma.creatorSocialLink.findFirst({
-            where: { creatorId: profile.id, platform: provider },
-          });
-
-          if (!existing) {
-            await this.prisma.creatorSocialLink.create({
-              data: {
-                creatorId: profile.id,
-                platform: provider,
-                url,
-              },
-            });
-          }
-        }
-      }
-    } catch (err) {
-      // Non-critical background sync
-      console.warn(
-        '[CreatorsService] Failed to auto-sync OAuth social accounts:',
-        err,
-      );
+    // 5. Save social links if passed in DTO
+    if (socialLinks.length > 0) {
+      await this.upsertSocialLinks(profile.id, socialLinks);
     }
 
     if (isFirstOnboarding && profile.user?.email) {
@@ -613,6 +541,129 @@ export class CreatorsService {
   // -----------------------------------------------------------
   // Profile Update (post-onboarding edits)
   // -----------------------------------------------------------
+
+  private toValidLinks(links: { platform: string; url: string }[]) {
+    const seen = new Set<string>();
+    return links.map((link) => {
+      try {
+        const normalized = normalizeSocialLink(link.platform, link.url);
+        if (seen.has(normalized.platform)) {
+          throw new SocialLinkError(
+            `Only one ${normalized.platform} link is allowed`,
+          );
+        }
+        seen.add(normalized.platform);
+        return normalized;
+      } catch (err) {
+        if (err instanceof SocialLinkError) {
+          throw new BadRequestException({
+            code: ErrorCodes.VALIDATION_ERROR,
+            message: err.message,
+          });
+        }
+        throw err;
+      }
+    });
+  }
+
+  /** Adds or updates the given links and leaves the others alone. */
+  private async upsertSocialLinks(
+    creatorId: string,
+    links: { platform: string; url: string }[],
+  ) {
+    for (const { platform, url } of links) {
+      const existing = await this.prisma.creatorSocialLink.findFirst({
+        where: { creatorId, platform },
+      });
+      if (existing) {
+        await this.prisma.creatorSocialLink.update({
+          where: { id: existing.id },
+          data: existing.url === url ? {} : { url, verified: false },
+        });
+      } else {
+        await this.prisma.creatorSocialLink.create({
+          data: { creatorId, platform, url },
+        });
+      }
+    }
+  }
+
+  private async getProfileId(userId: string): Promise<string> {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!profile) throw new NotFoundException('Creator profile not found');
+    return profile.id;
+  }
+
+  async getSocialLinks(userId: string) {
+    const creatorId = await this.getProfileId(userId);
+    return this.prisma.creatorSocialLink.findMany({
+      where: { creatorId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * Replaces the creator's links with exactly the given set. A link that was
+   * connected through OAuth keeps its verified flag when it is sent back
+   * unchanged; anything typed in is stored as unverified.
+   */
+  async saveSocialLinks(userId: string, dto: SaveSocialLinksDto) {
+    const creatorId = await this.getProfileId(userId);
+    const connected = await this.prisma.creatorSocialLink.findMany({
+      where: { creatorId, verified: true },
+    });
+    const isConnected = (l: { platform: string; url: string }) =>
+      connected.some(
+        (c) =>
+          c.platform === resolveSocialPlatform(l.platform) &&
+          c.url === l.url?.trim(),
+      );
+
+    const kept = dto.links.filter(isConnected).map((l) => ({
+      platform: resolveSocialPlatform(l.platform) as string,
+      url: l.url.trim(),
+      verified: true,
+    }));
+    const typed = this.toValidLinks(
+      dto.links.filter((l) => !isConnected(l)),
+    ).map((l) => ({ ...l, verified: false }));
+
+    const clash = typed.find((t) =>
+      kept.some((k) => k.platform === t.platform),
+    );
+    if (clash) {
+      throw new BadRequestException({
+        code: ErrorCodes.VALIDATION_ERROR,
+        message: `Only one ${clash.platform} link is allowed`,
+      });
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.creatorSocialLink.deleteMany({ where: { creatorId } });
+      await tx.creatorSocialLink.createMany({
+        data: [...kept, ...typed].map((l) => ({ creatorId, ...l })),
+      });
+    });
+    return this.getSocialLinks(userId);
+  }
+
+  async deleteSocialLink(userId: string, platformInput: string) {
+    const creatorId = await this.getProfileId(userId);
+    const platform = resolveSocialPlatform(platformInput);
+    if (!platform) {
+      throw new BadRequestException({
+        code: ErrorCodes.VALIDATION_ERROR,
+        message: `"${platformInput}" is not a supported platform`,
+      });
+    }
+    await this.prisma.creatorSocialLink.deleteMany({
+      where: { creatorId, platform },
+    });
+    return this.getSocialLinks(userId);
+  }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     const profile = await this.prisma.creatorProfile.findUnique({

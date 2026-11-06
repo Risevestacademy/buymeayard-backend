@@ -18,9 +18,8 @@ export class CreatorSocialLinkResponseDto {
   creatorId: string;
 
   @ApiProperty({
-    example: 'twitter',
-    description:
-      'Platform identifier (e.g. twitter, instagram, tiktok, youtube)',
+    example: 'x',
+    description: 'youtube, twitch, x, facebook, instagram, tiktok or discord',
   })
   platform: string;
 

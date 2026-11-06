@@ -12,6 +12,7 @@ import {
   Put,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -38,6 +39,8 @@ import { NairaResponseInterceptor } from '../../common/interceptors/naira-respon
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
+import { SaveSocialLinksDto } from './dto/social-links.dto';
+import { CreatorSocialLinkResponseDto } from './dto/creator-response.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
 import { CreateCustomMaterialDto } from './dto/create-custom-material.dto';
@@ -601,6 +604,78 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
   ) {
     const profile = await this.creatorsService.updateProfile(userId, dto);
     return this.creatorsService.formatCreatorProfile(profile);
+  }
+
+  @Get('me/social-links')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Get my social links',
+    description:
+      'Platforms: youtube, twitch, x, facebook, instagram, tiktok, discord.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'The creator social links.',
+    type: [CreatorSocialLinkResponseDto],
+  })
+  @ApiErrors(UNAUTHORIZED_ERROR, CREATOR_NOT_FOUND_ERROR)
+  async getMySocialLinks(@CurrentUser('id') userId: string) {
+    return this.creatorsService.getSocialLinks(userId);
+  }
+
+  @Put('me/social-links')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Save my social links',
+    description:
+      'Replaces the whole set: links not in the list are removed, and an empty list clears them. One link per platform. Each `url` can be a handle (`@ada`) or a profile URL and is stored as a canonical https URL. Discord needs an invite link. `twitter` is accepted as an alias for `x`.',
+  })
+  @ApiBody({
+    type: SaveSocialLinksDto,
+    examples: {
+      links: {
+        summary: 'Handles and URLs',
+        value: {
+          links: [
+            { platform: 'instagram', url: '@adeola' },
+            { platform: 'x', url: 'https://twitter.com/adeola' },
+            { platform: 'discord', url: 'https://discord.gg/ankara' },
+          ],
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'The saved links.',
+    type: [CreatorSocialLinkResponseDto],
+  })
+  @ApiErrors(VALIDATION_ERROR, UNAUTHORIZED_ERROR, CREATOR_NOT_FOUND_ERROR)
+  async saveMySocialLinks(
+    @CurrentUser('id') userId: string,
+    @Body() dto: SaveSocialLinksDto,
+  ) {
+    return this.creatorsService.saveSocialLinks(userId, dto);
+  }
+
+  @Delete('me/social-links/:platform')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({ summary: 'Remove one social link' })
+  @ApiParam({ name: 'platform', example: 'instagram' })
+  @ApiResponse({
+    status: 200,
+    description: 'The remaining links.',
+    type: [CreatorSocialLinkResponseDto],
+  })
+  @ApiErrors(VALIDATION_ERROR, UNAUTHORIZED_ERROR, CREATOR_NOT_FOUND_ERROR)
+  async deleteMySocialLink(
+    @CurrentUser('id') userId: string,
+    @Param('platform') platform: string,
+  ) {
+    return this.creatorsService.deleteSocialLink(userId, platform);
   }
 
   @Put('me/thank-you-message')

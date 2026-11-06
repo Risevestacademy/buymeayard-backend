@@ -277,6 +277,7 @@ describe('createBetterAuth', () => {
         enabled: true,
         trustedProviders: ['google', 'apple'],
         requireLocalEmailVerified: false,
+        allowDifferentEmails: true,
       });
     });
 
