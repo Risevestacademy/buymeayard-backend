@@ -18,7 +18,11 @@ export const SUPPORT_WALL_SELECT = {
         select: {
           materialId: true,
           material: {
-            select: { color: true, thumbnailSmallUrl: true, imageUrl: true },
+            select: {
+              color: true,
+              thumbnailLargeUrl: true,
+              thumbnailSmallUrl: true,
+            },
           },
         },
       },

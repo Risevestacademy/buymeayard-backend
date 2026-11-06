@@ -1561,10 +1561,10 @@ export class CreatorsService {
           id: firstItem.creatorMaterial?.materialId,
           name: firstItem.materialNameSnapshot,
           color: firstItem.creatorMaterial?.material?.color || null,
-          thumbnailUrl:
-            firstItem.creatorMaterial?.material?.thumbnailSmallUrl ||
-            firstItem.creatorMaterial?.material?.imageUrl ||
-            null,
+          thumbnailSmallUrl:
+            firstItem.creatorMaterial?.material?.thumbnailSmallUrl || null,
+          thumbnailLargeUrl:
+            firstItem.creatorMaterial?.material?.thumbnailLargeUrl || null,
           quantity: support.items
             .reduce((acc, it) => acc.add(it.quantity), new Prisma.Decimal(0))
             .toNumber(),

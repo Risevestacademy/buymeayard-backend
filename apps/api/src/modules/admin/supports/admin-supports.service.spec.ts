@@ -42,7 +42,8 @@ describe('AdminSupportsService contribution material', () => {
     id: 'mat-adire',
     name: 'Adire',
     color: '#7F3516',
-    thumbnailUrl: 'https://cdn/adire-sm.png',
+    thumbnailSmallUrl: 'https://cdn/adire-sm.png',
+    thumbnailLargeUrl: null,
     quantity: 2.5,
   };
 
