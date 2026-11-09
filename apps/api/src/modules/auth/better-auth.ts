@@ -307,39 +307,39 @@ export function createBetterAuth(
       google: {
         clientId: process.env.GOOGLE_CLIENT_ID || '',
         clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
-        disableSignUp: true,
+        disableSignUp: false,
       },
       apple: {
         clientId: process.env.APPLE_CLIENT_ID || '',
         clientSecret: resolveAppleClientSecret(),
-        disableSignUp: true,
+        disableSignUp: false,
       },
       twitter: {
         clientId: process.env.TWITTER_CLIENT_ID || '',
         clientSecret: process.env.TWITTER_CLIENT_SECRET || '',
-        disableSignUp: true,
+        disableSignUp: false,
       },
       facebook: {
         clientId: process.env.FACEBOOK_CLIENT_ID || '',
         clientSecret: process.env.FACEBOOK_CLIENT_SECRET || '',
         // user_link returns the profile URL; Facebook must approve it for the app.
         scope: ['public_profile', 'user_link'],
-        disableSignUp: true,
+        disableSignUp: false,
       },
       discord: {
         clientId: process.env.DISCORD_CLIENT_ID || '',
         clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
-        disableSignUp: true,
+        disableSignUp: false,
       },
       twitch: {
         clientId: process.env.TWITCH_CLIENT_ID || '',
         clientSecret: process.env.TWITCH_CLIENT_SECRET || '',
-        disableSignUp: true,
+        disableSignUp: false,
       },
       tiktok: {
         clientKey: process.env.TIKTOK_CLIENT_KEY || '',
         clientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
-        disableSignUp: true,
+        disableSignUp: false,
       },
     },
     emailAndPassword: {

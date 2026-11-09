@@ -281,14 +281,17 @@ describe('createBetterAuth', () => {
       });
     });
 
-    it('should configure disableSignUp: true on all social providers', () => {
+    it('should allow sign-up on all social providers', () => {
       createBetterAuth(mockPrisma);
       const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
 
-      expect(passedConfig.socialProviders.google.disableSignUp).toBe(true);
-      expect(passedConfig.socialProviders.apple.disableSignUp).toBe(true);
-      expect(passedConfig.socialProviders.twitter.disableSignUp).toBe(true);
-      expect(passedConfig.socialProviders.facebook.disableSignUp).toBe(true);
+      expect(passedConfig.socialProviders.google.disableSignUp).toBe(false);
+      expect(passedConfig.socialProviders.apple.disableSignUp).toBe(false);
+      expect(passedConfig.socialProviders.twitter.disableSignUp).toBe(false);
+      expect(passedConfig.socialProviders.facebook.disableSignUp).toBe(false);
+      expect(passedConfig.socialProviders.discord.disableSignUp).toBe(false);
+      expect(passedConfig.socialProviders.twitch.disableSignUp).toBe(false);
+      expect(passedConfig.socialProviders.tiktok.disableSignUp).toBe(false);
     });
   });
 
