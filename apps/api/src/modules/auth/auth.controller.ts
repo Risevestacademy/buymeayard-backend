@@ -18,6 +18,8 @@ import {
   ApiOperation,
   ApiResponse as SwaggerResponse,
   ApiBearerAuth,
+  ApiBody,
+  ApiCookieAuth,
   ApiHeader,
   ApiParam,
   ApiQuery,
@@ -34,6 +36,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { LinkSocialDto } from './dto/link-social.dto';
 import {
   SocialSignInDto,
   SocialSignInResponseDto,
@@ -527,6 +530,56 @@ export class AuthController {
       headers: fromNodeHeaders(req.headers),
     });
     return this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
+  }
+
+  /**
+   * Documented route for a Better Auth endpoint. It must stay above the
+   * catch-all below and forwards to the same handler, so behaviour is unchanged.
+   * Better Auth checks the session itself and answers 401 without one.
+   */
+  @Public()
+  @Post('link-social')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Connect a social account (YouTube, X, Twitch, ...)',
+    description:
+      'Starts the OAuth flow that connects a platform account to the signed-in creator. Redirect the browser to the returned `url`. After consent the API stores a verified social link and sends the browser to `callbackURL` (or `errorCallbackURL` with `?error=<code>`). Then call `GET /creators/me/social-links` to show the result. This never signs in or creates a user. Requires an active session.',
+  })
+  @ApiBody({
+    type: LinkSocialDto,
+    examples: {
+      youtube: {
+        summary: 'Connect YouTube',
+        value: {
+          provider: 'youtube',
+          callbackURL:
+            'https://creator.buymeayard.com/settings/socials?connected=youtube',
+          errorCallbackURL:
+            'https://creator.buymeayard.com/settings/socials?failed=youtube',
+        },
+      },
+    },
+  })
+  @SwaggerResponse({
+    status: 200,
+    description:
+      'Authorization URL of the platform. Send the user there (`redirect` is true).',
+    type: SocialSignInResponseDto,
+  })
+  @SwaggerResponse({
+    status: 401,
+    description: 'No active session.',
+    type: ErrorResponseDto,
+  })
+  @SwaggerResponse({
+    status: 400,
+    description: 'Unknown provider or untrusted callback URL.',
+    type: ErrorResponseDto,
+  })
+  async linkSocial(@Req() req: Request, @Res() res: Response) {
+    return this.handleBetterAuth(req, res);
   }
 
   @Public()
