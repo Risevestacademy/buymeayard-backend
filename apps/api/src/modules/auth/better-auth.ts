@@ -2,6 +2,7 @@ import { betterAuth, APIError } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, genericOAuth } from 'better-auth/plugins';
 import { syncSocialLink } from './social-link-sync';
+import { fetchYoutubeChannel } from './youtube-channel';
 import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
 import { renderEmailTemplate } from './email-templates/render-email-template';
@@ -684,20 +685,15 @@ export function createBetterAuth(
             discoveryUrl:
               'https://accounts.google.com/.well-known/openid-configuration',
             scopes: ['https://www.googleapis.com/auth/youtube.readonly'],
+            // A channel can live on a different Google account (or a brand
+            // account) than the one the browser is signed in with.
+            prompt: 'select_account consent',
             getUserInfo: async (tokens) => {
-              const res = await fetch(
-                'https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true',
-                { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
-              );
-              if (!res.ok) return null;
-              const body = (await res.json()) as {
-                items?: { id: string; snippet?: { title?: string } }[];
-              };
-              const channel = body.items?.[0];
+              const channel = await fetchYoutubeChannel(tokens.accessToken);
               if (!channel) return null;
               return {
                 id: channel.id,
-                name: channel.snippet?.title,
+                name: channel.name,
                 emailVerified: false,
               };
             },
