@@ -44,6 +44,11 @@ Redirect URI to register at each provider: `<API_URL>/api/v1/auth/callback/<prov
 | Discord | discord.com/developers | `DISCORD_CLIENT_ID/SECRET` | Stores `https://discord.com/users/<id>` |
 | YouTube | Google Cloud, enable YouTube Data API v3 | `GOOGLE_CLIENT_ID/SECRET` | Reuses the Google client. Add the redirect URI and the `youtube.readonly` scope to the consent screen |
 
+YouTube always shows Google's account picker, so a creator can pick the account that
+owns the channel. If that account has no channel (or the API is not enabled), the
+redirect back carries `error=unable_to_get_user_info`; show "No YouTube channel found
+on that Google account". The API log says which case it was.
+
 A platform with blank credentials simply fails at the consent step. Hide its button
 until its env vars are set.
 
