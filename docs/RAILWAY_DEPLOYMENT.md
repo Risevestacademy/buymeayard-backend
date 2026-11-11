@@ -113,7 +113,7 @@ ADMIN_PASSWORD=
 
 Notes:
 - **Do not set `PORT`.** Railway injects it and the app reads it.
-- Optional: `POSTHOG_API_KEY`, `POSTHOG_HOST`.
+- Optional: `POSTHOG_API_KEY`, `POSTHOG_HOST`. Set `POSTHOG_HOST=https://st.buymeayard.com` to send events through our PostHog reverse proxy (the proxy must forward to `us.i.posthog.com`). Unset, it defaults to `https://us.i.posthog.com`.
 - Click **Deploy** when prompted so the variables take effect.
 
 ## Part 6: Generate the public domain
