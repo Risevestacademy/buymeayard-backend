@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,6 +11,10 @@ import { buildPagination } from '../../../common/utils/pagination.util';
 import { MoneyUtil } from '../../../common/utils/money.util';
 import { AuditLogService } from '../../analytics/audit-log.service';
 import { MaterialsService } from '../../materials/materials.service';
+import {
+  STORAGE_PROVIDER,
+  StorageProvider,
+} from '../../../infrastructure/storage/storage-provider.interface';
 import {
   AdminCreateMaterialDto,
   AdminMaterialsQueryDto,
@@ -36,7 +41,17 @@ export class AdminMaterialsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditLogService,
     private readonly materialsService: MaterialsService,
+    @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
   ) {}
+
+  /** Stores a material image and returns its URL. Nothing is saved on a material yet. */
+  async uploadThumbnail(file: Express.Multer.File) {
+    const result = await this.storage.uploadFile(file.buffer, {
+      folder: 'materials',
+      resourceType: 'image',
+    });
+    return { url: result.secureUrl };
+  }
 
   async create(adminId: string, dto: AdminCreateMaterialDto) {
     const slug = slugify(dto.slug || dto.name);
