@@ -170,7 +170,7 @@ export class DashboardBalanceDto {
   @ApiProperty({
     example: 12000,
     description:
-      'Contributions still processing (checkout opened in the last hour, not yet confirmed by Paystack), in naira',
+      'Contributions still processing (checkout opened in the last hour, not yet confirmed by Bachs), in naira',
   })
   pendingBalance!: number;
 

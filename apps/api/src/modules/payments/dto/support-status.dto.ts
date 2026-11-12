@@ -15,7 +15,7 @@ export class SupportStatusResponseDto {
   @ApiProperty({
     example: true,
     description:
-      'True once Paystack has confirmed the payment (PAID or COMPLETED). Show the thank-you screen only when this is true.',
+      'True once Bachs has confirmed the payment (PAID or COMPLETED). Show the thank-you screen only when this is true.',
   })
   paid!: boolean;
 

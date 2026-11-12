@@ -34,7 +34,7 @@ export class SupportQuoteResponseDto {
 export class SupportIntentResponseDto extends SupportQuoteResponseDto {
   @ApiProperty({
     description:
-      'Pass this to POST /payments/initialize to get the Paystack checkout URL',
+      'Pass this to POST /payments/initialize to get the Bachs checkout URL',
   })
   supportId!: string;
 
@@ -50,7 +50,7 @@ export class CheckoutGiftDto extends CreateSupportIntentDto {
   @ApiPropertyOptional({
     example: 'https://buymeayard.com/adeola/thanks',
     description:
-      'Page Paystack sends the supporter back to after paying. Must be on one of our own sites. We add `supportId` to it, and Paystack adds `reference` and `trxref`.',
+      'Page Bachs sends the supporter back to after paying. Must be on one of our own sites. We add `supportId` to it, and Bachs adds `reference` and `trxref`.',
   })
   @IsOptional()
   @IsUrl({
@@ -67,7 +67,7 @@ export class CheckoutGiftResponseDto extends SupportIntentResponseDto {
   paymentId!: string;
 
   @ApiProperty({
-    example: 'https://checkout.paystack.com/abc123',
+    example: 'https://checkout.bachs.io/c/abc123',
     description: 'Send the supporter here to pay',
   })
   authorizationUrl!: string;

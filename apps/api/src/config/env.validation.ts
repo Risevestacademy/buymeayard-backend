@@ -33,9 +33,16 @@ export const envSchema = z.object({
     .min(16, 'BETTER_AUTH_SECRET must be at least 16 characters'),
   BETTER_AUTH_URL: z.string().url().default('http://localhost:8000'),
 
-  PAYSTACK_SECRET_KEY: z.string().default('sk_test_mock'),
-  PAYSTACK_PUBLIC_KEY: z.string().default('pk_test_mock'),
-  PAYSTACK_WEBHOOK_SECRET: z.string().default('webhook_secret_mock'),
+  // Paystack is switched off for now (see InfrastructurePaymentsModule).
+  // PAYSTACK_SECRET_KEY: z.string().default('sk_test_mock'),
+  // PAYSTACK_PUBLIC_KEY: z.string().default('pk_test_mock'),
+  // PAYSTACK_WEBHOOK_SECRET: z.string().default('webhook_secret_mock'),
+
+  BACHS_API_KEY: z.string().default('sk_sandbox_mock'),
+  BACHS_WEBHOOK_SECRET: z.string().default('webhook_secret_mock'),
+  BACHS_BASE_URL: z.string().url().optional(),
+  /** What Bachs charges per payout, in naira. Added to the creator's processing fee. */
+  BACHS_PAYOUT_FEE: z.coerce.number().min(0).default(50),
 
   BREVO_API_KEY: z.string().optional(),
   SMTP_HOST: z.string().optional(),
@@ -91,6 +98,8 @@ export const envSchema = z.object({
 // default (e.g. CREATOR_FRONTEND_URL -> localhost) must still be set
 // explicitly in production.
 const PRODUCTION_REQUIRED_KEYS = [
+  'BACHS_API_KEY',
+  'BACHS_WEBHOOK_SECRET',
   'DIDIT_API_KEY',
   'DIDIT_WORKFLOW_ID',
   'DIDIT_WEBHOOK_SECRET',

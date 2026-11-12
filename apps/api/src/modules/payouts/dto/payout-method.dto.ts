@@ -10,7 +10,7 @@ export class BankDto {
 
   @ApiProperty({
     example: '058',
-    description: 'Paystack bank code. Send it as `bankCode`.',
+    description: 'Bank code. Send it as `bankCode`.',
   })
   code!: string;
 

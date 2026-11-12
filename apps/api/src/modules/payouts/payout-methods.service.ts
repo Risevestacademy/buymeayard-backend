@@ -73,11 +73,24 @@ export class PayoutMethodsService {
   ): Promise<PayoutMethodDto> {
     const creator = await this.getVerifiedCreator(userId);
     const resolved = this.takeResolved(input) ?? (await this.resolve(input));
+    // A provider that keeps an account per creator reuses it for a new bank account
+    const previous = await this.prisma.payoutMethod.findFirst({
+      where: {
+        creatorId: creator.id,
+        provider: this.paymentProvider.providerName,
+        recipientCode: { not: null },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { recipientCode: true },
+    });
     const recipientCode = await this.callProvider(() =>
       this.paymentProvider.createTransferRecipient({
         accountName: resolved.accountName,
         accountNumber: resolved.accountNumber,
         bankCode: resolved.bankCode,
+        creatorId: creator.id,
+        email: creator.email,
+        previousRecipientCode: previous?.recipientCode,
       }),
     );
 
@@ -89,6 +102,7 @@ export class PayoutMethodsService {
       return tx.payoutMethod.create({
         data: {
           creatorId: creator.id,
+          provider: this.paymentProvider.providerName,
           accountIdentifier: resolved.accountNumber,
           accountName: resolved.accountName,
           bankName: resolved.bankName,
@@ -107,7 +121,12 @@ export class PayoutMethodsService {
   /** The account withdrawals are sent to, or null if none is set up. */
   async getActiveMethod(creatorId: string): Promise<PayoutMethod | null> {
     return this.prisma.payoutMethod.findFirst({
-      where: { creatorId, status: 'ACTIVE' },
+      // A recipient saved under another provider cannot be paid through this one
+      where: {
+        creatorId,
+        status: 'ACTIVE',
+        provider: this.paymentProvider.providerName,
+      },
       orderBy: [{ isDefault: 'desc' }, { createdAt: 'desc' }],
     });
   }
@@ -160,7 +179,7 @@ export class PayoutMethodsService {
   }
 
   /**
-   * Paystack test mode allows only 3 account lookups a day, so the lookup the
+   * The provider limits account lookups, so the lookup the
    * creator just confirmed is reused when they save. Server-side, not
    * client-supplied, so the saved name is still the bank's.
    */
@@ -183,10 +202,19 @@ export class PayoutMethodsService {
   }
 
   private async getVerifiedCreator(userId: string) {
-    const creator = await this.prisma.creatorProfile.findUnique({
+    const profile = await this.prisma.creatorProfile.findUnique({
       where: { userId },
-      select: { id: true, kycStatus: true },
+      select: {
+        id: true,
+        kycStatus: true,
+        user: { select: { email: true } },
+      },
     });
+    const creator = profile && {
+      id: profile.id,
+      kycStatus: profile.kycStatus,
+      email: profile.user?.email,
+    };
     if (!creator) {
       throw new NotFoundException({
         code: ErrorCodes.CREATOR_NOT_FOUND,

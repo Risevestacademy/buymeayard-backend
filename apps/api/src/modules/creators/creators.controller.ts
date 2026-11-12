@@ -1116,7 +1116,7 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
   @ApiOperation({
     summary: 'Create a guest support intent',
     description:
-      'Public endpoint for a guest to start a gift to a creator. No authentication required. To get the Paystack checkout URL in the same call, use POST /creators/:slug/supports/checkout instead. Otherwise send the returned supportId to POST /payments/initialize.',
+      'Public endpoint for a guest to start a gift to a creator. No authentication required. To get the Bachs checkout URL in the same call, use POST /creators/:slug/supports/checkout instead. Otherwise send the returned supportId to POST /payments/initialize.',
   })
   @ApiParam({
     name: 'slug',
@@ -1136,9 +1136,9 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
   @Public()
   @Post(':slug/supports/checkout')
   @ApiOperation({
-    summary: 'Start a gift and get the Paystack checkout URL in one call',
+    summary: 'Start a gift and get the Bachs checkout URL in one call',
     description:
-      'Public. Does what `supports/intent` then `POST /payments/initialize` do, in one request: creates the gift, opens a Paystack checkout and returns `authorizationUrl`. Redirect the supporter there. After paying, Paystack sends them to `callbackUrl` (we add `supportId`), where you confirm with GET /supports/:supportId/status.',
+      'Public. Does what `supports/intent` then `POST /payments/initialize` do, in one request: creates the gift, opens a Bachs checkout and returns `authorizationUrl`. Redirect the supporter there. After paying, Bachs sends them to `callbackUrl` (we add `supportId`), where you confirm with GET /supports/:supportId/status.',
   })
   @ApiParam({ name: 'slug', example: 'adeola' })
   @ApiBody({ type: CheckoutGiftDto })

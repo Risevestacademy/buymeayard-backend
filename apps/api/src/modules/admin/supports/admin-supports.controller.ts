@@ -49,9 +49,9 @@ export class AdminSupportsController {
   @Post('supports/:id/refund')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Refund a paid contribution in full through Paystack',
+    summary: 'Refund a paid contribution in full through Bachs',
     description:
-      'Takes the money back from the creator and the platform fee first, then asks Paystack to refund the supporter. PROCESSING means Paystack is still working; the refund.processed webhook finishes it. A rejected refund is rolled back.',
+      'Takes the money back from the creator and the platform fee first, then asks Bachs to refund the supporter. PROCESSING means Bachs is still working; the refund.processed webhook finishes it. A rejected refund is rolled back.',
   })
   refund(
     @Param('id', ParseUUIDPipe) id: string,

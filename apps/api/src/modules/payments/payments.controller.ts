@@ -32,7 +32,7 @@ export class PaymentsController {
   @Public()
   @Post('payments/initialize')
   @ApiOperation({
-    summary: 'Initialize Paystack payment for a support order',
+    summary: 'Start the payment for a support order',
     description:
       'Public, so a guest can pay for the support they just created. The unguessable support id is the only credential, and it only lets the caller pay, never read anything.',
   })
@@ -71,7 +71,7 @@ export class PaymentsController {
   @ApiOperation({
     summary: 'Check whether a gift has been paid',
     description:
-      'For the page Paystack sends the supporter back to. Paystack confirms the payment by webhook, which can land a few seconds after the redirect, so poll this every second or two (up to about 15 seconds) until `paid` is true, then show `thankYouMessage`. Never treat the redirect itself as proof of payment. The unguessable support id is the only credential.',
+      'For the page the payment provider sends the supporter back to. The provider confirms the payment by webhook, which can land a few seconds after the redirect, so poll this every second or two (up to about 15 seconds) until `paid` is true, then show `thankYouMessage`. Never treat the redirect itself as proof of payment. The unguessable support id is the only credential.',
   })
   @ApiParam({ name: 'supportId', description: 'From the intent/checkout call' })
   @ApiResponse({ status: 200, type: SupportStatusResponseDto })
@@ -88,27 +88,46 @@ export class PaymentsController {
   }
 
   @Public()
-  @Post('webhooks/paystack')
+  @Post('webhooks/bachs')
   @ApiOperation({
-    summary:
-      'Handle Paystack webhook events (called by Paystack, not the apps)',
-    description: `Configure in Paystack: *Settings → API Keys & Webhooks → Webhook URL* = \`https://<api-domain>/webhooks/paystack\` (no \`/api/v1\`).
+    summary: 'Handle Bachs webhook events (called by Bachs, not the apps)',
+    description: `Configure in Bachs: *Developer Portal → Webhooks → Add destination* with URL \`https://<api-domain>/webhooks/bachs\` (no \`/api/v1\`), and put the endpoint's signing secret in \`BACHS_WEBHOOK_SECRET\`.
 
-The \`x-paystack-signature\` header must be the HMAC-SHA512 of the raw body using \`PAYSTACK_WEBHOOK_SECRET\`, which must equal the Paystack secret key.
+The \`X-Bachs-Signature-V2\` header (\`t=<unix seconds>,v1=<hex>\`) must be the HMAC-SHA256 of \`<t>.<raw body>\`. Deliveries more than 5 minutes old are rejected. The older \`X-Bachs-Signature\` + \`X-Bachs-Timestamp\` pair is accepted too.
 
 Handled events:
-- \`charge.success\`: a contribution was paid. Credits the creator's balance.
-- \`transfer.success\`: a payout reached the bank. "Money landed" notification.
-- \`transfer.failed\` / \`transfer.reversed\`: the payout failed. The full amount goes back to the balance, plus a "Withdrawal didn’t go through" notification.
+- \`collection.succeeded\`: a checkout payment was paid in full. Credits the creator's balance. Virtual-account deposits and part payments are ignored.
+- \`payout.paid\`: a payout reached the bank. "Money landed" notification.
+- \`payout.failed\`: the payout failed. The full amount goes back to the balance, plus a "Withdrawal didn’t go through" notification.
+- \`refund.paid\` / \`refund.failed\`: settle an open refund.
 
 Repeated deliveries of the same event are ignored (\`{ status: "already_processed" }\`).`,
   })
-  async handlePaystackWebhook(
-    @Headers('x-paystack-signature') signature: string,
+  async handleBachsWebhook(
+    @Headers('x-bachs-signature-v2') signatureV2: string,
+    @Headers('x-bachs-signature') signatureV1: string,
+    @Headers('x-bachs-timestamp') timestamp: string,
     @Body() payload: any,
     @Req() req: any,
   ) {
+    // The older header pair carries the same digest without the `t=` wrapper
+    const signature =
+      signatureV2 ||
+      (signatureV1 && timestamp ? `t=${timestamp},v1=${signatureV1}` : '');
     const rawBody = req.rawBody || JSON.stringify(payload);
     return this.paymentsService.handleWebhook(signature, payload, rawBody);
   }
+
+  // Paystack webhook, switched off with the Paystack provider. Its signature
+  // (HMAC-SHA512 in x-paystack-signature) would fail against the Bachs provider.
+  // @Public()
+  // @Post('webhooks/paystack')
+  // async handlePaystackWebhook(
+  //   @Headers('x-paystack-signature') signature: string,
+  //   @Body() payload: any,
+  //   @Req() req: any,
+  // ) {
+  //   const rawBody = req.rawBody || JSON.stringify(payload);
+  //   return this.paymentsService.handleWebhook(signature, payload, rawBody);
+  // }
 }

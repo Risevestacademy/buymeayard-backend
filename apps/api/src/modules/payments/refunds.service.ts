@@ -37,9 +37,9 @@ export interface InitiateRefundOptions {
 }
 
 /**
- * Full refunds of a paid contribution, sent to Paystack. The money is taken
+ * Full refunds of a paid contribution, sent to Bachs. The money is taken
  * back from the creator and the platform fee in the ledger first (like a payout
- * reservation) and returned if Paystack fails the refund.
+ * reservation) and returned if Bachs fails the refund.
  */
 @Injectable()
 export class RefundsService {
@@ -164,6 +164,7 @@ export class RefundsService {
     try {
       result = await this.paymentProvider.refundPayment({
         paymentReference: payment.providerReference,
+        providerTransactionId: payment.providerTransactionId,
         amount: payment.amount,
         reason: options.reason,
       });
@@ -172,11 +173,11 @@ export class RefundsService {
         await this.applyOutcome(refund.id, 'FAILED', error.message);
         throw new BadRequestException({
           code: ErrorCodes.REFUND_NOT_ALLOWED,
-          message: `Paystack rejected the refund: ${error.message}`,
+          message: `The payment provider rejected the refund: ${error.message}`,
         });
       }
       // Unknown outcome: leave it PENDING. A refund.processed / refund.failed
-      // webhook settles it; Paystack refuses a second refund of the same payment.
+      // webhook settles it; the provider refuses a second refund of the same payment.
       this.logger.error(`Refund ${refund.id} has an unknown outcome`, error);
       return refund;
     }
@@ -287,7 +288,7 @@ export class RefundsService {
   }
 
   /**
-   * Applies a Paystack refund webhook, found through the original payment's
+   * Applies a Bachs refund webhook, found through the original payment's
    * reference. Returns false when no open refund matches.
    */
   async applyProviderEvent(
@@ -318,7 +319,7 @@ export class RefundsService {
     return this.applyOutcome(
       refund.id,
       status,
-      failureReason ?? 'Paystack could not complete the refund.',
+      failureReason ?? 'Bachs could not complete the refund.',
       providerRefundId,
     );
   }
