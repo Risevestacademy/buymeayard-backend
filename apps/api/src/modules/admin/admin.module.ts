@@ -28,6 +28,7 @@ import { AdminAuditController } from './audit/admin-audit.controller';
 import { AdminAuditService } from './audit/admin-audit.service';
 import { AdminMaterialsController } from './materials/admin-materials.controller';
 import { AdminMaterialsService } from './materials/admin-materials.service';
+import { StorageModule } from '../../infrastructure/storage/storage.module';
 
 @Module({
   imports: [
@@ -37,6 +38,7 @@ import { AdminMaterialsService } from './materials/admin-materials.service';
     PaymentsModule,
     WaitlistModule,
     MaterialsModule,
+    StorageModule,
   ],
   controllers: [
     AdminController,
