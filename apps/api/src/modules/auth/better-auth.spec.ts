@@ -58,11 +58,23 @@ describe('createBetterAuth', () => {
   });
 
   describe('youtube connect provider', () => {
+    it('trusts youtube so a connect is not rejected as unlinkable', () => {
+      createBetterAuth(mockPrisma, mockEventEmitter);
+      const config = (betterAuth as jest.Mock).mock.calls[0][0];
+      expect(config.account.accountLinking.trustedProviders).toContain(
+        'youtube',
+      );
+    });
+
     it('asks Google to show the account picker', () => {
       createBetterAuth(mockPrisma, mockEventEmitter);
       const { config } = (genericOAuth as jest.Mock).mock.calls[0][0];
       const youtube = config.find((c: any) => c.providerId === 'youtube');
       expect(youtube.prompt).toBe('select_account consent');
+      // The channel id is the account id (profile has no `sub`).
+      expect(youtube.accountSubject({ profile: { id: 'UC123' } })).toBe(
+        'UC123',
+      );
       expect(youtube.scopes).toEqual([
         'https://www.googleapis.com/auth/youtube.readonly',
       ]);
@@ -288,7 +300,7 @@ describe('createBetterAuth', () => {
 
       expect(passedConfig.account?.accountLinking).toEqual({
         enabled: true,
-        trustedProviders: ['google', 'apple'],
+        trustedProviders: ['google', 'apple', 'youtube'],
         requireLocalEmailVerified: false,
         allowDifferentEmails: true,
       });

@@ -286,7 +286,10 @@ export function createBetterAuth(
       skipStateCookieCheck: true,
       accountLinking: {
         enabled: true,
-        trustedProviders: ['google', 'apple'],
+        // youtube is connect-only and returns no email, so trusting it cannot
+        // link a sign-in to someone else's account. Without this a connect fails
+        // with unable_to_link_account (the profile is not email-verified).
+        trustedProviders: ['google', 'apple', 'youtube'],
         requireLocalEmailVerified: false,
         // Creators connect social accounts whose email differs from their own.
         allowDifferentEmails: true,
@@ -688,6 +691,10 @@ export function createBetterAuth(
             // A channel can live on a different Google account (or a brand
             // account) than the one the browser is signed in with.
             prompt: 'select_account consent',
+            // Discovery makes this an OIDC provider, so Better Auth reads the
+            // account id from a `sub` claim we do not return. Use the channel id.
+            // Without it every connect fails with unable_to_get_user_info.
+            accountSubject: ({ profile }) => String(profile.id),
             getUserInfo: async (tokens) => {
               const channel = await fetchYoutubeChannel(tokens.accessToken);
               if (!channel) return null;
