@@ -45,6 +45,8 @@ export const envSchema = z.object({
   BACHS_PAYOUT_FEE: z.coerce.number().min(0).default(50),
 
   BREVO_API_KEY: z.string().optional(),
+  // Expo push: only needed when Enhanced Push Security is on in the Expo dashboard
+  EXPO_ACCESS_TOKEN: z.string().optional(),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().optional(),
   SMTP_USER: z.string().optional(),

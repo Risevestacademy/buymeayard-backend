@@ -3,10 +3,11 @@ import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
 import { NotificationDispatcherService } from './notification-dispatcher.service';
 import { NotificationListeners } from './notification.listeners';
+import { PushNotificationsModule } from '../push-notifications/push-notifications.module';
 import { InfrastructureNotificationsModule } from '../../infrastructure/notifications/infrastructure-notifications.module';
 
 @Module({
-  imports: [InfrastructureNotificationsModule],
+  imports: [InfrastructureNotificationsModule, PushNotificationsModule],
   controllers: [NotificationsController],
   providers: [
     NotificationsService,
@@ -16,4 +17,3 @@ import { InfrastructureNotificationsModule } from '../../infrastructure/notifica
   exports: [NotificationsService, NotificationDispatcherService],
 })
 export class NotificationsModule {}
-

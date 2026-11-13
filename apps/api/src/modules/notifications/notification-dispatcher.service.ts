@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { PushService } from '../push-notifications/push.service';
 import * as nodemailer from 'nodemailer';
 import { renderEmailTemplate } from '../auth/email-templates/render-email-template';
 import {
@@ -17,7 +18,10 @@ export class NotificationDispatcherService {
   private readonly emailFrom: string;
   private readonly frontendUrl: string;
 
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly push: PushService,
+  ) {
     this.emailFrom =
       process.env.EMAIL_FROM || 'BuyMeAYard <buymeayard@gmail.com>';
     this.frontendUrl =
@@ -205,6 +209,19 @@ export class NotificationDispatcherService {
       });
     }
 
+    // Push Notification
+    if (prefs.pushOnPayout !== false) {
+      await this.push.sendToUser(user.id, {
+        title,
+        body,
+        data: {
+          url: `/payouts/${event.payoutId}`,
+          type,
+          payoutId: event.payoutId,
+        },
+      });
+    }
+
     // Email Notification
     if (prefs.emailOnPayout !== false && user.email) {
       const firstName = user.name?.split(' ')[0] || 'there';
@@ -264,6 +281,20 @@ export class NotificationDispatcherService {
             message: event.message,
           },
           actionUrl: '/dashboard/contributions',
+        },
+      });
+    }
+
+    // Push Notification
+    if (prefs.pushOnContribution) {
+      await this.push.sendToUser(user.id, {
+        title,
+        // No supporter note: push text shows on lock screens.
+        body: `${event.supporterName} bought ${event.yards} yards of ${event.materialName} (₦${formattedAmount})`,
+        data: {
+          url: `/transactions/${event.supportId}`,
+          type: 'CONTRIBUTION_RECEIVED',
+          contributionId: event.supportId,
         },
       });
     }

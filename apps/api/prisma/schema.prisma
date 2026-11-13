@@ -31,6 +31,7 @@ model User {
   notifications          Notification[]
   supportTickets         SupportTicket[]
   notificationPreference NotificationPreference?
+  pushTokens             PushToken[]
   entitlements           PostEntitlement[]
   reports                ContentReport[]         @relation("ReporterReports")
 
@@ -563,6 +564,21 @@ model NotificationPreference {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_preferences")
+}
+
+/// Expo push token of one device. A token belongs to exactly one user at a time.
+model PushToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  platform  String // ios | android
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
 }
 
 model KycSubmission {
