@@ -8,6 +8,7 @@ import {
 
 describe('NotificationDispatcherService', () => {
   let service: NotificationDispatcherService;
+  let push: { sendToUser: jest.Mock };
   let prisma: {
     notification: { create: jest.Mock };
     notificationPreference: { findUnique: jest.Mock; create: jest.Mock };
@@ -26,7 +27,8 @@ describe('NotificationDispatcherService', () => {
       },
     };
 
-    service = new NotificationDispatcherService(prisma as never);
+    push = { sendToUser: jest.fn().mockResolvedValue(undefined) };
+    service = new NotificationDispatcherService(prisma as never, push as never);
     // Mock sendEmail to avoid network calls during tests
     jest.spyOn(service, 'sendEmail').mockResolvedValue(undefined);
   });
@@ -183,6 +185,85 @@ describe('NotificationDispatcherService', () => {
         expect.stringContaining('Chidi just supported you with 3 yards!'),
         expect.stringContaining('Keep making wonderful designs!'),
       );
+    });
+  });
+
+  describe('push', () => {
+    const user = { id: 'user-1', name: 'Ada', email: 'ada@example.com' };
+
+    it('pushes a payout with data.url and payoutId', async () => {
+      prisma.user.findUnique.mockResolvedValue(user);
+      prisma.notificationPreference.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        pushOnPayout: true,
+      });
+
+      await service.dispatchPayoutNotification(
+        { payoutId: 'payout-9', creatorUserId: 'user-1', amount: 100000 },
+        'SUCCESS',
+      );
+
+      expect(push.sendToUser).toHaveBeenCalledWith(
+        'user-1',
+        expect.objectContaining({
+          title: 'Money landed',
+          data: {
+            url: '/payouts/payout-9',
+            type: 'PAYOUT_COMPLETED',
+            payoutId: 'payout-9',
+          },
+        }),
+      );
+    });
+
+    it('pushes a contribution with contributionId, without the supporter note', async () => {
+      prisma.user.findUnique.mockResolvedValue(user);
+      prisma.notificationPreference.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        pushOnContribution: true,
+      });
+
+      await service.dispatchContributionNotification({
+        supportId: 'sup-7',
+        creatorUserId: 'user-1',
+        supporterName: 'Chidi',
+        yards: 3,
+        materialName: 'Silk',
+        amount: 1500000,
+        message: 'private note',
+      });
+
+      const [, payload] = push.sendToUser.mock.calls[0];
+      expect(payload.data).toEqual({
+        url: '/transactions/sup-7',
+        type: 'CONTRIBUTION_RECEIVED',
+        contributionId: 'sup-7',
+      });
+      expect(payload.body).not.toContain('private note');
+    });
+
+    it('does not push when the preference is off', async () => {
+      prisma.user.findUnique.mockResolvedValue(user);
+      prisma.notificationPreference.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        pushOnPayout: false,
+        pushOnContribution: false,
+      });
+
+      await service.dispatchPayoutNotification(
+        { payoutId: 'p', creatorUserId: 'user-1', amount: 1 },
+        'FAILED',
+      );
+      await service.dispatchContributionNotification({
+        supportId: 's',
+        creatorUserId: 'user-1',
+        supporterName: 'X',
+        yards: 1,
+        materialName: 'Y',
+        amount: 1,
+      });
+
+      expect(push.sendToUser).not.toHaveBeenCalled();
     });
   });
 
