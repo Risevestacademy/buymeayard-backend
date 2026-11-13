@@ -16,3 +16,8 @@ export class RegisterPushTokenDto {
   @IsIn(PUSH_PLATFORMS, { message: 'platform must be ios or android' })
   platform!: PushPlatform;
 }
+
+export class PushTokenSuccessDto {
+  @ApiProperty({ example: true })
+  success!: boolean;
+}
