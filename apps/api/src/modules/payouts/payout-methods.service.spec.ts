@@ -5,7 +5,11 @@ describe('PayoutMethodsService', () => {
   const input = { bankCode: '058', accountNumber: '0123454589' };
 
   function setup(
-    opts: { kycStatus?: string; resolve?: () => Promise<unknown> } = {},
+    opts: {
+      kycStatus?: string;
+      resolve?: () => Promise<unknown>;
+      previousRecipientCode?: string | null;
+    } = {},
   ) {
     const tx = {
       payoutMethod: {
@@ -22,11 +26,22 @@ describe('PayoutMethodsService', () => {
         findUnique: jest.fn().mockResolvedValue({
           id: 'creator-1',
           kycStatus: opts.kycStatus ?? 'VERIFIED',
+          user: { email: 'ada@example.com' },
         }),
+      },
+      payoutMethod: {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue(
+            opts.previousRecipientCode
+              ? { recipientCode: opts.previousRecipientCode }
+              : null,
+          ),
       },
       $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)),
     };
     const provider = {
+      providerName: 'BACHS',
       listBanks: jest.fn().mockResolvedValue([
         { name: 'Zenith Bank', code: '057', slug: 'zenith-bank' },
         {
@@ -47,6 +62,7 @@ describe('PayoutMethodsService', () => {
     };
     return {
       tx,
+      prisma,
       provider,
       service: new PayoutMethodsService(prisma as never, provider as never),
     };
@@ -125,6 +141,9 @@ describe('PayoutMethodsService', () => {
       accountName: 'SHOSANYA ISAAC OLUWADAMILARE',
       accountNumber: '0123454589',
       bankCode: '058',
+      creatorId: 'creator-1',
+      email: 'ada@example.com',
+      previousRecipientCode: undefined,
     });
     expect(tx.payoutMethod.updateMany).toHaveBeenCalledWith({
       where: { creatorId: 'creator-1', status: 'ACTIVE' },
@@ -133,6 +152,7 @@ describe('PayoutMethodsService', () => {
     expect(tx.payoutMethod.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         recipientCode: 'RCP_123',
+        provider: 'BACHS',
         accountName: 'SHOSANYA ISAAC OLUWADAMILARE',
         isDefault: true,
         status: 'ACTIVE',
@@ -146,5 +166,38 @@ describe('PayoutMethodsService', () => {
       accountNumberLast4: '4589',
       verified: true,
     });
+  });
+
+  it('hands the creator’s earlier recipient to the provider so it can reuse their account', async () => {
+    const { service, provider, prisma } = setup({
+      previousRecipientCode: 'acct_1:pd_1',
+    });
+
+    await service.savePayoutMethod('user-1', input);
+
+    expect(prisma.payoutMethod.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          creatorId: 'creator-1',
+          provider: 'BACHS',
+        }),
+      }),
+    );
+    expect(provider.createTransferRecipient).toHaveBeenCalledWith(
+      expect.objectContaining({ previousRecipientCode: 'acct_1:pd_1' }),
+    );
+  });
+
+  it('only returns an active method saved under the current provider', async () => {
+    const { service, prisma } = setup();
+    prisma.payoutMethod.findFirst.mockResolvedValue(null);
+
+    await service.getActiveMethod('creator-1');
+
+    expect(prisma.payoutMethod.findFirst).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: { creatorId: 'creator-1', status: 'ACTIVE', provider: 'BACHS' },
+      }),
+    );
   });
 });

@@ -86,19 +86,9 @@ export class PaymentsService {
       });
     }
 
-    // Create payment attempt record
-    const payment = await this.prisma.payment.create({
-      data: {
-        supportId: support.id,
-        provider: this.paymentProvider.providerName,
-        providerReference: `temp_${Date.now()}_${support.id.slice(0, 8)}`,
-        amount: support.totalAmount,
-        currency: support.currency,
-        status: PaymentStatus.PENDING,
-      },
-    });
+    const payment = await this.getOrCreatePaymentAttempt(support);
 
-    // Initialize with Paystack
+    // Start the payment with the provider
     const initResult = await this.paymentProvider.initializePayment({
       paymentId: payment.id,
       supportId: support.id,
@@ -130,7 +120,66 @@ export class PaymentsService {
   }
 
   /**
-   * What the page Paystack sends the supporter back to needs: whether the
+   * A support has one payment row. The row is saved before the provider is
+   * called, so a provider failure leaves it behind with a placeholder
+   * reference; the supporter's retry picks that row up again. A row that
+   * already holds a live checkout is left alone: the supporter may still pay
+   * it, and swapping its reference would orphan that payment.
+   */
+  private async getOrCreatePaymentAttempt(support: {
+    id: string;
+    totalAmount: number;
+    currency: string;
+  }) {
+    const existing = await this.prisma.payment.findUnique({
+      where: { supportId: support.id },
+    });
+    if (existing) return this.reusableAttempt(existing);
+
+    try {
+      return await this.prisma.payment.create({
+        data: {
+          supportId: support.id,
+          provider: this.paymentProvider.providerName,
+          providerReference: `temp_${Date.now()}_${support.id.slice(0, 8)}`,
+          amount: support.totalAmount,
+          currency: support.currency,
+          status: PaymentStatus.PENDING,
+        },
+      });
+    } catch (error) {
+      // Two requests for the same support raced: the other one won
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const winner = await this.prisma.payment.findUnique({
+          where: { supportId: support.id },
+        });
+        if (winner) return this.reusableAttempt(winner);
+      }
+      throw error;
+    }
+  }
+
+  private reusableAttempt<
+    T extends { status: string; providerReference: string },
+  >(payment: T): T {
+    if (
+      payment.status === PaymentStatus.PENDING &&
+      payment.providerReference.startsWith('temp_')
+    ) {
+      return payment;
+    }
+    throw new BadRequestException({
+      code: ErrorCodes.PAYMENT_ALREADY_PROCESSED,
+      message:
+        'A payment was already started for this support. Start a new gift to try again.',
+    });
+  }
+
+  /**
+   * What the page the provider sends the supporter back to needs: whether the
    * gift is paid yet (the webhook can land a moment after the redirect) and
    * the thank-you message to show. The support id is the only credential.
    */
@@ -213,6 +262,13 @@ export class PaymentsService {
       });
     }
 
+    // Providers send different bodies; the rest of this method reads one shape.
+    // The original body is what gets stored on the payment event.
+    const rawPayload = payload;
+    payload = this.paymentProvider.normalizeWebhook
+      ? this.paymentProvider.normalizeWebhook(rawPayload)
+      : rawPayload;
+
     const eventType = payload.event;
     // One object (e.g. a transfer) can send several events, such as
     // transfer.failed then transfer.reversed, so the key includes the type.
@@ -239,11 +295,11 @@ export class PaymentsService {
     }
 
     if (TRANSFER_OUTCOMES[eventType]) {
-      return this.handleTransferEvent(eventType, eventId, payload);
+      return this.handleTransferEvent(eventType, eventId, payload, rawPayload);
     }
 
     if (REFUND_EVENTS[eventType]) {
-      return this.handleRefundEvent(eventType, eventId, payload);
+      return this.handleRefundEvent(eventType, eventId, payload, rawPayload);
     }
 
     if (eventType === 'charge.success') {
@@ -294,7 +350,7 @@ export class PaymentsService {
               provider: this.paymentProvider.providerName,
               eventType,
               providerEventId: eventId,
-              payload,
+              payload: rawPayload,
               processedAt: new Date(),
             },
           });
@@ -353,10 +409,22 @@ export class PaymentsService {
     eventType: string,
     eventId: string,
     payload: any,
+    rawPayload: any,
   ) {
     const data = payload.data ?? {};
-    const paymentReference: string =
+    let paymentReference: string =
       data.transaction_reference ?? data.transaction?.reference ?? '';
+    if (!paymentReference && data.charge_id) {
+      // Bachs names the charge, not our checkout reference
+      const charged = await this.prisma.payment.findFirst({
+        where: {
+          provider: this.paymentProvider.providerName,
+          providerTransactionId: String(data.charge_id),
+        },
+        select: { providerReference: true },
+      });
+      paymentReference = charged?.providerReference ?? '';
+    }
     const applied = await this.refundsService.applyProviderEvent(
       paymentReference,
       REFUND_EVENTS[eventType],
@@ -382,7 +450,7 @@ export class PaymentsService {
           provider: this.paymentProvider.providerName,
           eventType,
           providerEventId: eventId,
-          payload,
+          payload: rawPayload,
           processedAt: new Date(),
         },
       });
@@ -401,6 +469,7 @@ export class PaymentsService {
     eventType: string,
     eventId: string,
     payload: any,
+    rawPayload: any,
   ) {
     const payout = await this.payoutsService.findByProviderReference(
       payload.data?.reference ?? '',
@@ -424,7 +493,7 @@ export class PaymentsService {
           provider: this.paymentProvider.providerName,
           eventType,
           providerEventId: eventId,
-          payload,
+          payload: rawPayload,
           processedAt: new Date(),
         },
       });

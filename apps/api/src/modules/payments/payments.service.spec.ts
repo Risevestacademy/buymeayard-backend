@@ -1,4 +1,9 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 
 describe('PaymentsService.initializePayment contribution gate', () => {
@@ -21,6 +26,7 @@ describe('PaymentsService.initializePayment contribution gate', () => {
         update: jest.fn(),
       },
       payment: {
+        findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 'payment-1' }),
         update: jest.fn(),
       },
@@ -106,6 +112,7 @@ describe('PaymentsService checkout callback and status', () => {
         update: jest.fn(),
       },
       payment: {
+        findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 'payment-1' }),
         update: jest.fn(),
       },
@@ -439,5 +446,171 @@ describe('PaymentsService.handleWebhook charge.success', () => {
         },
       }),
     );
+  });
+});
+
+describe('PaymentsService.handleWebhook with a provider that normalizes events', () => {
+  function setup(found: unknown = { id: 'pay-1', providerReference: 'chk_1' }) {
+    const prisma = {
+      paymentEvent: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
+      payment: { findFirst: jest.fn().mockResolvedValue(found) },
+    };
+    const provider = {
+      providerName: 'BACHS',
+      verifyWebhookSignature: jest.fn().mockResolvedValue({ isValid: true }),
+      normalizeWebhook: jest.fn((p: any): any => ({
+        event: 'refund.processed',
+        event_id: p.id,
+        data: { id: 'rf_1', charge_id: 'ch_1' },
+      })),
+    };
+    const refunds = { applyProviderEvent: jest.fn().mockResolvedValue(true) };
+    const service = new PaymentsService(
+      prisma as never,
+      provider as never,
+      {} as never,
+      { emit: jest.fn() } as never,
+      {} as never,
+      refunds as never,
+    );
+    return { service, prisma, provider, refunds };
+  }
+
+  const raw = { id: 'evt_9', type: 'refund.paid', data: {} };
+
+  it('finds the refunded payment by the provider charge id', async () => {
+    const { service, prisma, refunds } = setup();
+
+    await service.handleWebhook('sig', raw, 'raw');
+
+    expect(prisma.payment.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { provider: 'BACHS', providerTransactionId: 'ch_1' },
+      }),
+    );
+    expect(refunds.applyProviderEvent).toHaveBeenCalledWith(
+      'chk_1',
+      'PROCESSED',
+      'rf_1',
+      undefined,
+    );
+  });
+
+  it('stores the provider’s original body on the event, not the normalized one', async () => {
+    const { service, prisma } = setup();
+
+    await service.handleWebhook('sig', raw, 'raw');
+
+    expect(prisma.paymentEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        payload: raw,
+        providerEventId: 'refund.processed:evt_9',
+      }),
+    });
+  });
+
+  it('does nothing for an event the provider marks as ignored', async () => {
+    const { service, prisma, provider, refunds } = setup();
+    provider.normalizeWebhook.mockReturnValue({ event: 'ignored' });
+
+    await service.handleWebhook('sig', raw, 'raw');
+
+    expect(refunds.applyProviderEvent).not.toHaveBeenCalled();
+    expect(prisma.payment.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe('PaymentsService.initializePayment retries', () => {
+  function setup(existing: Record<string, unknown> | null) {
+    const prisma = {
+      support: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'support-1',
+          status: 'CREATED',
+          totalAmount: 500_000,
+          currency: 'NGN',
+          creator: { status: 'ACTIVE' },
+        }),
+        update: jest.fn(),
+      },
+      payment: {
+        findUnique: jest.fn().mockResolvedValue(existing),
+        create: jest.fn().mockResolvedValue({ id: 'payment-new' }),
+        update: jest.fn(),
+      },
+    };
+    const provider = {
+      providerName: 'BACHS',
+      initializePayment: jest.fn().mockResolvedValue({
+        providerReference: 'chk_1',
+        authorizationUrl: 'https://checkout',
+      }),
+    };
+    const service = new PaymentsService(
+      prisma as never,
+      provider as never,
+      {} as never,
+      { emit: jest.fn() } as never,
+      {} as never,
+      {} as never,
+    );
+    return { service, prisma, provider };
+  }
+
+  it('reuses the row a failed first attempt left behind', async () => {
+    const { service, prisma, provider } = setup({
+      id: 'payment-old',
+      status: 'PENDING',
+      providerReference: 'temp_123_support-',
+    });
+
+    const res = await service.initializePayment('support-1');
+
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+    expect(provider.initializePayment).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentId: 'payment-old' }),
+    );
+    expect(prisma.payment.update).toHaveBeenCalledWith({
+      where: { id: 'payment-old' },
+      data: { providerReference: 'chk_1', status: 'PROCESSING' },
+    });
+    expect(res.paymentId).toBe('payment-old');
+  });
+
+  it('refuses a support whose checkout is already open', async () => {
+    const { service, provider } = setup({
+      id: 'payment-old',
+      status: 'PROCESSING',
+      providerReference: 'chk_open',
+    });
+
+    await expect(service.initializePayment('support-1')).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(provider.initializePayment).not.toHaveBeenCalled();
+  });
+
+  it('picks up the winner when two requests race to create the row', async () => {
+    const { service, prisma } = setup(null);
+    prisma.payment.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('dup', {
+        code: 'P2002',
+        clientVersion: 'x',
+      }),
+    );
+    prisma.payment.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'payment-winner',
+        status: 'PENDING',
+        providerReference: 'temp_9_support-',
+      });
+
+    const res = await service.initializePayment('support-1');
+
+    expect(res.paymentId).toBe('payment-winner');
   });
 });

@@ -1780,7 +1780,7 @@ export class CreatorsService {
     );
     const availableBalance = await this.ledger.getAccountBalance(account.id);
 
-    // "Contributions still processing": checkouts opened recently that Paystack
+    // "Contributions still processing": checkouts opened recently that Bachs
     // has not confirmed yet. Abandoned checkouts are never marked failed, so
     // only recent ones count.
     const pendingContributionsAgg = await this.prisma.support.aggregate({

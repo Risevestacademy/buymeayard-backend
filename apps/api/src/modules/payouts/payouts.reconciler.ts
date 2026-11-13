@@ -11,7 +11,7 @@ const DELAYED_AFTER_MS = 30 * 60 * 1000;
 const BATCH_SIZE = 50;
 
 /**
- * Settles payouts whose Paystack webhook never arrived, and tells the creator
+ * Settles payouts whose Bachs webhook never arrived, and tells the creator
  * when a payout is taking longer than usual. Every update is conditional, so
  * running on several instances at once is safe.
  */
@@ -41,10 +41,11 @@ export class PayoutsReconciler {
       try {
         const result = await this.paymentProvider.verifyTransfer(
           payout.providerReference ?? '',
+          payout.providerTransferCode,
         );
 
         if (result.status === 'NOT_FOUND') {
-          // The transfer never reached Paystack, so no money moved
+          // The provider has no such transfer, so no money moved
           await this.payoutsService.applyTransferOutcome(
             payout.id,
             'FAILED',

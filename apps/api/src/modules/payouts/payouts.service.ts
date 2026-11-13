@@ -31,7 +31,10 @@ import {
 } from '../notifications/events/notification.events';
 import { PayoutMethodsService } from './payout-methods.service';
 import { calculatePayoutFee } from './payout-fees';
-import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
+import {
+  PayoutRules,
+  PlatformSettingsService,
+} from '../platform-settings/platform-settings.service';
 import { buildPagination } from '../../common/utils/pagination.util';
 import { MoneyUtil } from '../../common/utils/money.util';
 import {
@@ -86,7 +89,8 @@ export class PayoutsService {
       account.id,
     );
     const rules = await this.platformSettings.get();
-    const fee = amount > 0 ? calculatePayoutFee(amount, rules) : 0;
+    const feeBreakdown = this.feeFor(amount, rules);
+    const fee = feeBreakdown.serviceFee + feeBreakdown.transferFee;
 
     let error: PayoutQuoteDto['error'] = null;
     if (amount < rules.minimumWithdrawal) error = 'BELOW_MINIMUM';
@@ -95,6 +99,7 @@ export class PayoutsService {
     return {
       amount,
       fee,
+      feeBreakdown,
       netAmount: Math.max(amount - fee, 0),
       minimumWithdrawal: rules.minimumWithdrawal,
       availableBalance,
@@ -158,7 +163,8 @@ export class PayoutsService {
       });
     }
 
-    const fee = calculatePayoutFee(amount, rules);
+    const feeParts = this.feeFor(amount, rules);
+    const fee = feeParts.serviceFee + feeParts.transferFee;
 
     let payout: Payout;
     try {
@@ -200,7 +206,8 @@ export class PayoutsService {
             accountId: account.id,
             payoutMethodId: method.id,
             reference,
-            // Paystack only accepts lowercase transfer references
+            provider: this.paymentProvider.providerName,
+            // Lowercase: providers differ on case, and this one form works for all
             providerReference: reference.toLowerCase(),
             idempotencyKey,
             amount,
@@ -306,7 +313,7 @@ export class PayoutsService {
     outcome: TransferOutcome,
     failureReason?: string,
   ): Promise<boolean> {
-    // A transfer Paystack reported as successful can still be reversed later
+    // A transfer the provider reported as successful can still be reversed later
     const fromStatuses =
       outcome === 'REVERSED'
         ? [...IN_FLIGHT_PAYOUT_STATUSES, PayoutStatus.SUCCESS]
@@ -359,16 +366,17 @@ export class PayoutsService {
   }
 
   /**
-   * Admin: asks Paystack what happened to a payout that is still in flight and
+   * Admin: asks the payment provider what happened to a payout that is still in flight and
    * applies the answer. Returns the payout as it stands afterwards.
    */
   async reconcilePayout(payoutId: string): Promise<Payout> {
     const payout = await this.getInFlightPayout(payoutId);
     const result = await this.paymentProvider.verifyTransfer(
       payout.providerReference ?? '',
+      payout.providerTransferCode,
     );
     if (result.status === 'NOT_FOUND') {
-      // The transfer never reached Paystack, so no money moved
+      // The provider has no such transfer, so no money moved
       await this.applyTransferOutcome(
         payout.id,
         'FAILED',
@@ -381,9 +389,9 @@ export class PayoutsService {
   }
 
   /**
-   * Admin: sends a stuck payout (REQUESTED or PENDING) to Paystack again. The
-   * transfer reference is reused, so Paystack refuses a duplicate: if it
-   * already has the transfer, its state is applied instead of sending twice.
+   * Admin: sends a stuck payout (REQUESTED or PENDING) to the provider again.
+   * The transfer reference is reused, so the provider cannot send it twice: if
+   * it already has the transfer, its state is applied instead.
    */
   async retryTransfer(payoutId: string): Promise<Payout> {
     const payout = await this.prisma.payout.findUnique({
@@ -410,8 +418,15 @@ export class PayoutsService {
 
     const existing = await this.paymentProvider.verifyTransfer(
       payout.providerReference ?? '',
+      payout.providerTransferCode,
     );
-    if (existing.status === 'NOT_FOUND') {
+    // A provider that de-duplicates on our reference (Bachs) cannot look a
+    // transfer up without its code, but sending again is safe: it returns the
+    // transfer it already has.
+    const safeToResend =
+      !payout.providerTransferCode &&
+      this.paymentProvider.transfersAreIdempotent === true;
+    if (existing.status === 'NOT_FOUND' || safeToResend) {
       return this.startTransfer(payout, recipientCode);
     }
     return this.reconcilePayout(payoutId);
@@ -435,11 +450,13 @@ export class PayoutsService {
     }
     const existing = await this.paymentProvider.verifyTransfer(
       payout.providerReference ?? '',
+      payout.providerTransferCode,
     );
     if (existing.status !== 'NOT_FOUND') {
       throw new BadRequestException({
         code: ErrorCodes.PAYOUT_ALREADY_PROCESSED,
-        message: 'Paystack already has this transfer. Reconcile it instead.',
+        message:
+          'The payment provider may already have this transfer. Retry or reconcile it instead.',
       });
     }
 
@@ -497,7 +514,7 @@ export class PayoutsService {
     });
   }
 
-  /** Finds the payout a Paystack transfer reference belongs to. */
+  /** Finds the payout a Bachs transfer reference belongs to. */
   async findByProviderReference(reference: string): Promise<Payout | null> {
     return this.prisma.payout.findFirst({
       where: { providerReference: reference.toLowerCase() },
@@ -532,7 +549,7 @@ export class PayoutsService {
   }
 
   /**
-   * Sends the transfer to Paystack. A definite rejection fails the payout and
+   * Sends the transfer to the provider. A definite rejection fails the payout and
    * restores the balance; an unknown outcome (network error) leaves it
    * PENDING for the reconciler to settle.
    */
@@ -631,6 +648,27 @@ export class PayoutsService {
     }
   }
 
+  /** Our service fee and the provider's own charge, for a new withdrawal. */
+  private feeFor(amount: number, rules: PayoutRules) {
+    if (amount <= 0) return { serviceFee: 0, transferFee: 0 };
+    return {
+      serviceFee: calculatePayoutFee(amount, rules),
+      transferFee: this.paymentProvider.payoutFee ?? 0,
+    };
+  }
+
+  /**
+   * Splits a saved payout's fee. Only the total is stored, so the provider's
+   * share is its current charge, and only for payouts it sent.
+   */
+  private splitFee(payout: Payout) {
+    const transferFee =
+      payout.provider === this.paymentProvider.providerName
+        ? Math.min(this.paymentProvider.payoutFee ?? 0, payout.fee)
+        : 0;
+    return { serviceFee: payout.fee - transferFee, transferFee };
+  }
+
   private toDto(payout: Payout): PayoutDto {
     return {
       id: payout.id,
@@ -655,6 +693,7 @@ export class PayoutsService {
       toDisplayStatus(payout.status) === PayoutDisplayStatus.FAILED;
     return {
       ...this.toDto(payout),
+      feeBreakdown: this.splitFee(payout),
       breakdown: {
         amountRequested: payout.amount,
         transferred: failed ? 0 : payout.netAmount,

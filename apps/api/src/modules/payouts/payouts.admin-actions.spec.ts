@@ -16,7 +16,11 @@ describe('PayoutsService admin actions', () => {
   };
 
   function setup(
-    opts: { payout?: Record<string, unknown> | null; transfer?: unknown } = {},
+    opts: {
+      payout?: Record<string, unknown> | null;
+      transfer?: unknown;
+      idempotent?: boolean;
+    } = {},
   ) {
     const row = 'payout' in opts ? opts.payout : payout;
     const tx = {
@@ -40,6 +44,7 @@ describe('PayoutsService admin actions', () => {
       $transaction: jest.fn((fn: (t: unknown) => unknown) => fn(tx)),
     };
     const provider = {
+      transfersAreIdempotent: opts.idempotent,
       verifyTransfer: jest
         .fn()
         .mockResolvedValue(opts.transfer ?? { status: 'NOT_FOUND' }),
@@ -83,10 +88,10 @@ describe('PayoutsService admin actions', () => {
       expect(eventEmitter.emit).toHaveBeenCalled();
     });
 
-    it('refuses when Paystack already has the transfer', async () => {
+    it('refuses when the provider already has the transfer', async () => {
       const { service, tx } = setup({ transfer: { status: 'PENDING' } });
       await expect(service.cancelPayout('p-1', 'x')).rejects.toThrow(
-        'Reconcile it',
+        'reconcile it instead',
       );
       expect(tx.ledgerEntry.create).not.toHaveBeenCalled();
     });
@@ -102,7 +107,7 @@ describe('PayoutsService admin actions', () => {
   });
 
   describe('retryTransfer', () => {
-    it('sends the transfer again with the same reference when Paystack has no record', async () => {
+    it('sends the transfer again with the same reference when the provider has no record', async () => {
       const { service, provider, prisma } = setup({
         payout: { ...payout, status: 'PENDING' },
       });
@@ -122,10 +127,57 @@ describe('PayoutsService admin actions', () => {
       );
     });
 
-    it('does not send twice when Paystack already has the transfer', async () => {
+    it('does not send twice when the provider already has the transfer', async () => {
       const { service, provider } = setup({
         payout: { ...payout, status: 'PENDING' },
         transfer: { status: 'PENDING' },
+      });
+
+      await service.retryTransfer('p-1');
+
+      expect(provider.initiateTransfer).not.toHaveBeenCalled();
+    });
+
+    it('asks the provider about the transfer using the code it gave us', async () => {
+      const { service, provider } = setup({
+        payout: {
+          ...payout,
+          status: 'PENDING',
+          providerTransferCode: 'acct_1:pay_1',
+        },
+        transfer: { status: 'PENDING' },
+      });
+
+      await service.retryTransfer('p-1');
+
+      expect(provider.verifyTransfer).toHaveBeenCalledWith(
+        'pyt-1',
+        'acct_1:pay_1',
+      );
+    });
+
+    it('resends when the provider de-duplicates and we never got a transfer code', async () => {
+      // Bachs cannot look a payout up without its code and answers PENDING
+      const { service, provider } = setup({
+        payout: { ...payout, status: 'PENDING' },
+        transfer: { status: 'PENDING' },
+        idempotent: true,
+      });
+
+      await service.retryTransfer('p-1');
+
+      expect(provider.initiateTransfer).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not resend a de-duplicating provider’s payout that has a code', async () => {
+      const { service, provider } = setup({
+        payout: {
+          ...payout,
+          status: 'PENDING',
+          providerTransferCode: 'acct_1:pay_1',
+        },
+        transfer: { status: 'PENDING' },
+        idempotent: true,
       });
 
       await service.retryTransfer('p-1');

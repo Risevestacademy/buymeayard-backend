@@ -62,6 +62,22 @@ export class ListPayoutsQueryDto extends PageQueryDto {
   sort: 'newest' | 'oldest' = 'newest';
 }
 
+export class PayoutFeeBreakdownDto {
+  @ApiProperty({
+    example: 50,
+    description:
+      'Our service fee in naira (₦50 up to ₦50,000, ₦100 above; editable by an admin). "Service fee"',
+  })
+  serviceFee!: number;
+
+  @ApiProperty({
+    example: 50,
+    description:
+      'The payment provider\'s charge for sending the money to the bank, in naira. "Bank transfer fee"',
+  })
+  transferFee!: number;
+}
+
 export class PayoutQuoteDto {
   @ApiProperty({
     example: 45000,
@@ -71,11 +87,18 @@ export class PayoutQuoteDto {
   amount!: number;
 
   @ApiProperty({
-    example: 50,
+    example: 100,
     description:
-      'Processing fee in naira, taken out of `amount`: ₦50 up to ₦50,000, ₦100 above. 0 when amount is 0.',
+      'Total processing fee in naira, taken out of `amount`: `feeBreakdown.serviceFee` + `feeBreakdown.transferFee`. 0 when amount is 0.',
   })
   fee!: number;
+
+  @ApiProperty({
+    type: PayoutFeeBreakdownDto,
+    description:
+      'The two parts of `fee`, to show as separate lines under "Processing fee".',
+  })
+  feeBreakdown!: PayoutFeeBreakdownDto;
 
   @ApiProperty({
     example: 44950,
@@ -166,8 +189,9 @@ export class PayoutDto {
   amount!: number;
 
   @ApiProperty({
-    example: 50,
-    description: 'Processing fee in naira ("Processing fee −₦50")',
+    example: 100,
+    description:
+      'Total processing fee in naira ("Processing fee −₦100"): service fee + bank transfer fee',
   })
   fee!: number;
 
@@ -226,6 +250,13 @@ export class PayoutDetailDto extends PayoutDto {
     description: 'The "Payout breakdown" rows for the details drawer',
   })
   breakdown!: PayoutBreakdownDto;
+
+  @ApiProperty({
+    type: PayoutFeeBreakdownDto,
+    description:
+      'The two parts of `fee` (service fee and bank transfer fee), for the "Processing fee" rows. On a failed payout nothing is kept: read `breakdown.feeCharged`.',
+  })
+  feeBreakdown!: PayoutFeeBreakdownDto;
 
   @ApiProperty({
     example: 'Your bank declined the transfer.',

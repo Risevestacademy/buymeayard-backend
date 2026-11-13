@@ -48,7 +48,7 @@ export class CreateSupportIntentDto {
   @ApiPropertyOptional({
     example: 'jane@example.com',
     description:
-      'Where the payment receipt is sent. Optional, but without it Paystack sends the receipt to a platform placeholder address.',
+      'Where the payment receipt is sent. Optional, but without it the receipt goes to a platform placeholder address.',
   })
   @IsOptional()
   @IsEmail()

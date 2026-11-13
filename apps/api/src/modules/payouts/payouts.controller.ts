@@ -57,7 +57,7 @@ const BANK_SERVICE_UNAVAILABLE_ERROR: ApiErrorDoc = {
   status: 503,
   code: 'BANK_SERVICE_UNAVAILABLE',
   message: 'We couldn’t reach the bank right now. Please try again.',
-  when: 'Paystack is down, slow, or rate-limited (in test mode: more than 3 real account lookups in a day). Not the creator’s fault: show a retry message, **not** the "verification unsuccessful" screen.',
+  when: 'Bachs is down, slow, or rate-limited (for example, too many account lookups in a short time). Not the creator’s fault: show a retry message, **not** the "verification unsuccessful" screen.',
 };
 
 const BANK_ACCOUNT_ERRORS: ApiErrorDoc[] = [
@@ -112,9 +112,9 @@ export class PayoutsController {
     summary: 'List banks supported for payouts',
     description: `Banks for the **Bank** search field on "Add bank account" (screens 1.2 / mobile 07).
 
-- About 290 Nigerian banks from Paystack, sorted by name, cached on the server for 24 hours.
+- Nigerian banks from Bachs, sorted by name, cached on the server for 24 hours.
 - Send the chosen bank's \`code\` to the resolve and save endpoints.
-- In mock mode (\`PAYSTACK_SECRET_KEY\` containing \`mock\`) this is a short list of 7 common banks.`,
+- In mock mode (\`BACHS_API_KEY\` containing \`mock\`) this is a short list of 7 common banks.`,
   })
   @ApiResponse({
     status: 200,
@@ -138,7 +138,7 @@ Show \`accountName\` and ask the creator to confirm. If they confirm, call \`POS
 
 Requires verified identity.
 
-⚠️ **Paystack test mode allows only 3 real account lookups per day.** After that this returns \`503 BANK_SERVICE_UNAVAILABLE\` until the next day.`,
+⚠️ **Bank lookups can be rate-limited by the provider.** After that this returns \`503 BANK_SERVICE_UNAVAILABLE\` until the next day.`,
   })
   @ApiResponse({
     status: 200,
@@ -160,7 +160,7 @@ Requires verified identity.
     description: `Step 2, after the creator taps **"Yes, save this account"**. Used for both **Add bank account** and **Change payout account** (screen 1.7).
 
 - Send the same \`bankCode\` and \`accountNumber\` that were just resolved.
-- The server never trusts a name from the client. It reuses the lookup it just did (kept 15 minutes) or looks the account up again, then registers the account with Paystack for transfers.
+- The server never trusts a name from the client. It reuses the lookup it just did (kept 15 minutes) or looks the account up again, then registers the account with Bachs for transfers.
 - A creator has **one** payout account. Saving a new one **replaces** the current one, and the old one stays active until this succeeds.
 - Withdrawals already submitted keep going to the account they were sent to ("Pending withdrawals won't move").
 
@@ -220,13 +220,13 @@ Disable **Continue** while \`isValid\` is false.`,
 
 **What happens:**
 1. The full \`amount\` is taken from the available balance immediately, so it can't be spent twice.
-2. \`amount − fee\` is sent to the saved bank account through Paystack.
+2. \`amount − fee\` is sent to the saved bank account through Bachs.
 3. The response is usually \`status: "IN_PROGRESS"\` → show 2.5 "Withdrawal submitted" with \`reference\`.
-4. The final result arrives from Paystack, usually within 30 minutes. Poll \`GET /creators/me/payouts/:id\` or wait for the notification.
+4. The final result arrives from Bachs, usually within 30 minutes. Poll \`GET /creators/me/payouts/:id\` or wait for the notification.
    - \`SUCCESSFUL\` → 2.6 "Withdrawal successful".
    - \`FAILED\` → 2.7 "Withdrawal failed". The **full amount, fee included**, goes back to the balance.
 
-The response can already be \`FAILED\` if Paystack rejected the transfer outright. The balance is restored in that case too.
+The response can already be \`FAILED\` if the payment provider rejected the transfer outright. The balance is restored in that case too.
 
 **Always send \`Idempotency-Key\`** (see header).
 
