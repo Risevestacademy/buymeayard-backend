@@ -473,6 +473,9 @@ export function createBetterAuth(
         ? { crossSubDomainCookies: { enabled: true, domain: cookieDomain } }
         : {}),
       defaultCookieAttributes: resolveCookieAttributes(baseUrl),
+      // Behind Railway's proxy the client IP arrives in these headers; without
+      // them rate limiting shares one bucket per path across all users.
+      ipAddress: { ipAddressHeaders: ['x-forwarded-for', 'x-real-ip'] },
     },
     hooks: {
       // Native Better Auth endpoints (used by the Better Auth client) bypass
