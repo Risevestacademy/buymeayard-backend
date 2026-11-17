@@ -18,7 +18,10 @@ import { Throttle } from '@nestjs/throttler';
 import { ErrorResponseDto } from '../../common/dto/error-response.dto';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PushTokensService } from './push-tokens.service';
-import { RegisterPushTokenDto } from './dto/register-push-token.dto';
+import {
+  PushTokenSuccessDto,
+  RegisterPushTokenDto,
+} from './dto/register-push-token.dto';
 import { UserThrottlerGuard } from './user-throttler.guard';
 
 @ApiTags('push-tokens')
@@ -36,13 +39,21 @@ export class PushTokensController {
     description:
       'Call on every app launch/login. Idempotent: the token is upserted, and reassigned to the caller if another user held it. The user comes from the session, never the body. Limited to 10 requests/min per user.',
   })
-  @ApiResponse({ status: 200, description: '{ success: true }' })
+  @ApiResponse({
+    status: 200,
+    description: 'Token saved',
+    type: PushTokenSuccessDto,
+  })
   @ApiResponse({
     status: 400,
     description: 'Invalid token or platform',
     type: ErrorResponseDto,
   })
-  @ApiResponse({ status: 401, type: ErrorResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Not signed in',
+    type: ErrorResponseDto,
+  })
   @ApiResponse({ status: 429, description: 'Too many requests' })
   async register(
     @CurrentUser('id') userId: string,
@@ -60,7 +71,11 @@ export class PushTokensController {
       'The token is URL-encoded in the path. Only the caller’s own token is removed. Returns 204 even if the token does not exist.',
   })
   @ApiResponse({ status: 204, description: 'Removed or not found' })
-  @ApiResponse({ status: 401, type: ErrorResponseDto })
+  @ApiResponse({
+    status: 401,
+    description: 'Not signed in',
+    type: ErrorResponseDto,
+  })
   async remove(
     @CurrentUser('id') userId: string,
     @Param('token') token: string,

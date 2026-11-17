@@ -84,6 +84,10 @@ async function bootstrap() {
       'support-tickets',
       'Contact support messages, optionally about a payout or contribution',
     )
+    .addTag(
+      'push-tokens',
+      "Register the device's Expo push token after login and remove it on logout. The backend sends push for payouts and contributions with `data.url` (in-app route) plus `payoutId` or `contributionId`. Only sent when the matching `pushOn*` notification preference is on.",
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
