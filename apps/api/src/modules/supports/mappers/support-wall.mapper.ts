@@ -1,7 +1,10 @@
 import { Prisma } from '@prisma/client';
 import { SupportWallItemDto } from '../dto/support-wall.dto';
 import { toContributionMaterial } from './contribution-material.mapper';
-import { resolveDisplayName } from '../utils/support-visibility.util';
+import {
+  resolveDisplayName,
+  wallMessage,
+} from '../utils/support-visibility.util';
 
 // The query selects ONLY these columns, so fee and payment data never leave the database.
 export const SUPPORT_WALL_SELECT = {
@@ -9,7 +12,7 @@ export const SUPPORT_WALL_SELECT = {
   createdAt: true,
   guestName: true,
   message: true,
-  isAnonymous: true,
+  visibility: true,
   items: {
     select: {
       materialNameSnapshot: true,
@@ -53,7 +56,7 @@ export function toSupportWallItem(row: SupportWallRow): SupportWallItemDto {
     material,
     materialId: material?.id ?? null,
     materialName: material?.name ?? null,
-    message: row.isAnonymous ? null : row.message || null,
+    message: wallMessage(row),
     createdAt: row.createdAt,
   };
 }

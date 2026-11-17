@@ -1138,7 +1138,7 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
   @ApiOperation({
     summary: 'Start a gift and get the Bachs checkout URL in one call',
     description:
-      'Public. Does what `supports/intent` then `POST /payments/initialize` do, in one request: creates the gift, opens a Bachs checkout and returns `authorizationUrl`. Redirect the supporter there. After paying, Bachs sends them to `callbackUrl` (we add `supportId`), where you confirm with GET /supports/:supportId/status.',
+      'Public. Does what `supports/intent` then `POST /payments/initialize` do, in one request: creates the gift, opens a Bachs checkout and returns `authorizationUrl`. Redirect the supporter there. After paying, Bachs sends them to `callbackUrl` (we add `supportId`), where you confirm with GET /supports/:supportId/status. If they cancel or the payment fails they go to `cancelUrl` instead (defaults to `callbackUrl`). The receipt is sent by Bachs to the email the supporter enters at checkout.',
   })
   @ApiParam({ name: 'slug', example: 'adeola' })
   @ApiBody({ type: CheckoutGiftDto })
@@ -1150,11 +1150,12 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
   ): Promise<CheckoutGiftResponseDto> {
     // Reject a bad callbackUrl before anything is created
     resolveCallbackUrl(dto.callbackUrl);
+    resolveCallbackUrl(dto.cancelUrl);
     const intent = await this.supportsService.createGuestIntent(slug, dto);
     const payment = await this.paymentsService.initializePayment(
       intent.supportId,
-      dto.email,
       dto.callbackUrl,
+      dto.cancelUrl,
     );
     return {
       ...intent,

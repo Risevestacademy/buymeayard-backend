@@ -61,8 +61,8 @@ export class PaymentsController {
   async initialize(@Body() body: InitializePaymentDto) {
     return this.paymentsService.initializePayment(
       body.supportId,
-      body.email,
       body.callbackUrl,
+      body.cancelUrl,
     );
   }
 

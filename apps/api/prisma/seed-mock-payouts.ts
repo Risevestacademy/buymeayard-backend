@@ -35,7 +35,9 @@ const MESSAGES = [
   'Keep it up! 🔥',
   null,
 ];
-const AMOUNTS = [100_000, 200_000, 300_000, 500_000, 1_000_000, 1_500_000, 2_500_000];
+const AMOUNTS = [
+  100_000, 200_000, 300_000, 500_000, 1_000_000, 1_500_000, 2_500_000,
+];
 const BANKS = [
   { bankName: 'GTBank', bankCode: '058' },
   { bankName: 'Access Bank', bankCode: '044' },
@@ -144,7 +146,7 @@ async function seedCreator(
         creatorId: creator.id,
         guestName,
         guestEmail,
-        isAnonymous: i % 5 === 4,
+        visibility: i % 5 === 4 ? 'ANONYMOUS' : 'PUBLIC',
         message: pick(MESSAGES),
         subtotal: amount,
         platformFee,
@@ -223,16 +225,30 @@ async function seedCreator(
   }
 
   // --- Payouts: one of each status, sized to fit what was earned ----------
-  const plan: { status: string; share: number; daysAgo: number; failureReason?: string }[] = [
+  const plan: {
+    status: string;
+    share: number;
+    daysAgo: number;
+    failureReason?: string;
+  }[] = [
     { status: 'SUCCESS', share: 0.3, daysAgo: 40 },
     { status: 'SUCCESS', share: 0.2, daysAgo: 20 },
-    { status: 'FAILED', share: 0.1, daysAgo: 10, failureReason: 'Bank account could not be credited. Please check your details.' },
+    {
+      status: 'FAILED',
+      share: 0.1,
+      daysAgo: 10,
+      failureReason:
+        'Bank account could not be credited. Please check your details.',
+    },
     { status: 'PROCESSING', share: 0.1, daysAgo: 1 },
     { status: 'REQUESTED', share: 0.05, daysAgo: 0 },
   ];
   let n = 0;
   for (const p of plan) {
-    const amount = Math.max(100_000, Math.round((earned * p.share) / 1000) * 1000);
+    const amount = Math.max(
+      100_000,
+      Math.round((earned * p.share) / 1000) * 1000,
+    );
     const fee = amount <= 5_000_000 ? 5_000 : 10_000;
     const requestedAt = new Date(Date.now() - p.daysAgo * DAY);
     const reference = `MOCK-PYT-${creator.slug}-${++n}`;
@@ -303,7 +319,9 @@ async function main() {
     await seedCreator(creator, i);
     console.log(`✅ ${creator.slug}`);
   }
-  console.log(`🌱 Mock contributions and payouts added for ${creators.length} creators.`);
+  console.log(
+    `🌱 Mock contributions and payouts added for ${creators.length} creators.`,
+  );
 }
 
 main()

@@ -132,6 +132,35 @@ describe('BachsProvider', () => {
       expect(body.reference).toBe('pay-1');
       expect(body.metadata).toMatchObject({ k: 'v', supportId: 'sup-1' });
     });
+
+    it('sends separate success and cancel URLs', async () => {
+      reply(201, { checkout_id: 'chk_1', checkout_url: 'https://pay/chk_1' });
+      await make().initializePayment({
+        paymentId: 'pay-1',
+        supportId: 'sup-1',
+        amount: 500_000,
+        currency: 'NGN',
+        callbackUrl: 'https://app/thanks',
+        cancelUrl: 'https://app/failed',
+      });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.success_url).toBe('https://app/thanks');
+      expect(body.cancel_url).toBe('https://app/failed');
+    });
+
+    it('leaves the customer out so the checkout collects the email', async () => {
+      reply(201, { checkout_id: 'chk_1', checkout_url: 'https://pay/chk_1' });
+      await make().initializePayment({
+        paymentId: 'pay-1',
+        supportId: 'sup-1',
+        amount: 500_000,
+        currency: 'NGN',
+        callbackUrl: 'https://app/thanks',
+      });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body).not.toHaveProperty('customer');
+      expect(body.cancel_url).toBe('https://app/thanks');
+    });
   });
 
   describe('verifyWebhookSignature', () => {

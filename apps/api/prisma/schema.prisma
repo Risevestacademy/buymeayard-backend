@@ -226,7 +226,7 @@ model Support {
   guestName     String?
   guestEmail    String?
   message       String?
-  isAnonymous   Boolean  @default(false)
+  visibility    String   @default("PUBLIC") // PUBLIC, CREATOR_ONLY, ANONYMOUS
   status        String   @default("CREATED") // CREATED, PAYMENT_PENDING, PAID, COMPLETED, PAYMENT_FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
