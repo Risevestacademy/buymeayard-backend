@@ -51,6 +51,7 @@ import {
   DashboardContributionsListResponseDto,
 } from './dto/creator-dashboard.dto';
 import { Prisma } from '@prisma/client';
+import { creatorMessage } from '../supports/utils/support-visibility.util';
 import { buildPagination } from '../../common/utils/pagination.util';
 
 const CONTRIBUTION_INCLUDE = {
@@ -1588,12 +1589,12 @@ export class CreatorsService {
     };
     if (!term) return where;
 
-    // Names of anonymous supporters stay hidden from the creator, so they
-    // can't be searched for either. Messages are always visible to the creator.
+    // Anonymous gifts hide both name and message from the creator, so they
+    // can't be searched for either.
     const contains = { contains: term, mode: 'insensitive' as const };
     where.OR = [
-      { isAnonymous: false, guestName: contains },
-      { message: contains },
+      { visibility: { not: 'ANONYMOUS' }, guestName: contains },
+      { visibility: { not: 'ANONYMOUS' }, message: contains },
     ];
     return where;
   }
@@ -1601,7 +1602,7 @@ export class CreatorsService {
   private toContributionDto(
     support: ContributionRow,
   ): DashboardContributionDto {
-    const isAnonymous = support.isAnonymous;
+    const isAnonymous = support.visibility === 'ANONYMOUS';
     const supporterName = isAnonymous
       ? 'Anonymous'
       : support.guestName?.trim() || 'Supporter';
@@ -1632,7 +1633,7 @@ export class CreatorsService {
         isAnonymous,
       },
       material,
-      message: support.message || null,
+      message: creatorMessage(support),
       amount: support.totalAmount,
       platformFee: support.platformFee,
       creatorAmount: support.creatorAmount,

@@ -1,13 +1,45 @@
 export const ANONYMOUS_LABEL = 'Anonymous';
 
+/**
+ * PUBLIC: name and message on the contribution wall and the creator dashboard.
+ * CREATOR_ONLY: hidden on the wall, shown on the creator dashboard.
+ * ANONYMOUS: hidden on both.
+ */
+export const SUPPORT_VISIBILITIES = [
+  'PUBLIC',
+  'CREATOR_ONLY',
+  'ANONYMOUS',
+] as const;
+export type SupportVisibility = (typeof SUPPORT_VISIBILITIES)[number];
+
 interface NameSource {
-  isAnonymous: boolean;
+  visibility: string;
   guestName: string | null;
 }
 
-/** Single source of truth for the name shown on public and creator-facing views. */
+function nameOrAnonymous(guestName: string | null): string {
+  return guestName?.trim() || ANONYMOUS_LABEL;
+}
+
+/** Name shown on the public contribution wall. */
 export function resolveDisplayName(row: NameSource): string {
-  if (row.isAnonymous) return ANONYMOUS_LABEL;
-  const name = row.guestName?.trim();
-  return name || ANONYMOUS_LABEL;
+  return row.visibility === 'PUBLIC'
+    ? nameOrAnonymous(row.guestName)
+    : ANONYMOUS_LABEL;
+}
+
+/** Message shown on the public wall. */
+export function wallMessage(row: {
+  visibility: string;
+  message: string | null;
+}): string | null {
+  return row.visibility === 'PUBLIC' ? row.message || null : null;
+}
+
+/** Message shown to the creator who received the gift. */
+export function creatorMessage(row: {
+  visibility: string;
+  message: string | null;
+}): string | null {
+  return row.visibility === 'ANONYMOUS' ? null : row.message || null;
 }

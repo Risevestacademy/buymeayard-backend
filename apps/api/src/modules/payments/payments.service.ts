@@ -49,12 +49,19 @@ export class PaymentsService {
     private readonly refundsService: RefundsService,
   ) {}
 
+  /**
+   * `callbackUrl` is where Bachs sends the supporter after paying;
+   * `cancelUrl` is where it sends them if they cancel or the payment fails
+   * (it defaults to `callbackUrl`). The receipt goes to the email the
+   * supporter enters on Bachs's checkout page.
+   */
   async initializePayment(
     supportId: string,
-    email?: string,
     callbackUrl?: string,
+    cancelUrl?: string,
   ) {
     const callback = resolveCallbackUrl(callbackUrl, supportId);
+    const cancel = resolveCallbackUrl(cancelUrl, supportId) ?? callback;
     const support = await this.prisma.support.findUnique({
       where: { id: supportId },
       include: { creator: { select: { status: true } } },
@@ -94,8 +101,9 @@ export class PaymentsService {
       supportId: support.id,
       amount: support.totalAmount,
       currency: support.currency,
-      email: email || support.guestEmail || 'supporter@buymeayard.com',
+      email: support.guestEmail ?? undefined,
       callbackUrl: callback,
+      cancelUrl: cancel,
     });
 
     // Update payment with provider reference
@@ -337,10 +345,16 @@ export class PaymentsService {
             },
           });
 
-          // 2. Mark support as PAID
+          // 2. Mark support as PAID. Keep the payer's email from Bachs so
+          // repeat supporters can be recognised.
           await tx.support.update({
             where: { id: payment.supportId },
-            data: { status: SupportStatus.PAID },
+            data: {
+              status: SupportStatus.PAID,
+              ...(payload.data.email && !payment.support.guestEmail
+                ? { guestEmail: String(payload.data.email).toLowerCase() }
+                : {}),
+            },
           });
 
           // 3. Record event
@@ -374,10 +388,12 @@ export class PaymentsService {
             .map((i) => i.materialNameSnapshot)
             .filter(Boolean)
             .join(', ') || 'Fabric';
-        const supporterName = payment.support.isAnonymous
+        // The creator sees the name unless the gift is fully anonymous
+        const hiddenFromCreator = payment.support.visibility === 'ANONYMOUS';
+        const supporterName = hiddenFromCreator
           ? 'Anonymous'
           : payment.support.guestName || 'A supporter';
-        const supporterEmail = payment.support.isAnonymous
+        const supporterEmail = hiddenFromCreator
           ? undefined
           : payment.support.guestEmail || undefined;
 
@@ -397,7 +413,7 @@ export class PaymentsService {
               )
             : null,
           amount: payment.support.creatorAmount,
-          message: payment.support.message,
+          message: hiddenFromCreator ? null : payment.support.message,
         });
       }
     }

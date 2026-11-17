@@ -60,6 +60,20 @@ export class CheckoutGiftDto extends CreateSupportIntentDto {
   })
   @MaxLength(2000)
   callbackUrl?: string;
+
+  @ApiPropertyOptional({
+    example: 'https://buymeayard.com/adeola?payment=failed',
+    description:
+      'Page Bachs sends the supporter back to if they cancel or the payment fails. Same rules as `callbackUrl`; defaults to it when omitted.',
+  })
+  @IsOptional()
+  @IsUrl({
+    require_tld: false,
+    require_protocol: true,
+    protocols: ['http', 'https'],
+  })
+  @MaxLength(2000)
+  cancelUrl?: string;
 }
 
 export class CheckoutGiftResponseDto extends SupportIntentResponseDto {

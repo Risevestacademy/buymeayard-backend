@@ -148,10 +148,10 @@ export class BachsProvider implements PaymentProvider {
           amount: toDecimal(params.amount),
           price_type: 'fixed',
         },
-        customer: { email: params.email },
+        ...(params.email ? { customer: { email: params.email } } : {}),
         reference: params.paymentId,
         success_url: params.callbackUrl,
-        cancel_url: params.callbackUrl,
+        cancel_url: params.cancelUrl ?? params.callbackUrl,
         expires_in_minutes: CHECKOUT_EXPIRY_MINUTES,
         metadata: {
           ...params.metadata,
@@ -164,7 +164,8 @@ export class BachsProvider implements PaymentProvider {
         // is a different request and must not be refused as a key conflict
         idempotencyKey: `checkout-${params.paymentId}-${digest(
           params.callbackUrl ?? '',
-          params.email,
+          params.cancelUrl ?? '',
+          params.email ?? '',
           String(params.amount),
         )}`,
       },
@@ -275,7 +276,12 @@ export class BachsProvider implements PaymentProvider {
         return {
           event: 'charge.success',
           ...base,
-          data: { id: data.charge_id, reference: data.checkout_id },
+          data: {
+            id: data.charge_id,
+            reference: data.checkout_id,
+            // Where the receipt went; the field name is read from the payload
+            email: data.customer_email ?? data.customer?.email ?? undefined,
+          },
         };
       }
       case 'payout.paid':

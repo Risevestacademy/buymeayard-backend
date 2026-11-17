@@ -1178,7 +1178,7 @@ describe('CreatorsService', () => {
           creatorAmount: 475000,
           currency: 'NGN',
           message: 'Love your work!',
-          isAnonymous: false,
+          visibility: 'PUBLIC',
           createdAt: new Date('2026-10-05T12:00:00Z'),
           guestName: 'Ada Okafor',
           items: [
@@ -1358,7 +1358,7 @@ describe('CreatorsService', () => {
           creatorAmount: 95000,
           currency: 'NGN',
           message: null,
-          isAnonymous: true,
+          visibility: 'ANONYMOUS',
           createdAt: new Date('2026-10-06T10:00:00Z'),
           supporter: null,
           items: [],
@@ -1369,7 +1369,7 @@ describe('CreatorsService', () => {
           creatorAmount: 190000,
           currency: 'NGN',
           message: 'Congrats!',
-          isAnonymous: false,
+          visibility: 'PUBLIC',
           createdAt: new Date('2026-10-06T11:00:00Z'),
           guestName: 'Chidi Nwosu',
           items: [
@@ -1412,8 +1412,8 @@ describe('CreatorsService', () => {
         createdAt: new Date('2026-10-06T10:00:00Z'),
       };
       prisma.support.findMany.mockResolvedValue([
-        { ...base, id: 's-1', isAnonymous: false, guestName: 'Ada Okafor' },
-        { ...base, id: 's-2', isAnonymous: true, guestName: 'Tomi' },
+        { ...base, id: 's-1', visibility: 'PUBLIC', guestName: 'Ada Okafor' },
+        { ...base, id: 's-2', visibility: 'ANONYMOUS', guestName: 'Tomi' },
       ]);
 
       const res = await service.getDashboardContributions('u-1');
@@ -1425,6 +1425,35 @@ describe('CreatorsService', () => {
         status: 'PAID',
         reference: 'ref-9',
       });
+    });
+
+    it('shows the creator the name and message of a creator-only gift but not an anonymous one', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.count.mockResolvedValue(2);
+      const base = {
+        totalAmount: 500000,
+        platformFee: 50000,
+        creatorAmount: 450000,
+        currency: 'NGN',
+        status: 'PAID',
+        guestName: 'Tomi',
+        message: 'Keep creating',
+        supporter: null,
+        items: [],
+        payment: { providerReference: 'ref-9' },
+        createdAt: new Date('2026-10-06T10:00:00Z'),
+      };
+      prisma.support.findMany.mockResolvedValue([
+        { ...base, id: 's-1', visibility: 'CREATOR_ONLY' },
+        { ...base, id: 's-2', visibility: 'ANONYMOUS' },
+      ]);
+
+      const res = await service.getDashboardContributions('u-1');
+
+      expect(res.items[0].supporter.name).toBe('Tomi');
+      expect(res.items[0].message).toBe('Keep creating');
+      expect(res.items[1].supporter.name).toBe('Anonymous');
+      expect(res.items[1].message).toBeNull();
     });
 
     it('searches names and messages but never the name of an anonymous supporter', async () => {
@@ -1444,8 +1473,8 @@ describe('CreatorsService', () => {
             creatorId: 'c-1',
             status: { in: ['PAID', 'COMPLETED'] },
             OR: [
-              { isAnonymous: false, guestName: contains },
-              { message: contains },
+              { visibility: { not: 'ANONYMOUS' }, guestName: contains },
+              { visibility: { not: 'ANONYMOUS' }, message: contains },
             ],
           },
           orderBy: [{ createdAt: 'asc' }, { id: 'desc' }],
@@ -1483,7 +1512,7 @@ describe('CreatorsService', () => {
         currency: 'NGN',
         status: 'COMPLETED',
         message: 'Loved the video',
-        isAnonymous: false,
+        visibility: 'PUBLIC',
         guestName: 'Ada Okafor',
         payment: { providerReference: 'BMY-1' },
         items: [],
@@ -1636,7 +1665,7 @@ describe('CreatorsService', () => {
           creatorAmount: 475000,
           currency: 'NGN',
           message: 'Great work!',
-          isAnonymous: false,
+          visibility: 'PUBLIC',
           createdAt: new Date('2026-10-06T12:00:00Z'),
           guestName: 'Ada Okafor',
           items: [

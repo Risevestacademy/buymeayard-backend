@@ -167,7 +167,6 @@ export class SupportsService {
     const support = await this.prisma.support.create({
       data: {
         guestName: dto.name?.trim() || null,
-        guestEmail: dto.email?.trim().toLowerCase() || null,
         creatorId: creator.id,
         subtotal: amountMinor,
         platformFee,
@@ -175,7 +174,8 @@ export class SupportsService {
         totalAmount: amountMinor,
         currency: material.currency,
         message: dto.message?.trim() || null,
-        isAnonymous: dto.isAnonymous ?? false,
+        visibility:
+          dto.visibility ?? (dto.isAnonymous ? 'ANONYMOUS' : 'PUBLIC'),
         status: 'CREATED',
         items: {
           create: [

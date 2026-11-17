@@ -3,9 +3,13 @@ export interface InitializePaymentParams {
   supportId: string;
   amount: number; // minor units
   currency: string;
-  email: string;
+  /** Omit to let the provider's checkout collect it. */
+  email?: string;
   metadata?: Record<string, any>;
+  /** Where the supporter lands after paying. */
   callbackUrl?: string;
+  /** Where the supporter lands if they cancel or the payment fails. */
+  cancelUrl?: string;
 }
 
 export interface InitializePaymentResult {

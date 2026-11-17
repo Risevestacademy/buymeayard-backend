@@ -56,18 +56,18 @@ describe('PaymentsService.initializePayment contribution gate', () => {
 
   it('refuses checkout when the creator is no longer active', async () => {
     const { service, prisma, provider } = setup('PROFILE_CREATED');
-    await expect(
-      service.initializePayment('support-1', 's@example.com'),
-    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(service.initializePayment('support-1')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
     expect(prisma.payment.create).not.toHaveBeenCalled();
     expect(provider.initializePayment).not.toHaveBeenCalled();
   });
 
   it('initializes checkout for an active creator', async () => {
     const { service, provider } = setup('ACTIVE');
-    await expect(
-      service.initializePayment('support-1', 's@example.com'),
-    ).resolves.toMatchObject({ paymentId: 'payment-1' });
+    await expect(service.initializePayment('support-1')).resolves.toMatchObject(
+      { paymentId: 'payment-1' },
+    );
     expect(provider.initializePayment).toHaveBeenCalled();
   });
 
@@ -82,14 +82,11 @@ describe('PaymentsService.initializePayment contribution gate', () => {
     );
   });
 
-  it('prefers an email sent with the initialize call', async () => {
-    const { service, provider } = setup('ACTIVE', {
-      supporter: null,
-      guestEmail: 'guest@example.com',
-    });
-    await service.initializePayment('support-1', 'other@example.com');
+  it('lets the checkout collect the email when none is known', async () => {
+    const { service, provider } = setup('ACTIVE', { guestEmail: null });
+    await service.initializePayment('support-1');
     expect(provider.initializePayment).toHaveBeenCalledWith(
-      expect.objectContaining({ email: 'other@example.com' }),
+      expect.objectContaining({ email: undefined }),
     );
   });
 });
@@ -143,12 +140,30 @@ describe('PaymentsService checkout callback and status', () => {
     const { service, provider } = setup({});
     await service.initializePayment(
       'support-1',
-      undefined,
       'https://buymeayard.com/adeola/thanks',
     );
     expect(provider.initializePayment).toHaveBeenCalledWith(
       expect.objectContaining({
         callbackUrl: 'https://buymeayard.com/adeola/thanks?supportId=support-1',
+        // No cancelUrl given: cancel goes to the same page
+        cancelUrl: 'https://buymeayard.com/adeola/thanks?supportId=support-1',
+      }),
+    );
+  });
+
+  it('sends a cancelled or failed payment to its own page', async () => {
+    process.env.FRONTEND_URL = 'https://buymeayard.com';
+    const { service, provider } = setup({});
+    await service.initializePayment(
+      'support-1',
+      'https://buymeayard.com/adeola/thanks',
+      'https://buymeayard.com/adeola?payment=failed',
+    );
+    expect(provider.initializePayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callbackUrl: 'https://buymeayard.com/adeola/thanks?supportId=support-1',
+        cancelUrl:
+          'https://buymeayard.com/adeola?payment=failed&supportId=support-1',
       }),
     );
   });
@@ -157,7 +172,7 @@ describe('PaymentsService checkout callback and status', () => {
     process.env.FRONTEND_URL = 'https://buymeayard.com';
     const { service, prisma } = setup({});
     await expect(
-      service.initializePayment('support-1', undefined, 'https://evil.com/x'),
+      service.initializePayment('support-1', 'https://evil.com/x'),
     ).rejects.toMatchObject({ response: { code: 'VALIDATION_ERROR' } });
     expect(prisma.payment.create).not.toHaveBeenCalled();
   });
@@ -380,7 +395,7 @@ describe('PaymentsService.handleWebhook charge.success', () => {
         creatorId: 'creator-1',
         creatorAmount: 450_000,
         platformFee: 50_000,
-        isAnonymous: false,
+        visibility: 'PUBLIC',
         guestName: 'Tomi',
         guestEmail: 'tomi@example.com',
         message: 'Keep creating',

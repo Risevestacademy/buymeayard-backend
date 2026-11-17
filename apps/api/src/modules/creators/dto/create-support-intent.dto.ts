@@ -1,6 +1,7 @@
 import {
   IsBoolean,
   IsEmail,
+  IsIn,
   IsNumber,
   IsOptional,
   IsString,
@@ -10,6 +11,10 @@ import {
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import {
+  SUPPORT_VISIBILITIES,
+  SupportVisibility,
+} from '../../supports/utils/support-visibility.util';
 
 export const MIN_GIFT_AMOUNT_NAIRA = 100;
 export const MAX_GIFT_AMOUNT_NAIRA = 10_000_000;
@@ -47,8 +52,9 @@ export class CreateSupportIntentDto {
 
   @ApiPropertyOptional({
     example: 'jane@example.com',
+    deprecated: true,
     description:
-      'Where the payment receipt is sent. Optional, but without it the receipt goes to a platform placeholder address.',
+      'Ignored. Bachs collects the supporter email at checkout and sends the receipt there. Still accepted so older clients do not break.',
   })
   @IsOptional()
   @IsEmail()
@@ -56,9 +62,21 @@ export class CreateSupportIntentDto {
   email?: string;
 
   @ApiPropertyOptional({
-    default: false,
+    enum: SUPPORT_VISIBILITIES,
+    default: 'PUBLIC',
     description:
-      "If true, hides the supporter's name and message from the public wall, and the name from the creator",
+      'Who sees the name and message. `PUBLIC`: the contribution wall and the creator dashboard. `CREATOR_ONLY`: hidden on the wall, shown on the creator dashboard. `ANONYMOUS`: hidden on both.',
+  })
+  @IsOptional()
+  @IsIn(SUPPORT_VISIBILITIES, {
+    message: 'visibility must be PUBLIC, CREATOR_ONLY or ANONYMOUS',
+  })
+  visibility?: SupportVisibility;
+
+  @ApiPropertyOptional({
+    deprecated: true,
+    description:
+      'Use `visibility`. `true` means `ANONYMOUS` when `visibility` is not sent.',
   })
   @IsOptional()
   @IsBoolean()
