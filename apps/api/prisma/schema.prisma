@@ -134,6 +134,7 @@ model CreatorProfile {
   user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   themeMaterial   Material?           @relation("CreatorThemeMaterial", fields: [themeMaterialId], references: [id], onDelete: SetNull)
   socialLinks     CreatorSocialLink[]
+  reports         CreatorReport[]
   materials       CreatorMaterial[]
   customMaterials Material[]          @relation("CustomMaterials")
   supports        Support[]           @relation("CreatorSupports")
@@ -647,6 +648,28 @@ model ContentReport {
 
   @@index([status])
   @@map("content_reports")
+}
+
+/// A "Report a creator" submission. Supporters are guests, so the reporter is
+/// identified only by an optional email.
+model CreatorReport {
+  id             String    @id @default(uuid())
+  creatorId      String
+  reporterEmail  String?
+  reason         String // FRAUD_OR_SCAM, IMPERSONATION, INAPPROPRIATE_CONTENT, COPYRIGHT, HARASSMENT, OTHER
+  description    String
+  status         String    @default("PENDING") // PENDING, UNDER_REVIEW, RESOLVED, REJECTED
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  resolutionNote String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId])
+  @@index([status])
+  @@map("creator_reports")
 }
 
 model AuditLog {

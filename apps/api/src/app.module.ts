@@ -26,6 +26,7 @@ import { LedgerModule } from './modules/ledger/ledger.module';
 import { PayoutsModule } from './modules/payouts/payouts.module';
 import { ContentModule } from './modules/content/content.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { CreatorReportsModule } from './modules/creator-reports/creator-reports.module';
 import { PushNotificationsModule } from './modules/push-notifications/push-notifications.module';
 import { KycModule } from './modules/kyc/kyc.module';
 import { ModerationModule } from './modules/moderation/moderation.module';
@@ -79,6 +80,7 @@ import { AuditLogInterceptor } from './modules/admin/interceptors/audit-log.inte
     ContentModule,
     NotificationsModule,
     PushNotificationsModule,
+    CreatorReportsModule,
     KycModule,
     ModerationModule,
     AdminModule,
