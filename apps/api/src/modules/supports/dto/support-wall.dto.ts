@@ -18,7 +18,7 @@ export class SupportWallItemDto {
     type: DashboardContributionMaterialDto,
     nullable: true,
     description:
-      'The fabric gifted, same shape as on the creator dashboard: id, name, color, thumbnailUrl and yards (quantity).',
+      'The fabric gifted, same shape as on the creator dashboard: id, name, color, thumbnailSmallUrl, thumbnailLargeUrl and yards (quantity).',
   })
   material!: DashboardContributionMaterialDto | null;
 

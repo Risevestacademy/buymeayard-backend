@@ -46,7 +46,7 @@ export class AdminPayoutsController {
   @Post(':id/reconcile')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Ask Paystack what happened to an in-flight payout and apply it',
+    summary: 'Ask Bachs what happened to an in-flight payout and apply it',
   })
   reconcile(
     @Param('id', ParseUUIDPipe) id: string,
@@ -58,9 +58,9 @@ export class AdminPayoutsController {
   @Post(':id/retry')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Send a stuck REQUESTED or PENDING payout to Paystack again',
+    summary: 'Send a stuck REQUESTED or PENDING payout to Bachs again',
     description:
-      'Safe to repeat: the transfer reference is reused, so Paystack never sends twice.',
+      'Safe to repeat: the transfer reference is reused, so Bachs never sends twice.',
   })
   retry(
     @Param('id', ParseUUIDPipe) id: string,
@@ -74,7 +74,7 @@ export class AdminPayoutsController {
   @ApiOperation({
     summary: 'Cancel a payout whose transfer never started',
     description:
-      'Returns the reserved amount to the creator. Only for REQUESTED payouts Paystack has no record of.',
+      'Returns the reserved amount to the creator. Only for REQUESTED payouts Bachs has no record of.',
   })
   cancel(
     @Param('id', ParseUUIDPipe) id: string,

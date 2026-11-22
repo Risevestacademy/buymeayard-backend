@@ -131,6 +131,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
         return ErrorCodes.NOT_FOUND;
       case HttpStatus.CONFLICT:
         return ErrorCodes.CONFLICT;
+      case HttpStatus.TOO_MANY_REQUESTS:
+        return ErrorCodes.TOO_MANY_REQUESTS;
       default:
         return ErrorCodes.INTERNAL_SERVER_ERROR;
     }

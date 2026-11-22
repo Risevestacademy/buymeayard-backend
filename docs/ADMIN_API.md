@@ -171,6 +171,7 @@ Platform catalogue materials and creator-made ones, in one place.
 | `POST /admin/materials` | Create. Body below. |
 | `PATCH /admin/materials/:id` | Edit. Send only the fields to change. `creatorId` cannot be changed. |
 | `DELETE /admin/materials/:id` | Deletes it, or deactivates it when it has contribution history. |
+| `POST /admin/materials/thumbnail` | Upload one image, get its URL. See below. |
 
 `:id` is the material id (UUID).
 
@@ -222,6 +223,9 @@ Platform catalogue materials and creator-made ones, in one place.
 | `creatorId` | Optional creator profile id. Omit for a platform material; set it to create one owned by that creator (`404` if the creator does not exist). |
 
 On `PATCH`, an empty string clears an optional text field.
+
+**Thumbnail upload.** The thumbnail fields take URLs, so the form uploads each image first:
+`POST /admin/materials/thumbnail`, `multipart/form-data` with one field `file` (JPEG, PNG or WebP, max 5 MB), returns `201 { "url": "https://res.cloudinary.com/..." }`. Call it once for the large image and once for the small one, then send the URLs as `thumbnailLargeUrl` / `thumbnailSmallUrl` in the create or `PATCH` call. The upload alone does not change any material. A wrong file type, a file over 5 MB or a missing `file` returns `400`.
 
 **Delete.** A material that has contribution history is set to `INACTIVE` instead of removed, and the response says which: `{ "success": true, "materialId", "deleted": true | false, "status": null | "INACTIVE", "message" }`. Otherwise it is deleted for good, along with its creator links.
 

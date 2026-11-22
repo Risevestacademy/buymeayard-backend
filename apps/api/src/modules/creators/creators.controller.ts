@@ -12,6 +12,7 @@ import {
   Put,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -40,6 +41,8 @@ import { NairaResponseInterceptor } from '../../common/interceptors/naira-respon
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
+import { SaveSocialLinksDto } from './dto/social-links.dto';
+import { CreatorSocialLinkResponseDto } from './dto/creator-response.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
 import { CreateCustomMaterialDto } from './dto/create-custom-material.dto';
@@ -608,6 +611,82 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
     return this.creatorsService.formatCreatorProfile(profile);
   }
 
+  @Get('me/social-links')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Get my social links',
+    description:
+      'Platforms: youtube, twitch, x, facebook, instagram, tiktok, discord. `verified: true` means the account was connected through the platform OAuth. To connect one, call `POST /auth/link-social` with `{ provider, callbackURL, errorCallbackURL }` (provider ids: youtube, twitch, twitter for X, facebook, instagram, tiktok, discord), redirect the user to the returned `url`, then call this endpoint again after the redirect back.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'The creator social links.',
+    type: [CreatorSocialLinkResponseDto],
+  })
+  @ApiErrors(UNAUTHORIZED_ERROR, CREATOR_NOT_FOUND_ERROR)
+  async getMySocialLinks(@CurrentUser('id') userId: string) {
+    return this.creatorsService.getSocialLinks(userId);
+  }
+
+  @Put('me/social-links')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Save my social links',
+    description:
+      'Replaces the whole set: links not in the list are removed, and an empty list clears them. One link per platform. Each `url` can be a handle (`@ada`) or a profile URL and is stored as a canonical https URL. Discord needs an invite link. `twitter` is accepted as an alias for `x`. A connected (`verified: true`) link sent back unchanged stays verified; any link whose URL is typed or edited is saved as `verified: false`.',
+  })
+  @ApiBody({
+    type: SaveSocialLinksDto,
+    examples: {
+      links: {
+        summary: 'Handles and URLs',
+        value: {
+          links: [
+            { platform: 'instagram', url: '@adeola' },
+            { platform: 'x', url: 'https://twitter.com/adeola' },
+            { platform: 'discord', url: 'https://discord.gg/ankara' },
+          ],
+        },
+      },
+    },
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'The saved links.',
+    type: [CreatorSocialLinkResponseDto],
+  })
+  @ApiErrors(VALIDATION_ERROR, UNAUTHORIZED_ERROR, CREATOR_NOT_FOUND_ERROR)
+  async saveMySocialLinks(
+    @CurrentUser('id') userId: string,
+    @Body() dto: SaveSocialLinksDto,
+  ) {
+    return this.creatorsService.saveSocialLinks(userId, dto);
+  }
+
+  @Delete('me/social-links/:platform')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Remove one social link',
+    description:
+      'Removes the link, connected or typed. The OAuth account itself stays linked to the user.',
+  })
+  @ApiParam({ name: 'platform', example: 'instagram' })
+  @ApiResponse({
+    status: 200,
+    description: 'The remaining links.',
+    type: [CreatorSocialLinkResponseDto],
+  })
+  @ApiErrors(VALIDATION_ERROR, UNAUTHORIZED_ERROR, CREATOR_NOT_FOUND_ERROR)
+  async deleteMySocialLink(
+    @CurrentUser('id') userId: string,
+    @Param('platform') platform: string,
+  ) {
+    return this.creatorsService.deleteSocialLink(userId, platform);
+  }
+
   @Put('me/thank-you-message')
   @ApiBearerAuth()
   @ApiCookieAuth('better-auth.session_token')
@@ -1042,7 +1121,7 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
   @ApiOperation({
     summary: 'Create a guest support intent',
     description:
-      'Public endpoint for a guest to start a gift to a creator. No authentication required. To get the Paystack checkout URL in the same call, use POST /creators/:slug/supports/checkout instead. Otherwise send the returned supportId to POST /payments/initialize.',
+      'Public endpoint for a guest to start a gift to a creator. No authentication required. To get the Bachs checkout URL in the same call, use POST /creators/:slug/supports/checkout instead. Otherwise send the returned supportId to POST /payments/initialize.',
   })
   @ApiParam({
     name: 'slug',
@@ -1062,9 +1141,9 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
   @Public()
   @Post(':slug/supports/checkout')
   @ApiOperation({
-    summary: 'Start a gift and get the Paystack checkout URL in one call',
+    summary: 'Start a gift and get the Bachs checkout URL in one call',
     description:
-      'Public. Does what `supports/intent` then `POST /payments/initialize` do, in one request: creates the gift, opens a Paystack checkout and returns `authorizationUrl`. Redirect the supporter there. After paying, Paystack sends them to `callbackUrl` (we add `supportId`), where you confirm with GET /supports/:supportId/status.',
+      'Public. Does what `supports/intent` then `POST /payments/initialize` do, in one request: creates the gift, opens a Bachs checkout and returns `authorizationUrl`. Redirect the supporter there. After paying, Bachs sends them to `callbackUrl` (we add `supportId`), where you confirm with GET /supports/:supportId/status. If they cancel or the payment fails they go to `cancelUrl` instead (defaults to `callbackUrl`). The receipt is sent by Bachs to the email the supporter enters at checkout.',
   })
   @ApiParam({ name: 'slug', example: 'adeola' })
   @ApiBody({ type: CheckoutGiftDto })
@@ -1076,11 +1155,12 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
   ): Promise<CheckoutGiftResponseDto> {
     // Reject a bad callbackUrl before anything is created
     resolveCallbackUrl(dto.callbackUrl);
+    resolveCallbackUrl(dto.cancelUrl);
     const intent = await this.supportsService.createGuestIntent(slug, dto);
     const payment = await this.paymentsService.initializePayment(
       intent.supportId,
-      dto.email,
       dto.callbackUrl,
+      dto.cancelUrl,
     );
     return {
       ...intent,

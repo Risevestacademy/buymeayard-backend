@@ -15,7 +15,7 @@ export class SupportStatusResponseDto {
   @ApiProperty({
     example: true,
     description:
-      'True once Paystack has confirmed the payment (PAID or COMPLETED). Show the thank-you screen only when this is true.',
+      'True once Bachs has confirmed the payment (PAID or COMPLETED). Show the thank-you screen only when this is true.',
   })
   paid!: boolean;
 
@@ -32,7 +32,7 @@ export class SupportStatusResponseDto {
     type: DashboardContributionMaterialDto,
     nullable: true,
     description:
-      'The fabric gifted, same shape as the creator dashboard: id, name, color, thumbnailUrl and yards (quantity)',
+      'The fabric gifted, same shape as the creator dashboard: id, name, color, thumbnailSmallUrl, thumbnailLargeUrl and yards (quantity)',
   })
   material!: DashboardContributionMaterialDto | null;
 

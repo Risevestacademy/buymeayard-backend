@@ -18,9 +18,8 @@ export class CreatorSocialLinkResponseDto {
   creatorId: string;
 
   @ApiProperty({
-    example: 'twitter',
-    description:
-      'Platform identifier (e.g. twitter, instagram, tiktok, youtube)',
+    example: 'x',
+    description: 'youtube, twitch, x, facebook, instagram, tiktok or discord',
   })
   platform: string;
 
@@ -29,6 +28,13 @@ export class CreatorSocialLinkResponseDto {
     description: 'Full social profile URL',
   })
   url: string;
+
+  @ApiProperty({
+    example: true,
+    description:
+      'true when the creator connected the account through the platform OAuth (POST /auth/link-social); false for a typed link',
+  })
+  verified: boolean;
 
   @ApiProperty({ example: '2026-09-25T14:00:00.000Z' })
   createdAt: Date;

@@ -83,7 +83,8 @@ describe('SupportsService guest gifting', () => {
         id: 'mat-adire',
         name: 'Adire',
         color: '#7F3516',
-        thumbnailUrl: 'https://cdn/adire-sm.png',
+        thumbnailSmallUrl: 'https://cdn/adire-sm.png',
+        thumbnailLargeUrl: null,
         quantity: 2.5,
       },
       materialName: 'Adire',
@@ -93,7 +94,7 @@ describe('SupportsService guest gifting', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           guestName: 'Tomi',
-          guestEmail: 'tomi@example.com',
+          visibility: 'PUBLIC',
           totalAmount: 500_000,
           platformFee: 50_000,
           creatorAmount: 450_000,
@@ -162,7 +163,7 @@ describe('SupportsService.getPublicWall', () => {
             createdAt: new Date('2026-10-06T10:00:00Z'),
             guestName: 'Tomi',
             message: 'Keep creating',
-            isAnonymous: false,
+            visibility: 'PUBLIC',
             supporter: null,
             items: [
               {
@@ -209,7 +210,8 @@ describe('SupportsService.getPublicWall', () => {
           id: 'mat-adire',
           name: 'Adire',
           color: '#7F3516',
-          thumbnailUrl: 'https://cdn/adire-sm.png',
+          thumbnailSmallUrl: 'https://cdn/adire-sm.png',
+          thumbnailLargeUrl: null,
           quantity: 2.5,
         },
       }),

@@ -33,8 +33,11 @@ describe('CreatorsService', () => {
     };
     creatorSocialLink: {
       findFirst: jest.Mock;
+      findMany: jest.Mock;
       create: jest.Mock;
+      createMany: jest.Mock;
       update: jest.Mock;
+      deleteMany: jest.Mock;
     };
     authAccount: {
       findMany: jest.Mock;
@@ -107,8 +110,11 @@ describe('CreatorsService', () => {
       },
       creatorSocialLink: {
         findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn(),
+        createMany: jest.fn(),
         update: jest.fn(),
+        deleteMany: jest.fn(),
       },
       authAccount: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -239,7 +245,7 @@ describe('CreatorsService', () => {
       expect(prisma.creatorSocialLink.create).toHaveBeenCalledWith({
         data: {
           creatorId: 'creator-1',
-          platform: 'twitter',
+          platform: 'x',
           url: 'https://x.com/adeola',
         },
       });
@@ -487,6 +493,126 @@ describe('CreatorsService', () => {
       expect(res.available).toBe(true);
       expect(res.slug).toBe('aesthetefisayo');
       expect(res.message).toBe('Handle is available');
+    });
+  });
+
+  describe('social links', () => {
+    beforeEach(() => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'creator-1' });
+    });
+
+    it('replaces the whole set with canonical urls in one transaction', async () => {
+      await service.saveSocialLinks('user-1', {
+        links: [
+          { platform: 'instagram', url: '@adeola' },
+          { platform: 'twitter', url: 'https://twitter.com/adeola' },
+        ],
+      });
+
+      expect(prisma.creatorSocialLink.deleteMany).toHaveBeenCalledWith({
+        where: { creatorId: 'creator-1' },
+      });
+      expect(prisma.creatorSocialLink.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            creatorId: 'creator-1',
+            platform: 'instagram',
+            url: 'https://instagram.com/adeola',
+            verified: false,
+          },
+          {
+            creatorId: 'creator-1',
+            platform: 'x',
+            url: 'https://x.com/adeola',
+            verified: false,
+          },
+        ],
+      });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a connected link verified when it is sent back unchanged', async () => {
+      prisma.creatorSocialLink.findMany.mockResolvedValueOnce([
+        {
+          platform: 'discord',
+          url: 'https://discord.com/users/123',
+          verified: true,
+        },
+      ]);
+      await service.saveSocialLinks('user-1', {
+        links: [
+          { platform: 'discord', url: 'https://discord.com/users/123' },
+          { platform: 'instagram', url: '@adeola' },
+        ],
+      });
+      expect(prisma.creatorSocialLink.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            creatorId: 'creator-1',
+            platform: 'discord',
+            url: 'https://discord.com/users/123',
+            verified: true,
+          },
+          {
+            creatorId: 'creator-1',
+            platform: 'instagram',
+            url: 'https://instagram.com/adeola',
+            verified: false,
+          },
+        ],
+      });
+    });
+
+    it('clears every link when given an empty list', async () => {
+      await service.saveSocialLinks('user-1', { links: [] });
+      expect(prisma.creatorSocialLink.deleteMany).toHaveBeenCalled();
+      expect(prisma.creatorSocialLink.createMany).toHaveBeenCalledWith({
+        data: [],
+      });
+    });
+
+    it('rejects an unsupported platform, a bad link and a duplicate platform', async () => {
+      for (const links of [
+        [{ platform: 'linkedin', url: 'ada' }],
+        [{ platform: 'instagram', url: 'https://x.com/ada' }],
+        [
+          { platform: 'x', url: '@ada' },
+          { platform: 'twitter', url: '@ada2' },
+        ],
+      ]) {
+        await expect(
+          service.saveSocialLinks('user-1', { links }),
+        ).rejects.toThrow(BadRequestException);
+      }
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('404s when the user has no creator profile', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(service.getSocialLinks('user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('removes one platform, accepting the twitter alias', async () => {
+      await service.deleteSocialLink('user-1', 'Twitter');
+      expect(prisma.creatorSocialLink.deleteMany).toHaveBeenCalledWith({
+        where: { creatorId: 'creator-1', platform: 'x' },
+      });
+      await expect(
+        service.deleteSocialLink('user-1', 'linkedin'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects a bad onboarding link before creating anything', async () => {
+      await expect(
+        service.onboardCreator('user-1', {
+          creatorName: 'Adeola',
+          slug: 'adeola',
+          socialLinks: [{ platform: 'instagram', url: 'https://x.com/ada' }],
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.creatorProfile.create).not.toHaveBeenCalled();
     });
   });
 
@@ -1052,7 +1178,7 @@ describe('CreatorsService', () => {
           creatorAmount: 475000,
           currency: 'NGN',
           message: 'Love your work!',
-          isAnonymous: false,
+          visibility: 'PUBLIC',
           createdAt: new Date('2026-10-05T12:00:00Z'),
           guestName: 'Ada Okafor',
           items: [
@@ -1232,7 +1358,7 @@ describe('CreatorsService', () => {
           creatorAmount: 95000,
           currency: 'NGN',
           message: null,
-          isAnonymous: true,
+          visibility: 'ANONYMOUS',
           createdAt: new Date('2026-10-06T10:00:00Z'),
           supporter: null,
           items: [],
@@ -1243,7 +1369,7 @@ describe('CreatorsService', () => {
           creatorAmount: 190000,
           currency: 'NGN',
           message: 'Congrats!',
-          isAnonymous: false,
+          visibility: 'PUBLIC',
           createdAt: new Date('2026-10-06T11:00:00Z'),
           guestName: 'Chidi Nwosu',
           items: [
@@ -1286,8 +1412,8 @@ describe('CreatorsService', () => {
         createdAt: new Date('2026-10-06T10:00:00Z'),
       };
       prisma.support.findMany.mockResolvedValue([
-        { ...base, id: 's-1', isAnonymous: false, guestName: 'Ada Okafor' },
-        { ...base, id: 's-2', isAnonymous: true, guestName: 'Tomi' },
+        { ...base, id: 's-1', visibility: 'PUBLIC', guestName: 'Ada Okafor' },
+        { ...base, id: 's-2', visibility: 'ANONYMOUS', guestName: 'Tomi' },
       ]);
 
       const res = await service.getDashboardContributions('u-1');
@@ -1299,6 +1425,35 @@ describe('CreatorsService', () => {
         status: 'PAID',
         reference: 'ref-9',
       });
+    });
+
+    it('shows the creator the name and message of a creator-only gift but not an anonymous one', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.count.mockResolvedValue(2);
+      const base = {
+        totalAmount: 500000,
+        platformFee: 50000,
+        creatorAmount: 450000,
+        currency: 'NGN',
+        status: 'PAID',
+        guestName: 'Tomi',
+        message: 'Keep creating',
+        supporter: null,
+        items: [],
+        payment: { providerReference: 'ref-9' },
+        createdAt: new Date('2026-10-06T10:00:00Z'),
+      };
+      prisma.support.findMany.mockResolvedValue([
+        { ...base, id: 's-1', visibility: 'CREATOR_ONLY' },
+        { ...base, id: 's-2', visibility: 'ANONYMOUS' },
+      ]);
+
+      const res = await service.getDashboardContributions('u-1');
+
+      expect(res.items[0].supporter.name).toBe('Tomi');
+      expect(res.items[0].message).toBe('Keep creating');
+      expect(res.items[1].supporter.name).toBe('Anonymous');
+      expect(res.items[1].message).toBeNull();
     });
 
     it('searches names and messages but never the name of an anonymous supporter', async () => {
@@ -1318,8 +1473,8 @@ describe('CreatorsService', () => {
             creatorId: 'c-1',
             status: { in: ['PAID', 'COMPLETED'] },
             OR: [
-              { isAnonymous: false, guestName: contains },
-              { message: contains },
+              { visibility: { not: 'ANONYMOUS' }, guestName: contains },
+              { visibility: { not: 'ANONYMOUS' }, message: contains },
             ],
           },
           orderBy: [{ createdAt: 'asc' }, { id: 'desc' }],
@@ -1357,7 +1512,7 @@ describe('CreatorsService', () => {
         currency: 'NGN',
         status: 'COMPLETED',
         message: 'Loved the video',
-        isAnonymous: false,
+        visibility: 'PUBLIC',
         guestName: 'Ada Okafor',
         payment: { providerReference: 'BMY-1' },
         items: [],
@@ -1510,7 +1665,7 @@ describe('CreatorsService', () => {
           creatorAmount: 475000,
           currency: 'NGN',
           message: 'Great work!',
-          isAnonymous: false,
+          visibility: 'PUBLIC',
           createdAt: new Date('2026-10-06T12:00:00Z'),
           guestName: 'Ada Okafor',
           items: [

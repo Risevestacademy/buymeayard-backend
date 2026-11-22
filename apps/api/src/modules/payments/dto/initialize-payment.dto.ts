@@ -8,8 +8,9 @@ export class InitializePaymentDto {
 
   @ApiPropertyOptional({
     example: 'jane@example.com',
+    deprecated: true,
     description:
-      'Paystack receipt email. Falls back to the email given on the guest intent, then a platform placeholder address.',
+      'Ignored. Bachs collects the supporter email at checkout and sends the receipt there. Still accepted so older clients do not break.',
   })
   @IsOptional()
   @IsEmail()
@@ -19,7 +20,7 @@ export class InitializePaymentDto {
   @ApiPropertyOptional({
     example: 'https://buymeayard.com/adeola/thanks',
     description:
-      'Page Paystack sends the supporter back to after paying. Must be on one of our own sites. We add `supportId` to it, and Paystack adds `reference` and `trxref`. Call GET /supports/:supportId/status there to confirm the payment.',
+      'Page Bachs sends the supporter back to after paying. Must be on one of our own sites. We add `supportId` to it, and Bachs adds `reference` and `trxref`. Call GET /supports/:supportId/status there to confirm the payment.',
   })
   @IsOptional()
   @IsUrl({
@@ -29,6 +30,20 @@ export class InitializePaymentDto {
   })
   @MaxLength(2000)
   callbackUrl?: string;
+
+  @ApiPropertyOptional({
+    example: 'https://buymeayard.com/adeola?payment=failed',
+    description:
+      'Page Bachs sends the supporter back to if they cancel or the payment fails. Same rules as `callbackUrl`; defaults to it when omitted.',
+  })
+  @IsOptional()
+  @IsUrl({
+    require_tld: false,
+    require_protocol: true,
+    protocols: ['http', 'https'],
+  })
+  @MaxLength(2000)
+  cancelUrl?: string;
 }
 
 export class InitializePaymentResponseDto {
@@ -37,12 +52,12 @@ export class InitializePaymentResponseDto {
 
   @ApiProperty({
     example: 'BMY-1730000000000-ab12cd',
-    description: 'Reference Paystack uses for this charge',
+    description: 'Bachs checkout id (chk_…) for this payment',
   })
   providerReference!: string;
 
   @ApiProperty({
-    example: 'https://checkout.paystack.com/abc123',
+    example: 'https://checkout.bachs.io/c/abc123',
     description: 'Send the supporter here to pay',
   })
   authorizationUrl!: string;

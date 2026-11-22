@@ -9,7 +9,7 @@ const LOCAL_ORIGINS = [
   'http://localhost:3002',
 ];
 
-/** Origins a Paystack checkout may send the supporter back to. */
+/** Origins a Bachs checkout may send the supporter back to. */
 function allowedOrigins(): Set<string> {
   const origins = new Set<string>(LOCAL_ORIGINS);
   for (const url of [
@@ -27,9 +27,9 @@ function allowedOrigins(): Set<string> {
 }
 
 /**
- * Validates the page Paystack sends the supporter back to, so the checkout
+ * Validates the page Bachs sends the supporter back to, so the checkout
  * can't be used as an open redirect, and adds the support id so the page knows
- * which gift to look up. Returns undefined when none was given (Paystack then
+ * which gift to look up. Returns undefined when none was given (Bachs then
  * uses the callback URL from its dashboard).
  */
 export function resolveCallbackUrl(

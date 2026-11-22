@@ -31,6 +31,7 @@ model User {
   notifications          Notification[]
   supportTickets         SupportTicket[]
   notificationPreference NotificationPreference?
+  pushTokens             PushToken[]
   entitlements           PostEntitlement[]
   reports                ContentReport[]         @relation("ReporterReports")
 
@@ -133,6 +134,7 @@ model CreatorProfile {
   user            User                @relation(fields: [userId], references: [id], onDelete: Cascade)
   themeMaterial   Material?           @relation("CreatorThemeMaterial", fields: [themeMaterialId], references: [id], onDelete: SetNull)
   socialLinks     CreatorSocialLink[]
+  reports         CreatorReport[]
   materials       CreatorMaterial[]
   customMaterials Material[]          @relation("CustomMaterials")
   supports        Support[]           @relation("CreatorSupports")
@@ -148,13 +150,15 @@ model CreatorProfile {
 model CreatorSocialLink {
   id        String   @id @default(uuid())
   creatorId String
-  platform  String // twitter, instagram, youtube, tiktok, etc.
+  platform  String // youtube, twitch, x, facebook, instagram, tiktok, discord
   url       String
+  verified  Boolean  @default(false) // true when connected through the platform's OAuth
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
+  @@unique([creatorId, platform])
   @@map("creator_social_links")
 }
 
@@ -222,7 +226,7 @@ model Support {
   guestName     String?
   guestEmail    String?
   message       String?
-  isAnonymous   Boolean  @default(false)
+  visibility    String   @default("PUBLIC") // PUBLIC, CREATOR_ONLY, ANONYMOUS
   status        String   @default("CREATED") // CREATED, PAYMENT_PENDING, PAID, COMPLETED, PAYMENT_FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -563,6 +567,21 @@ model NotificationPreference {
   @@map("notification_preferences")
 }
 
+/// Expo push token of one device. A token belongs to exactly one user at a time.
+model PushToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  platform  String // ios | android
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_tokens")
+}
+
 model KycSubmission {
   id                String    @id @default(uuid())
   creatorId         String
@@ -629,6 +648,28 @@ model ContentReport {
 
   @@index([status])
   @@map("content_reports")
+}
+
+/// A "Report a creator" submission. Supporters are guests, so the reporter is
+/// identified only by an optional email.
+model CreatorReport {
+  id             String    @id @default(uuid())
+  creatorId      String
+  reporterEmail  String?
+  reason         String // FRAUD_OR_SCAM, IMPERSONATION, INAPPROPRIATE_CONTENT, COPYRIGHT, HARASSMENT, OTHER
+  description    String
+  status         String    @default("PENDING") // PENDING, UNDER_REVIEW, RESOLVED, REJECTED
+  reviewedBy     String?
+  reviewedAt     DateTime?
+  resolutionNote String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([creatorId])
+  @@index([status])
+  @@map("creator_reports")
 }
 
 model AuditLog {

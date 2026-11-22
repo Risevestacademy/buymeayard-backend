@@ -7,6 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { USER_EVENTS } from '../analytics/events/user.events';
 import { betterAuth } from 'better-auth';
+import { genericOAuth } from 'better-auth/plugins';
 import * as crypto from 'crypto';
 
 jest.mock('better-auth', () => ({
@@ -54,6 +55,30 @@ describe('createBetterAuth', () => {
     mockEventEmitter = {
       emit: jest.fn(),
     } as unknown as EventEmitter2;
+  });
+
+  describe('youtube connect provider', () => {
+    it('trusts youtube so a connect is not rejected as unlinkable', () => {
+      createBetterAuth(mockPrisma, mockEventEmitter);
+      const config = (betterAuth as jest.Mock).mock.calls[0][0];
+      expect(config.account.accountLinking.trustedProviders).toContain(
+        'youtube',
+      );
+    });
+
+    it('asks Google to show the account picker', () => {
+      createBetterAuth(mockPrisma, mockEventEmitter);
+      const { config } = (genericOAuth as jest.Mock).mock.calls[0][0];
+      const youtube = config.find((c: any) => c.providerId === 'youtube');
+      expect(youtube.prompt).toBe('select_account consent');
+      // The channel id is the account id (profile has no `sub`).
+      expect(youtube.accountSubject({ profile: { id: 'UC123' } })).toBe(
+        'UC123',
+      );
+      expect(youtube.scopes).toEqual([
+        'https://www.googleapis.com/auth/youtube.readonly',
+      ]);
+    });
   });
 
   describe('parameter resolution and backwards compatibility', () => {
@@ -275,19 +300,23 @@ describe('createBetterAuth', () => {
 
       expect(passedConfig.account?.accountLinking).toEqual({
         enabled: true,
-        trustedProviders: ['google', 'apple'],
+        trustedProviders: ['google', 'apple', 'youtube'],
         requireLocalEmailVerified: false,
+        allowDifferentEmails: true,
       });
     });
 
-    it('should configure disableSignUp: true on all social providers', () => {
+    it('should allow sign-up on all social providers', () => {
       createBetterAuth(mockPrisma);
       const passedConfig = (betterAuth as jest.Mock).mock.calls[0][0];
 
-      expect(passedConfig.socialProviders.google.disableSignUp).toBe(true);
-      expect(passedConfig.socialProviders.apple.disableSignUp).toBe(true);
-      expect(passedConfig.socialProviders.twitter.disableSignUp).toBe(true);
-      expect(passedConfig.socialProviders.facebook.disableSignUp).toBe(true);
+      expect(passedConfig.socialProviders.google.disableSignUp).toBe(false);
+      expect(passedConfig.socialProviders.apple.disableSignUp).toBe(false);
+      expect(passedConfig.socialProviders.twitter.disableSignUp).toBe(false);
+      expect(passedConfig.socialProviders.facebook.disableSignUp).toBe(false);
+      expect(passedConfig.socialProviders.discord.disableSignUp).toBe(false);
+      expect(passedConfig.socialProviders.twitch.disableSignUp).toBe(false);
+      expect(passedConfig.socialProviders.tiktok.disableSignUp).toBe(false);
     });
   });
 

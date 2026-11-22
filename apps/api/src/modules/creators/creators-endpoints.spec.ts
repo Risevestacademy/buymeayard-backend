@@ -218,7 +218,6 @@ describe('Creators Endpoints (HTTP Integration)', () => {
             material: {
               name: 'Ankara',
               color: '#E05A47',
-              thumbnailUrl: 'https://cdn.example.com/ankara.jpg',
               quantity: 2,
             },
             message: 'Keep making great content!',

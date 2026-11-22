@@ -27,14 +27,36 @@ describe('AdminMaterialsService', () => {
         .fn()
         .mockResolvedValue({ basePriceMinor: 100_000, currency: 'NGN' }),
     };
+    const storage = {
+      uploadFile: jest.fn().mockResolvedValue({
+        secureUrl: 'https://cdn.test/materials/abc.jpg',
+      }),
+    };
     const service = new AdminMaterialsService(
       prisma as never,
       audit as never,
       materials as never,
+      storage as never,
     );
     jest.spyOn(service, 'get').mockResolvedValue({} as never);
-    return { service, prisma, audit };
+    return { service, prisma, audit, storage };
   }
+
+  describe('uploadThumbnail', () => {
+    it('stores the image in the materials folder and returns its url', async () => {
+      const { service, storage, prisma } = setup();
+      const file = { buffer: Buffer.from('img') } as Express.Multer.File;
+
+      await expect(service.uploadThumbnail(file)).resolves.toEqual({
+        url: 'https://cdn.test/materials/abc.jpg',
+      });
+      expect(storage.uploadFile).toHaveBeenCalledWith(file.buffer, {
+        folder: 'materials',
+        resourceType: 'image',
+      });
+      expect(prisma.material.update).not.toHaveBeenCalled();
+    });
+  });
 
   describe('list', () => {
     it('filters by source and returns summary, naira prices and visibility', async () => {

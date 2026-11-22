@@ -170,7 +170,7 @@ export class DashboardBalanceDto {
   @ApiProperty({
     example: 12000,
     description:
-      'Contributions still processing (checkout opened in the last hour, not yet confirmed by Paystack), in naira',
+      'Contributions still processing (checkout opened in the last hour, not yet confirmed by Bachs), in naira',
   })
   pendingBalance!: number;
 
@@ -289,10 +289,17 @@ export class DashboardContributionMaterialDto {
 
   @ApiPropertyOptional({
     example: 'https://cdn.buymeayard.com/materials/ankara-sm.png',
-    description: 'Thumbnail / icon URL of material',
+    description: 'Small thumbnail URL of the material',
     nullable: true,
   })
-  thumbnailUrl?: string | null;
+  thumbnailSmallUrl?: string | null;
+
+  @ApiPropertyOptional({
+    example: 'https://cdn.buymeayard.com/materials/ankara-lg.png',
+    description: 'Large thumbnail URL of the material',
+    nullable: true,
+  })
+  thumbnailLargeUrl?: string | null;
 
   @ApiProperty({
     example: 1,

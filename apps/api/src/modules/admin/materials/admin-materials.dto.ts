@@ -74,13 +74,19 @@ export class AdminCreateMaterialDto {
   @IsString()
   imageUrl?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description:
+      'Small thumbnail URL. Upload the image with POST /admin/materials/thumbnail and send the returned url',
+  })
   @IsOptional()
   @Transform(trim)
   @IsString()
   thumbnailSmallUrl?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    description:
+      'Large thumbnail URL. Upload the image with POST /admin/materials/thumbnail and send the returned url',
+  })
   @IsOptional()
   @Transform(trim)
   @IsString()
@@ -118,3 +124,13 @@ export class AdminCreateMaterialDto {
 export class AdminUpdateMaterialDto extends PartialType(
   OmitType(AdminCreateMaterialDto, ['creatorId'] as const),
 ) {}
+
+export class ThumbnailUploadResponseDto {
+  @ApiProperty({
+    example:
+      'https://res.cloudinary.com/buymeayard/image/upload/v1727627400/materials/abc123.jpg',
+    description:
+      'CDN URL of the uploaded image. Send it as thumbnailSmallUrl or thumbnailLargeUrl when creating or editing a material',
+  })
+  url: string;
+}

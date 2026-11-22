@@ -42,6 +42,8 @@ export const NAIRA_RESPONSE_KEYS = [
   'feeCharged',
   'returnedToBalance',
   'transferred',
+  'serviceFee',
+  'transferFee',
 ] as const;
 
 @Injectable()
