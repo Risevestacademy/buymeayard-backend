@@ -148,6 +148,38 @@ describe('BachsProvider', () => {
       expect(body.cancel_url).toBe('https://app/failed');
     });
 
+    it('moves localhost return URLs onto the fallback site when one is set', async () => {
+      reply(201, { checkout_id: 'chk_1', checkout_url: 'https://pay/chk_1' });
+      await make({
+        LOCALHOST_RETURN_ORIGIN: 'https://staging.buymeayard.com',
+      }).initializePayment({
+        paymentId: 'pay-1',
+        supportId: 'sup-1',
+        amount: 500_000,
+        currency: 'NGN',
+        callbackUrl: 'http://localhost:3000/adeola/thanks?supportId=s1',
+        cancelUrl: 'https://app/failed',
+      });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.success_url).toBe(
+        'https://staging.buymeayard.com/adeola/thanks?supportId=s1',
+      );
+      expect(body.cancel_url).toBe('https://app/failed');
+    });
+
+    it('leaves localhost URLs alone when no fallback is set', async () => {
+      reply(201, { checkout_id: 'chk_1', checkout_url: 'https://pay/chk_1' });
+      await make().initializePayment({
+        paymentId: 'pay-1',
+        supportId: 'sup-1',
+        amount: 500_000,
+        currency: 'NGN',
+        callbackUrl: 'http://localhost:3000/thanks',
+      });
+      const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+      expect(body.success_url).toBe('http://localhost:3000/thanks');
+    });
+
     it('leaves the customer out so the checkout collects the email', async () => {
       reply(201, { checkout_id: 'chk_1', checkout_url: 'https://pay/chk_1' });
       await make().initializePayment({

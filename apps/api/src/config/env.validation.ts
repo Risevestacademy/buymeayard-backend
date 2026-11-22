@@ -65,6 +65,8 @@ export const envSchema = z.object({
   DEFAULT_CURRENCY: z.string().default('NGN'),
 
   CREATOR_FRONTEND_URL: z.string().url().default('http://localhost:3001'),
+  // Test deployments only: where a localhost checkout return URL is sent instead
+  LOCALHOST_RETURN_ORIGIN: z.string().url().optional(),
 
   // KYC (Didit)
   DIDIT_API_KEY: z.string().optional(),

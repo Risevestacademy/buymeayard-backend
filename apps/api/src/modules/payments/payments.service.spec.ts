@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { PaymentProviderRejectedError } from '../../infrastructure/payments/payment-provider.interface';
 import { PaymentsService } from './payments.service';
 
 describe('PaymentsService.initializePayment contribution gate', () => {
@@ -69,6 +70,19 @@ describe('PaymentsService.initializePayment contribution gate', () => {
       { paymentId: 'payment-1' },
     );
     expect(provider.initializePayment).toHaveBeenCalled();
+  });
+
+  it('returns a 400 with the provider message when it rejects the checkout', async () => {
+    const { service, provider } = setup('ACTIVE');
+    provider.initializePayment.mockRejectedValue(
+      new PaymentProviderRejectedError(
+        'success_url must be a publicly accessible URL (localhost is not allowed)',
+      ),
+    );
+    await expect(service.initializePayment('support-1')).rejects.toMatchObject({
+      status: 400,
+      response: { message: expect.stringContaining('success_url') },
+    });
   });
 
   it('lets a guest pay with the email they gave on the intent', async () => {

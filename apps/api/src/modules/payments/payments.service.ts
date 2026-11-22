@@ -8,7 +8,10 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
-import { PAYMENT_PROVIDER } from '../../infrastructure/payments/payment-provider.interface';
+import {
+  PAYMENT_PROVIDER,
+  PaymentProviderRejectedError,
+} from '../../infrastructure/payments/payment-provider.interface';
 import type { PaymentProvider } from '../../infrastructure/payments/payment-provider.interface';
 import { LedgerService } from '../ledger/ledger.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
@@ -96,15 +99,28 @@ export class PaymentsService {
     const payment = await this.getOrCreatePaymentAttempt(support);
 
     // Start the payment with the provider
-    const initResult = await this.paymentProvider.initializePayment({
-      paymentId: payment.id,
-      supportId: support.id,
-      amount: support.totalAmount,
-      currency: support.currency,
-      email: support.guestEmail ?? undefined,
-      callbackUrl: callback,
-      cancelUrl: cancel,
-    });
+    let initResult;
+    try {
+      initResult = await this.paymentProvider.initializePayment({
+        paymentId: payment.id,
+        supportId: support.id,
+        amount: support.totalAmount,
+        currency: support.currency,
+        email: support.guestEmail ?? undefined,
+        callbackUrl: callback,
+        cancelUrl: cancel,
+      });
+    } catch (error) {
+      // The provider refused the request itself (e.g. a localhost return
+      // URL), which is the caller's to fix, not a server fault
+      if (error instanceof PaymentProviderRejectedError) {
+        throw new BadRequestException({
+          code: ErrorCodes.VALIDATION_ERROR,
+          message: error.message,
+        });
+      }
+      throw error;
+    }
 
     // Update payment with provider reference
     await this.prisma.payment.update({
