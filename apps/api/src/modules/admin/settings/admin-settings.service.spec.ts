@@ -7,6 +7,7 @@ describe('AdminSettingsService', () => {
     payoutFeeTierLimit: 5_000_000,
     payoutFeeUpToLimit: 5_000,
     payoutFeeAboveLimit: 10_000,
+    currencyRates: {},
   };
 
   function setup() {
@@ -42,6 +43,28 @@ describe('AdminSettingsService', () => {
         newState: { ...current, platformFeePercent: 8 },
       }),
     );
+  });
+
+  it('saves currency rates as sent, not as kobo', async () => {
+    const { service, settings } = setup();
+    await service.update('admin-1', { currencyRates: { USD: 1500 } });
+    expect(settings.save).toHaveBeenCalledWith(
+      { currencyRates: { USD: 1500 } },
+      'admin-1',
+    );
+  });
+
+  it.each<Record<string, number>>([
+    { EUR: 1700 },
+    { NGN: 1 },
+    { USD: 0 },
+    { USD: -5 },
+  ])('rejects currency rates %p', async (currencyRates) => {
+    const { service, settings } = setup();
+    await expect(
+      service.update('admin-1', { currencyRates }),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(settings.save).not.toHaveBeenCalled();
   });
 
   it('rejects a minimum withdrawal that the payout fee would swallow', async () => {

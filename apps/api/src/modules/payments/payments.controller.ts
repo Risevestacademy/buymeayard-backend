@@ -22,12 +22,36 @@ import {
   InitializePaymentResponseDto,
 } from './dto/initialize-payment.dto';
 import { SupportStatusResponseDto } from './dto/support-status.dto';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
+import { CHARGE_CURRENCIES } from '../supports/utils/charge-currency.util';
+import { CurrencyOptionDto } from './dto/currency-option.dto';
 
 @ApiTags('payments')
 @UseInterceptors(NairaResponseInterceptor)
 @Controller()
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly platformSettings: PlatformSettingsService,
+  ) {}
+
+  @Public()
+  @Get('payments/currencies')
+  @ApiOperation({
+    summary: 'Currencies a supporter can pay in',
+    description:
+      "Public. NGN is always first. Pick one from the supporter's region, show prices in it, and send its code as `currency` on the quote and support calls. `nairaPerUnit` is the rate we use to turn that currency into naira.",
+  })
+  @ApiResponse({ status: 200, type: [CurrencyOptionDto] })
+  async currencies(): Promise<CurrencyOptionDto[]> {
+    const { currencyRates } = await this.platformSettings.get();
+    return CHARGE_CURRENCIES.filter(
+      (code) => code === 'NGN' || (currencyRates[code] ?? 0) > 0,
+    ).map((code) => ({
+      code,
+      nairaPerUnit: code === 'NGN' ? 1 : currencyRates[code],
+    }));
+  }
 
   @Public()
   @Post('payments/initialize')

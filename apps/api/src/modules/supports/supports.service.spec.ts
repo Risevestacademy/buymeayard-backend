@@ -30,6 +30,7 @@ describe('SupportsService guest gifting', () => {
       themed: adire,
       fallback: ankara,
     },
+    currencyRates: Record<string, number> = {},
   ) {
     const prisma = {
       creatorProfile: {
@@ -56,7 +57,9 @@ describe('SupportsService guest gifting', () => {
       support: { create: jest.fn().mockResolvedValue({ id: 'support-1' }) },
     };
     const config = {
-      get: jest.fn().mockResolvedValue({ platformFeePercent: 10 }),
+      get: jest
+        .fn()
+        .mockResolvedValue({ platformFeePercent: 10, currencyRates }),
     };
     return {
       prisma,
@@ -102,6 +105,55 @@ describe('SupportsService guest gifting', () => {
         }),
       }),
     );
+  });
+
+  it('charges in the supporter currency and credits the creator in naira at the locked rate', async () => {
+    const { service, prisma } = setup(
+      {},
+      { themed: adire, fallback: ankara },
+      { USD: 1500 },
+    );
+
+    const res = await service.createGuestIntent('adeola', {
+      amount: 10,
+      currency: 'usd',
+    });
+
+    // $10 at 1,500 = ₦15,000 = 7.5 yards of a ₦2,000 fabric
+    expect(res).toMatchObject({ amount: 1000, currency: 'USD', yards: 7.5 });
+    expect(prisma.support.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          currency: 'NGN',
+          totalAmount: 1_500_000,
+          platformFee: 150_000,
+          creatorAmount: 1_350_000,
+          chargeCurrency: 'USD',
+          chargeAmount: 1000,
+          fxRate: 1500,
+        }),
+      }),
+    );
+  });
+
+  it('falls back to naira for a currency that has no rate', async () => {
+    const { service } = setup();
+    const res = await service.quoteGift('adeola', {
+      amount: 5000,
+      currency: 'USD',
+    });
+    expect(res).toMatchObject({ amount: 500_000, currency: 'NGN' });
+  });
+
+  it('rejects an amount whose naira equivalent is below the minimum', async () => {
+    const { service } = setup(
+      {},
+      { themed: adire, fallback: ankara },
+      { USD: 1500 },
+    );
+    await expect(
+      service.quoteGift('adeola', { amount: 0.01, currency: 'USD' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('returns the creator thank-you message when they set one', async () => {

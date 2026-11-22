@@ -104,8 +104,9 @@ export class PaymentsService {
       initResult = await this.paymentProvider.initializePayment({
         paymentId: payment.id,
         supportId: support.id,
-        amount: support.totalAmount,
-        currency: support.currency,
+        // Bachs charges in what the supporter chose; the ledger stays in naira
+        amount: support.chargeAmount ?? support.totalAmount,
+        currency: support.chargeCurrency,
         email: support.guestEmail ?? undefined,
         callbackUrl: callback,
         cancelUrl: cancel,
@@ -154,6 +155,8 @@ export class PaymentsService {
     id: string;
     totalAmount: number;
     currency: string;
+    chargeCurrency: string;
+    chargeAmount: number | null;
   }) {
     const existing = await this.prisma.payment.findUnique({
       where: { supportId: support.id },
@@ -168,6 +171,8 @@ export class PaymentsService {
           providerReference: `temp_${Date.now()}_${support.id.slice(0, 8)}`,
           amount: support.totalAmount,
           currency: support.currency,
+          chargeCurrency: support.chargeCurrency,
+          chargeAmount: support.chargeAmount,
           status: PaymentStatus.PENDING,
         },
       });
@@ -215,6 +220,8 @@ export class PaymentsService {
         status: true,
         totalAmount: true,
         currency: true,
+        chargeCurrency: true,
+        chargeAmount: true,
         items: {
           select: {
             quantity: true,
@@ -253,8 +260,8 @@ export class PaymentsService {
       paid:
         support.status === SupportStatus.PAID ||
         support.status === SupportStatus.COMPLETED,
-      amount: support.totalAmount,
-      currency: support.currency,
+      amount: support.chargeAmount ?? support.totalAmount,
+      currency: support.chargeCurrency,
       yards: yards.toNumber(),
       material: support.items[0]
         ? toContributionMaterial(

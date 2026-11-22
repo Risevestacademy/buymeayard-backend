@@ -7,6 +7,11 @@ import { AuditLogService } from '../../analytics/audit-log.service';
 import { ErrorCodes } from '../../../common/errors/error-codes';
 import { MoneyUtil } from '../../../common/utils/money.util';
 import { AdminUpdateSettingsDto } from './admin-settings.dto';
+import {
+  CHARGE_CURRENCIES,
+  LEDGER_CURRENCY,
+  isChargeCurrency,
+} from '../../supports/utils/charge-currency.util';
 
 const MONEY_KEYS = [
   'minimumWithdrawal',
@@ -55,6 +60,23 @@ export class AdminSettingsService {
       ),
     );
     const next = { ...previous, ...patch };
+
+    if (patch.currencyRates) {
+      for (const [code, rate] of Object.entries(patch.currencyRates)) {
+        if (
+          code === LEDGER_CURRENCY ||
+          !isChargeCurrency(code) ||
+          typeof rate !== 'number' ||
+          !Number.isFinite(rate) ||
+          rate <= 0
+        ) {
+          throw new BadRequestException({
+            code: ErrorCodes.INVALID_SETTINGS,
+            message: `currencyRates takes a positive naira rate for ${CHARGE_CURRENCIES.filter((c) => c !== LEDGER_CURRENCY).join(', ')}`,
+          });
+        }
+      }
+    }
 
     const highestFee = Math.max(
       next.payoutFeeUpToLimit,
