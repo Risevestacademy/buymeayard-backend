@@ -480,6 +480,27 @@ describe('AuthController', () => {
       expect(res.status).toHaveBeenCalledWith(HttpStatus.OK);
       expect(result).toEqual({ status: true });
     });
+
+    it.each([
+      ['revokeOtherSessions', { revokeOtherSessions: true }],
+      ['the older revokeOtherSession spelling', { revokeOtherSession: true }],
+    ])('signs out other sessions with %s', async (_label, extra) => {
+      const dto = {
+        currentPassword: 'OldPassword!',
+        newPassword: 'NewPassword123!',
+        ...extra,
+      };
+      const { req, res } = createMockReqRes();
+      authService.changePassword.mockResolvedValue(
+        createSuccessResponse({ status: true }),
+      );
+
+      await controller.changePassword(dto, req, res);
+
+      expect(authService.changePassword).toHaveBeenCalledWith(
+        expect.objectContaining({ revokeOtherSessions: true }),
+      );
+    });
   });
 
   // --------------------------------------------------------

@@ -171,12 +171,14 @@ export class AuthService implements OnModuleInit {
   async changePassword(params: {
     currentPassword: string;
     newPassword: string;
+    revokeOtherSessions?: boolean;
     headers: Headers;
   }): Promise<globalThis.Response> {
     return this.getAuth().api.changePassword({
       body: {
         currentPassword: params.currentPassword,
         newPassword: params.newPassword,
+        revokeOtherSessions: params.revokeOtherSessions,
       },
       headers: params.headers,
       asResponse: true,
