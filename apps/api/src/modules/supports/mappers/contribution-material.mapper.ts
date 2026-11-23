@@ -15,7 +15,6 @@ export function toContributionMaterial(
   name: string,
   look: PlatformMaterialLook | null | undefined,
   yards: number,
-  customThumbnail?: string | null,
 ): DashboardContributionMaterialDto {
   return {
     id: materialId,
@@ -23,7 +22,6 @@ export function toContributionMaterial(
     color: look?.color || null,
     thumbnailSmallUrl: look?.thumbnailSmallUrl || null,
     thumbnailLargeUrl: look?.thumbnailLargeUrl || null,
-    customMaterialThumbnail: customThumbnail || null,
     quantity: yards,
   };
 }

@@ -229,7 +229,6 @@ export class PaymentsService {
             creatorMaterial: {
               select: {
                 materialId: true,
-                customThumbnailUrl: true,
                 material: {
                   select: {
                     color: true,
@@ -270,7 +269,6 @@ export class PaymentsService {
             support.items[0].materialNameSnapshot,
             support.items[0].creatorMaterial.material,
             yards.toNumber(),
-            support.items[0].creatorMaterial.customThumbnailUrl,
           )
         : null,
       materialName: support.items[0]?.materialNameSnapshot ?? null,
@@ -435,7 +433,6 @@ export class PaymentsService {
                 payment.support.items[0].materialNameSnapshot,
                 payment.support.items[0].creatorMaterial.material,
                 yards,
-                payment.support.items[0].creatorMaterial.customThumbnailUrl,
               )
             : null,
           amount: payment.support.creatorAmount,

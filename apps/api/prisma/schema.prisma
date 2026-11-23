@@ -191,17 +191,16 @@ model Material {
 }
 
 model CreatorMaterial {
-  id                 String   @id @default(uuid())
-  creatorId          String
-  materialId         String
-  price              Int // Minor units (kobo)
-  currency           String   @default("NGN")
-  displayName        String?
-  description        String?
-  customThumbnailUrl String? // The creator's own banner for this material; null uses the system thumbnail
-  status             String   @default("ACTIVE") // ACTIVE, INACTIVE
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id          String   @id @default(uuid())
+  creatorId   String
+  materialId  String
+  price       Int // Minor units (kobo)
+  currency    String   @default("NGN")
+  displayName String?
+  description String?
+  status      String   @default("ACTIVE") // ACTIVE, INACTIVE
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   creator      CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   material     Material       @relation(fields: [materialId], references: [id], onDelete: Cascade)

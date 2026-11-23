@@ -39,7 +39,6 @@ function withMaterial<T extends SupportWithItems>(support: T) {
         first.materialNameSnapshot,
         first.creatorMaterial.material,
         yards,
-        first.creatorMaterial.customThumbnailUrl,
       )
     : null;
   return {

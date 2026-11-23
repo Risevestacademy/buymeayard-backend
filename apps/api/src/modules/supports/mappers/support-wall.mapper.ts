@@ -20,7 +20,6 @@ export const SUPPORT_WALL_SELECT = {
       creatorMaterial: {
         select: {
           materialId: true,
-          customThumbnailUrl: true,
           material: {
             select: {
               color: true,
@@ -48,7 +47,6 @@ export function toSupportWallItem(row: SupportWallRow): SupportWallItemDto {
         item.materialNameSnapshot,
         item.creatorMaterial.material,
         item.quantity.toNumber(),
-        item.creatorMaterial.customThumbnailUrl,
       )
     : null;
 

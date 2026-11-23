@@ -44,7 +44,6 @@ describe('AdminSupportsService contribution material', () => {
     color: '#7F3516',
     thumbnailSmallUrl: 'https://cdn/adire-sm.png',
     thumbnailLargeUrl: null,
-    customMaterialThumbnail: null,
     quantity: 2.5,
   };
 
