@@ -29,6 +29,21 @@ export class NotificationItemDto {
   })
   data!: Record<string, any> | null;
 
+  @ApiProperty({
+    example: 'a1b2c3',
+    nullable: true,
+    description: 'Payout to open. Set on PAYOUT notifications, otherwise null.',
+  })
+  payoutId!: string | null;
+
+  @ApiProperty({
+    example: 'd4e5f6',
+    nullable: true,
+    description:
+      'Contribution (support) to open. Set on CONTRIBUTION notifications, otherwise null.',
+  })
+  contributionId!: string | null;
+
   @ApiProperty({ example: '/dashboard/payouts', nullable: true })
   actionUrl!: string | null;
 
