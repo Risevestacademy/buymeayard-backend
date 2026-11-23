@@ -15,6 +15,7 @@ import {
   Delete,
   Body,
   Param,
+  ParseUUIDPipe,
   Query,
   UploadedFile,
   UseInterceptors,
@@ -48,6 +49,7 @@ import {
   CreatorProfileDataDto,
   CreatorMaterialResponseDto,
   AvatarUploadResponseDto,
+  MaterialThumbnailResponseDto,
 } from './dto/creator-response.dto';
 import { CheckSlugResponseDto } from './dto/check-slug.dto';
 import { CreatorShareLinkResponseDto } from './dto/share-link.dto';
@@ -760,6 +762,80 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
     file: Express.Multer.File,
   ) {
     return this.creatorsService.uploadAvatar(userId, file);
+  }
+
+  @Post('me/materials/:materialId/thumbnail')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({
+    summary: 'Set your own banner for a material',
+    description:
+      "Uploads an image (JPEG, PNG or WebP, max 5 MB) as the creator's own banner for a material on their menu. It is live immediately and comes back as `customMaterialThumbnail` on every material object for this creator. Uploading again replaces it. Use DELETE to go back to the system thumbnail.",
+  })
+  @ApiParam({ name: 'materialId', description: 'A material on your menu' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { file: { type: 'string', format: 'binary' } },
+      required: ['file'],
+    },
+  })
+  @ApiResponse({ status: 201, type: MaterialThumbnailResponseDto })
+  @ApiResponse({
+    status: 400,
+    description: 'No file, wrong file type, or file too large.',
+    type: ErrorResponseDto,
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'The material is not on your menu.',
+    type: ErrorResponseDto,
+  })
+  async uploadMaterialThumbnail(
+    @CurrentUser('id') userId: string,
+    @Param('materialId', ParseUUIDPipe) materialId: string,
+    @UploadedFile(
+      new ParseFilePipe({
+        validators: [
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
+          new FileTypeValidator({
+            fileType: /^image\/(jpeg|png|webp)$/,
+            fallbackToMimetype: true,
+          }),
+        ],
+      }),
+    )
+    file: Express.Multer.File,
+  ) {
+    return this.creatorsService.uploadMaterialThumbnail(
+      userId,
+      materialId,
+      file,
+    );
+  }
+
+  @Delete('me/materials/:materialId/thumbnail')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Go back to the system thumbnail for a material',
+    description:
+      "Removes the creator's own banner. `customMaterialThumbnail` becomes null and the frontend uses the system thumbnail again. Safe to call when none is set.",
+  })
+  @ApiParam({ name: 'materialId', description: 'A material on your menu' })
+  @ApiResponse({ status: 200, type: MaterialThumbnailResponseDto })
+  @ApiResponse({
+    status: 404,
+    description: 'The material is not on your menu.',
+    type: ErrorResponseDto,
+  })
+  async resetMaterialThumbnail(
+    @CurrentUser('id') userId: string,
+    @Param('materialId', ParseUUIDPipe) materialId: string,
+  ) {
+    return this.creatorsService.resetMaterialThumbnail(userId, materialId);
   }
 
   @Get('me/materials')
