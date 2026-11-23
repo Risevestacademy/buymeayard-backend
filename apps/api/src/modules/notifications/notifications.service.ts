@@ -11,6 +11,12 @@ import {
 import { ErrorCodes } from '../../common/errors/error-codes';
 import { buildPagination } from '../../common/utils/pagination.util';
 
+/** Reads an id out of a notification's JSON `data`, or null when absent. */
+function entityId(data: unknown, key: string): string | null {
+  const value = (data as Record<string, unknown> | null)?.[key];
+  return typeof value === 'string' ? value : null;
+}
+
 @Injectable()
 export class NotificationsService {
   constructor(
@@ -53,6 +59,8 @@ export class NotificationsService {
 
     const mappedItems: NotificationItemDto[] = items.map((item) => ({
       id: item.id,
+      payoutId: entityId(item.data, 'payoutId'),
+      contributionId: entityId(item.data, 'supportId'),
       category: item.category,
       type: item.type,
       title: item.title,

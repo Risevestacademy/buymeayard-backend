@@ -36,6 +36,28 @@ describe('NotificationsService', () => {
   });
 
   describe('getUserNotifications', () => {
+    it('exposes the contribution id from a contribution notification', async () => {
+      prisma.notification.count.mockResolvedValue(1);
+      prisma.notification.findMany.mockResolvedValue([
+        {
+          id: 'n_3',
+          category: 'CONTRIBUTION',
+          type: 'CONTRIBUTION_RECEIVED',
+          title: 'New contribution received!',
+          body: 'Tomi bought 2.5 yards',
+          data: { supportId: 'sup_1', amount: 500000 },
+          actionUrl: '/dashboard/contributions',
+          readAt: null,
+          createdAt: new Date('2026-10-08T10:00:00Z'),
+        },
+      ]);
+      const res = await service.getUserNotifications('usr_1');
+      expect(res.items[0]).toMatchObject({
+        contributionId: 'sup_1',
+        payoutId: null,
+      });
+    });
+
     it('returns paginated feed with unread count and category filters', async () => {
       prisma.notification.count
         .mockResolvedValueOnce(3) // unreadCount
@@ -48,7 +70,7 @@ describe('NotificationsService', () => {
           type: 'PAYOUT_COMPLETED',
           title: 'Money landed',
           body: '₦450,000 sent to Access Bank',
-          data: { amount: 450000 },
+          data: { amount: 450000, payoutId: 'po_1' },
           actionUrl: '/dashboard/payouts',
           readAt: null,
           createdAt: new Date('2026-10-08T10:00:00Z'),
@@ -77,6 +99,14 @@ describe('NotificationsService', () => {
       expect(res.items).toHaveLength(2);
       expect(res.items[0].isRead).toBe(false);
       expect(res.items[1].isRead).toBe(true);
+      expect(res.items[0]).toMatchObject({
+        payoutId: 'po_1',
+        contributionId: null,
+      });
+      expect(res.items[1]).toMatchObject({
+        payoutId: null,
+        contributionId: null,
+      });
       expect(res.pagination).toEqual({
         page: 1,
         limit: 10,
