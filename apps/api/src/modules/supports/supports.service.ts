@@ -179,6 +179,7 @@ export class SupportsService {
         materialName,
         material.material,
         yards.toNumber(),
+        material.customThumbnailUrl,
       ),
       materialName,
     };
@@ -246,6 +247,7 @@ export class SupportsService {
         materialName,
         material.material,
         yards.toNumber(),
+        material.customThumbnailUrl,
       ),
       materialName,
       thankYouMessage: resolveThankYouMessage(creator.thankYouMessage),

@@ -301,6 +301,15 @@ export class DashboardContributionMaterialDto {
   })
   thumbnailLargeUrl?: string | null;
 
+  @ApiPropertyOptional({
+    example:
+      'https://res.cloudinary.com/buymeayard/image/upload/v1/material-thumbnails/creator-1-ankara.jpg',
+    description:
+      "The creator's own banner image for this material, or null. When present, show it instead of `thumbnailLargeUrl`; when null, use the system thumbnail.",
+    nullable: true,
+  })
+  customMaterialThumbnail?: string | null;
+
   @ApiProperty({
     example: 1,
     description: 'Number of yards gifted',

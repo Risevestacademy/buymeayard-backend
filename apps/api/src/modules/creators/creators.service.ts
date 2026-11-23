@@ -741,6 +741,75 @@ export class CreatorsService {
   }
 
   // -----------------------------------------------------------
+  // Custom material thumbnail
+  // -----------------------------------------------------------
+
+  private async findOwnCreatorMaterial(userId: string, materialId: string) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+    const creatorMaterial = await this.prisma.creatorMaterial.findUnique({
+      where: {
+        creatorId_materialId: { creatorId: profile.id, materialId },
+      },
+      select: { id: true },
+    });
+    if (!creatorMaterial) {
+      throw new NotFoundException('This material is not on your menu');
+    }
+    return { profileId: profile.id, creatorMaterialId: creatorMaterial.id };
+  }
+
+  /** Sets the creator's own banner for one of their materials. Live at once. */
+  async uploadMaterialThumbnail(
+    userId: string,
+    materialId: string,
+    file: Express.Multer.File,
+  ) {
+    const { profileId, creatorMaterialId } = await this.findOwnCreatorMaterial(
+      userId,
+      materialId,
+    );
+
+    const result = await this.storage.uploadFile(file.buffer, {
+      folder: 'material-thumbnails',
+      publicId: `creator-${profileId}-${materialId}`,
+      resourceType: 'image',
+    });
+
+    await this.prisma.creatorMaterial.update({
+      where: { id: creatorMaterialId },
+      data: { customThumbnailUrl: result.secureUrl },
+    });
+
+    return { materialId, customMaterialThumbnail: result.secureUrl };
+  }
+
+  /** Goes back to the system thumbnail for one of the creator's materials. */
+  async resetMaterialThumbnail(userId: string, materialId: string) {
+    const { profileId, creatorMaterialId } = await this.findOwnCreatorMaterial(
+      userId,
+      materialId,
+    );
+
+    await this.prisma.creatorMaterial.update({
+      where: { id: creatorMaterialId },
+      data: { customThumbnailUrl: null },
+    });
+
+    // The image is no longer referenced; a failed clean-up is not the creator's problem
+    await this.storage
+      .deleteFile(`material-thumbnails/creator-${profileId}-${materialId}`)
+      .catch(() => false);
+
+    return { materialId, customMaterialThumbnail: null };
+  }
+
+  // -----------------------------------------------------------
   // Creator Materials (Yard Menu)
   // -----------------------------------------------------------
 
@@ -777,6 +846,7 @@ export class CreatorsService {
             color: themeMat.color,
             thumbnailSmallUrl: themeMat.thumbnailSmallUrl,
             thumbnailLargeUrl: themeMat.thumbnailLargeUrl,
+            customMaterialThumbnail: null,
             imageUrl: themeMat.imageUrl,
             status: themeMat.status,
             isCustom: Boolean(themeMat.creatorId),
@@ -795,6 +865,7 @@ export class CreatorsService {
       color: item.material?.color,
       thumbnailSmallUrl: item.material?.thumbnailSmallUrl,
       thumbnailLargeUrl: item.material?.thumbnailLargeUrl,
+      customMaterialThumbnail: item.customThumbnailUrl ?? null,
       isCustom: Boolean(item.material?.creatorId),
     }));
   }
@@ -930,11 +1001,15 @@ export class CreatorsService {
     });
 
     // Return the updated menu
-    return this.prisma.creatorMaterial.findMany({
+    const menu = await this.prisma.creatorMaterial.findMany({
       where: { creatorId: profile.id, status: 'ACTIVE' },
       include: { material: true },
       orderBy: { createdAt: 'asc' },
     });
+    return menu.map((item) => ({
+      ...item,
+      customMaterialThumbnail: item.customThumbnailUrl ?? null,
+    }));
   }
 
   // Helper to guarantee a creator always has material items available
@@ -1217,6 +1292,7 @@ export class CreatorsService {
             color: mat.color || null,
             thumbnailSmallUrl: mat.thumbnailSmallUrl || null,
             thumbnailLargeUrl: mat.thumbnailLargeUrl || null,
+            customMaterialThumbnail: item.customThumbnailUrl || null,
             imageUrl: mat.imageUrl || null,
             status: item.status || 'ACTIVE',
             isCustom: Boolean(mat.creatorId),
@@ -1256,6 +1332,7 @@ export class CreatorsService {
         color: mat.color || null,
         thumbnailSmallUrl: mat.thumbnailSmallUrl || null,
         thumbnailLargeUrl: mat.thumbnailLargeUrl || null,
+        customMaterialThumbnail: null,
         imageUrl: mat.imageUrl || null,
         status: mat.status || 'ACTIVE',
         isCustom: Boolean(mat.creatorId),
@@ -1617,6 +1694,8 @@ export class CreatorsService {
             firstItem.creatorMaterial?.material?.thumbnailSmallUrl || null,
           thumbnailLargeUrl:
             firstItem.creatorMaterial?.material?.thumbnailLargeUrl || null,
+          customMaterialThumbnail:
+            firstItem.creatorMaterial?.customThumbnailUrl || null,
           quantity: support.items
             .reduce((acc, it) => acc.add(it.quantity), new Prisma.Decimal(0))
             .toNumber(),

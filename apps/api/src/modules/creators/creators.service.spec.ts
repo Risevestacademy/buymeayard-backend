@@ -53,6 +53,8 @@ describe('CreatorsService', () => {
       create: jest.Mock;
       upsert: jest.Mock;
       updateMany: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
     };
     support: {
       aggregate: jest.Mock;
@@ -125,6 +127,8 @@ describe('CreatorsService', () => {
         create: jest.fn(),
       },
       creatorMaterial: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
         findMany: jest.fn(),
         findFirst: jest.fn(),
         create: jest.fn(),
@@ -709,6 +713,80 @@ describe('CreatorsService', () => {
         data: { avatarUrl: 'https://cdn.buymeayard.com/mock.jpg' },
       });
       expect(res.avatarUrl).toBe('https://cdn.buymeayard.com/mock.jpg');
+    });
+  });
+
+  describe('material thumbnail override', () => {
+    const file = { buffer: Buffer.from('img') } as Express.Multer.File;
+
+    beforeEach(() => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'creator-1' });
+      prisma.creatorMaterial.findUnique.mockResolvedValue({ id: 'cm-1' });
+    });
+
+    it('stores the uploaded image on the creator material', async () => {
+      storage.uploadFile.mockResolvedValue({
+        secureUrl: 'https://cdn.buymeayard.com/custom.jpg',
+      });
+
+      const res = await service.uploadMaterialThumbnail(
+        'user-1',
+        'mat-1',
+        file,
+      );
+
+      expect(storage.uploadFile).toHaveBeenCalledWith(file.buffer, {
+        folder: 'material-thumbnails',
+        publicId: 'creator-creator-1-mat-1',
+        resourceType: 'image',
+      });
+      expect(prisma.creatorMaterial.update).toHaveBeenCalledWith({
+        where: { id: 'cm-1' },
+        data: { customThumbnailUrl: 'https://cdn.buymeayard.com/custom.jpg' },
+      });
+      expect(res).toEqual({
+        materialId: 'mat-1',
+        customMaterialThumbnail: 'https://cdn.buymeayard.com/custom.jpg',
+      });
+    });
+
+    it('refuses a material that is not on the creator menu', async () => {
+      prisma.creatorMaterial.findUnique.mockResolvedValue(null);
+      await expect(
+        service.uploadMaterialThumbnail('user-1', 'mat-9', file),
+      ).rejects.toThrow(NotFoundException);
+      expect(storage.uploadFile).not.toHaveBeenCalled();
+    });
+
+    it('clears the override and removes the stored image on reset', async () => {
+      const res = await service.resetMaterialThumbnail('user-1', 'mat-1');
+
+      expect(prisma.creatorMaterial.update).toHaveBeenCalledWith({
+        where: { id: 'cm-1' },
+        data: { customThumbnailUrl: null },
+      });
+      expect(storage.deleteFile).toHaveBeenCalledWith(
+        'material-thumbnails/creator-creator-1-mat-1',
+      );
+      expect(res).toEqual({
+        materialId: 'mat-1',
+        customMaterialThumbnail: null,
+      });
+    });
+
+    it('returns the override on the creator menu', async () => {
+      prisma.creatorMaterial.findMany.mockResolvedValue([
+        {
+          id: 'cm-1',
+          materialId: 'mat-1',
+          customThumbnailUrl: 'https://cdn.buymeayard.com/custom.jpg',
+          material: { name: 'Ankara' },
+        },
+      ]);
+      const [item] = await service.getCreatorMaterials('user-1');
+      expect(item.customMaterialThumbnail).toBe(
+        'https://cdn.buymeayard.com/custom.jpg',
+      );
     });
   });
 
