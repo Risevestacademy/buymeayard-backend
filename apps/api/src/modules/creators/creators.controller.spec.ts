@@ -3,6 +3,7 @@ import { CreatorsController } from './creators.controller';
 import { CreatorsService } from './creators.service';
 import { SupportsService } from '../supports/supports.service';
 import { PaymentsService } from '../payments/payments.service';
+import { SupportAlertsService } from '../supports/support-alerts.service';
 
 describe('CreatorsController', () => {
   let controller: CreatorsController;
@@ -97,6 +98,10 @@ describe('CreatorsController', () => {
         },
         {
           provide: SupportsService,
+          useValue: {},
+        },
+        {
+          provide: SupportAlertsService,
           useValue: {},
         },
       ],

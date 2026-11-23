@@ -12,7 +12,11 @@ export interface GiftAlert {
   supporterName: string;
   materialName: string;
   yards: number;
-  netAmount: number; // kobo, the creator's cut after the fee
+  /** The creator's cut after the fee. Kobo inside the API; the class-level
+   * NairaResponseInterceptor on CreatorsController converts it to naira
+   * before it reaches the browser.
+   */
+  netAmount: number;
   message: string | null;
 }
 
