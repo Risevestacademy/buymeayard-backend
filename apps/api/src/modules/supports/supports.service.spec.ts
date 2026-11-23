@@ -216,6 +216,9 @@ describe('SupportsService.getPublicWall', () => {
             guestName: 'Tomi',
             message: 'Keep creating',
             visibility: 'PUBLIC',
+            totalAmount: 1_500_000,
+            chargeAmount: 1000,
+            chargeCurrency: 'USD',
             supporter: null,
             items: [
               {
@@ -256,6 +259,10 @@ describe('SupportsService.getPublicWall', () => {
       expect.objectContaining({
         id: 's-1',
         displayName: 'Tomi',
+        amount: 1_500_000,
+        currency: 'NGN',
+        paidAmount: 1000,
+        paidCurrency: 'USD',
         materialId: 'mat-adire',
         materialName: 'Adire',
         material: {

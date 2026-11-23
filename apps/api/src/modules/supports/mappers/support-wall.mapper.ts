@@ -13,6 +13,9 @@ export const SUPPORT_WALL_SELECT = {
   guestName: true,
   message: true,
   visibility: true,
+  totalAmount: true,
+  chargeAmount: true,
+  chargeCurrency: true,
   items: {
     select: {
       materialNameSnapshot: true,
@@ -57,6 +60,10 @@ export function toSupportWallItem(row: SupportWallRow): SupportWallItemDto {
     materialId: material?.id ?? null,
     materialName: material?.name ?? null,
     message: wallMessage(row),
+    amount: row.totalAmount,
+    currency: 'NGN',
+    paidAmount: row.chargeAmount ?? row.totalAmount,
+    paidCurrency: row.chargeCurrency,
     createdAt: row.createdAt,
   };
 }

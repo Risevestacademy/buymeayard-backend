@@ -10,3 +10,22 @@ export class CurrencyOptionDto {
   })
   nairaPerUnit!: number;
 }
+
+export class CurrenciesResponseDto {
+  @ApiProperty({
+    example: 'US',
+    nullable: true,
+    type: String,
+    description: "The visitor's two-letter country, or null when unknown",
+  })
+  country!: string | null;
+
+  @ApiProperty({
+    example: 'USD',
+    description: 'The currency to open the support page in',
+  })
+  defaultCurrency!: string;
+
+  @ApiProperty({ type: [CurrencyOptionDto] })
+  currencies!: CurrencyOptionDto[];
+}

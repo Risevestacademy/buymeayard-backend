@@ -24,7 +24,11 @@ import {
 import { SupportStatusResponseDto } from './dto/support-status.dto';
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
 import { CHARGE_CURRENCIES } from '../supports/utils/charge-currency.util';
-import { CurrencyOptionDto } from './dto/currency-option.dto';
+import { CurrenciesResponseDto } from './dto/currency-option.dto';
+import { detectCountry } from '../supports/utils/detect-country.util';
+import { lookupIpCountry } from '../supports/utils/ip-country';
+import { defaultCurrencyForCountry } from '../supports/utils/country-currency.util';
+import type { Request } from 'express';
 
 @ApiTags('payments')
 @UseInterceptors(NairaResponseInterceptor)
@@ -38,19 +42,28 @@ export class PaymentsController {
   @Public()
   @Get('payments/currencies')
   @ApiOperation({
-    summary: 'Currencies a supporter can pay in',
+    summary: 'Currencies a supporter can pay in, and the one to open with',
     description:
-      "Public. NGN is always first. Pick one from the supporter's region, show prices in it, and send its code as `currency` on the quote and support calls. `nairaPerUnit` is the rate we use to turn that currency into naira.",
+      "Public. `defaultCurrency` is picked from the visitor's country (from the request's IP or a CDN country header): their own currency if we offer it, otherwise USD, otherwise NGN. Open the support page in it and let the supporter switch to any entry in `currencies`. Send the chosen code as `currency` on the quote and support calls. `nairaPerUnit` is the rate used to turn that currency into naira.",
   })
-  @ApiResponse({ status: 200, type: [CurrencyOptionDto] })
-  async currencies(): Promise<CurrencyOptionDto[]> {
+  @ApiResponse({ status: 200, type: CurrenciesResponseDto })
+  async currencies(@Req() req: Request): Promise<CurrenciesResponseDto> {
     const { currencyRates } = await this.platformSettings.get();
-    return CHARGE_CURRENCIES.filter(
-      (code) => code === 'NGN' || (currencyRates[code] ?? 0) > 0,
-    ).map((code) => ({
-      code,
-      nairaPerUnit: code === 'NGN' ? 1 : currencyRates[code],
-    }));
+    const country = detectCountry(
+      req.headers,
+      req.socket?.remoteAddress,
+      lookupIpCountry,
+    );
+    return {
+      country,
+      defaultCurrency: defaultCurrencyForCountry(country, currencyRates),
+      currencies: CHARGE_CURRENCIES.filter(
+        (code) => code === 'NGN' || (currencyRates[code] ?? 0) > 0,
+      ).map((code) => ({
+        code,
+        nairaPerUnit: code === 'NGN' ? 1 : currencyRates[code],
+      })),
+    };
   }
 
   @Public()
