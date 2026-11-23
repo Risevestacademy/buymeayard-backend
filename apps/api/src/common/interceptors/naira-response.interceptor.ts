@@ -15,6 +15,7 @@ import { MoneyUtil } from '../utils/money.util';
  */
 export const NAIRA_RESPONSE_KEYS = [
   'amount',
+  'paidAmount',
   'fee',
   'netAmount',
   'totalAmount',

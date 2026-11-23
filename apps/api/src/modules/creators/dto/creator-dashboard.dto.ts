@@ -365,9 +365,22 @@ export class DashboardContributionDto {
 
   @ApiProperty({
     example: 'NGN',
-    description: 'ISO currency code',
+    description: 'ISO currency code of the naira amounts above',
   })
   currency!: string;
+
+  @ApiProperty({
+    example: 100,
+    description:
+      'What the supporter actually paid, in `paidCurrency` (e.g. 100 = $100). Equals `amount` for a naira gift; the naira figures above are this converted at the rate locked when the gift was made.',
+  })
+  paidAmount!: number;
+
+  @ApiProperty({
+    example: 'USD',
+    description: 'Currency the supporter paid in',
+  })
+  paidCurrency!: string;
 
   @ApiProperty({
     example: 'PAID',

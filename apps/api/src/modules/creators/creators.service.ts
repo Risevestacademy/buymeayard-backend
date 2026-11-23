@@ -1717,6 +1717,8 @@ export class CreatorsService {
       platformFee: support.platformFee,
       creatorAmount: support.creatorAmount,
       currency: support.currency,
+      paidAmount: support.chargeAmount ?? support.totalAmount,
+      paidCurrency: support.chargeCurrency,
       status: support.status,
       reference: support.payment?.providerReference ?? null,
       createdAt: support.createdAt,

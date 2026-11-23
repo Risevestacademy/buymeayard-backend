@@ -23,6 +23,7 @@ describe('PlatformSettingsService', () => {
     expect(await service.get()).toEqual({
       platformFeePercent: 12,
       ...DEFAULT_PAYOUT_RULES,
+      currencyRates: {},
     });
   });
 

@@ -42,6 +42,29 @@ export class SupportWallItemDto {
   @ApiProperty({ example: 'Keep creating!', nullable: true, type: String })
   message!: string | null;
 
+  @ApiProperty({
+    example: 150000,
+    description:
+      'The naira equivalent of the gift (e.g. 150000 = ₦150,000). The yards are worked out from it.',
+  })
+  amount!: number;
+
+  @ApiProperty({
+    example: 'NGN',
+    description: 'Currency of `amount`; always NGN',
+  })
+  currency!: string;
+
+  @ApiProperty({
+    example: 100,
+    description:
+      'What the supporter actually paid, in `paidCurrency` (e.g. 100 = $100). Equals `amount` for a naira gift.',
+  })
+  paidAmount!: number;
+
+  @ApiProperty({ example: 'USD' })
+  paidCurrency!: string;
+
   @ApiProperty()
   createdAt!: Date;
 }

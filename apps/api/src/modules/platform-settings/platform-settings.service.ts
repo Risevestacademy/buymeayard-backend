@@ -12,9 +12,17 @@ export interface PlatformSettings {
   payoutFeeTierLimit: number;
   payoutFeeUpToLimit: number;
   payoutFeeAboveLimit: number;
+  /**
+   * NGN per 1 unit of a currency we charge supporters in (e.g. USD: 1500).
+   * A currency is offered only once it has a rate. Not money in kobo.
+   */
+  currencyRates: Record<string, number>;
 }
 
-export type PayoutRules = Omit<PlatformSettings, 'platformFeePercent'>;
+export type PayoutRules = Omit<
+  PlatformSettings,
+  'platformFeePercent' | 'currencyRates'
+>;
 
 const SETTINGS_KEY = 'platform';
 const CACHE_TTL_MS = 30_000;
@@ -46,6 +54,7 @@ export class PlatformSettingsService {
       platformFeePercent:
         this.configService.get<number>('PLATFORM_FEE_PERCENTAGE') ?? 10,
       ...DEFAULT_PAYOUT_RULES,
+      currencyRates: {},
     };
   }
 

@@ -5,7 +5,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  Max,
+  Length,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -22,14 +22,21 @@ export const MAX_GIFT_AMOUNT_NAIRA = 10_000_000;
 export class CreateSupportIntentDto {
   @ApiProperty({
     example: 2000,
-    minimum: MIN_GIFT_AMOUNT_NAIRA,
-    maximum: MAX_GIFT_AMOUNT_NAIRA,
-    description: 'Amount in Naira (major units) the supporter wishes to gift',
+    description: `Amount the supporter wishes to gift, in \`currency\` (major units; Naira when \`currency\` is omitted). Its Naira equivalent must be between ${MIN_GIFT_AMOUNT_NAIRA} and ${MAX_GIFT_AMOUNT_NAIRA}.`,
   })
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(MIN_GIFT_AMOUNT_NAIRA)
-  @Max(MAX_GIFT_AMOUNT_NAIRA)
+  @Min(0.01)
   amount: number;
+
+  @ApiPropertyOptional({
+    example: 'USD',
+    description:
+      'Currency the supporter sees and pays in, from GET /payments/currencies. Anything not offered falls back to NGN.',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(3, 3)
+  currency?: string;
 
   @ApiPropertyOptional({
     example: 'Love your work!',
@@ -86,13 +93,21 @@ export class CreateSupportIntentDto {
 export class SupportQuoteQueryDto {
   @ApiProperty({
     example: 5000,
-    minimum: MIN_GIFT_AMOUNT_NAIRA,
-    maximum: MAX_GIFT_AMOUNT_NAIRA,
-    description: 'Amount in Naira (major units)',
+    description:
+      'Amount in `currency` (major units; Naira when `currency` is omitted)',
   })
   @Type(() => Number) // query params arrive as strings
   @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(MIN_GIFT_AMOUNT_NAIRA)
-  @Max(MAX_GIFT_AMOUNT_NAIRA)
+  @Min(0.01)
   amount: number;
+
+  @ApiPropertyOptional({
+    example: 'USD',
+    description:
+      'Currency of `amount`, from GET /payments/currencies. Anything not offered falls back to NGN.',
+  })
+  @IsOptional()
+  @IsString()
+  @Length(3, 3)
+  currency?: string;
 }

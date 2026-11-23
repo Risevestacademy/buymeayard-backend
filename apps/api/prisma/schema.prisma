@@ -217,20 +217,26 @@ model CreatorMaterial {
 // --------------------------------------------------------
 
 model Support {
-  id            String   @id @default(uuid())
-  creatorId     String
-  subtotal      Int // Minor units
-  platformFee   Int // Minor units
-  creatorAmount Int // Minor units
-  totalAmount   Int // Minor units (creatorAmount + platformFee)
-  currency      String   @default("NGN")
-  guestName     String?
-  guestEmail    String?
-  message       String?
-  visibility    String   @default("PUBLIC") // PUBLIC, CREATOR_ONLY, ANONYMOUS
-  status        String   @default("CREATED") // CREATED, PAYMENT_PENDING, PAID, COMPLETED, PAYMENT_FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id @default(uuid())
+  creatorId      String
+  subtotal       Int // Minor units
+  platformFee    Int // Minor units
+  creatorAmount  Int // Minor units
+  totalAmount    Int // Minor units (creatorAmount + platformFee)
+  currency       String   @default("NGN") // Ledger currency; every amount above is in it
+  // What the supporter was charged, when it is not NGN. The amounts above are
+  // the NGN equivalent at `fxRate` (NGN per 1 unit of chargeCurrency), locked
+  // when the gift was created.
+  chargeCurrency String   @default("NGN")
+  chargeAmount   Int? // Minor units of chargeCurrency; null means totalAmount
+  fxRate         Decimal? @db.Decimal(18, 6)
+  guestName      String?
+  guestEmail     String?
+  message        String?
+  visibility     String   @default("PUBLIC") // PUBLIC, CREATOR_ONLY, ANONYMOUS
+  status         String   @default("CREATED") // CREATED, PAYMENT_PENDING, PAID, COMPLETED, PAYMENT_FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   creator CreatorProfile  @relation("CreatorSupports", fields: [creatorId], references: [id], onDelete: Cascade)
   items   SupportItem[]
@@ -265,8 +271,10 @@ model Payment {
   provider              String    @default("PAYSTACK")
   providerReference     String
   providerTransactionId String?
-  amount                Int // Minor units
+  amount                Int // Minor units, ledger currency
   currency              String    @default("NGN")
+  chargeCurrency        String    @default("NGN") // What Bachs charged the supporter
+  chargeAmount          Int? // Minor units of chargeCurrency; null means amount
   status                String    @default("PENDING") // PENDING, PROCESSING, SUCCESS, FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
   paidAt                DateTime?
   metadata              Json?

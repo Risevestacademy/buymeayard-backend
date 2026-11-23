@@ -165,7 +165,8 @@ export class RefundsService {
       result = await this.paymentProvider.refundPayment({
         paymentReference: payment.providerReference,
         providerTransactionId: payment.providerTransactionId,
-        amount: payment.amount,
+        // Bachs refunds in the currency the supporter paid in
+        amount: payment.chargeAmount ?? payment.amount,
         reason: options.reason,
       });
     } catch (error) {
