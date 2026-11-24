@@ -38,6 +38,16 @@ const REFUND_EVENTS: Record<string, 'PROCESSED' | 'FAILED' | 'PROCESSING'> = {
   'refund.pending': 'PROCESSING',
 };
 
+/** Bachs's fee in naira kobo, for the payment's ledger-currency amount. */
+function feeInNaira(support: {
+  processingFee: number;
+  fxRate: Prisma.Decimal | null;
+}): number {
+  return support.fxRate
+    ? Math.round(support.fxRate.mul(support.processingFee).toNumber())
+    : support.processingFee;
+}
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
@@ -105,7 +115,8 @@ export class PaymentsService {
         paymentId: payment.id,
         supportId: support.id,
         // Bachs charges in what the supporter chose; the ledger stays in naira
-        amount: support.chargeAmount ?? support.totalAmount,
+        amount:
+          (support.chargeAmount ?? support.totalAmount) + support.processingFee,
         currency: support.chargeCurrency,
         email: support.guestEmail ?? undefined,
         callbackUrl: callback,
@@ -157,6 +168,8 @@ export class PaymentsService {
     currency: string;
     chargeCurrency: string;
     chargeAmount: number | null;
+    processingFee: number;
+    fxRate: Prisma.Decimal | null;
   }) {
     const existing = await this.prisma.payment.findUnique({
       where: { supportId: support.id },
@@ -169,10 +182,14 @@ export class PaymentsService {
           supportId: support.id,
           provider: this.paymentProvider.providerName,
           providerReference: `temp_${Date.now()}_${support.id.slice(0, 8)}`,
-          amount: support.totalAmount,
+          // What the supporter pays: the gift plus Bachs's fee
+          amount: support.totalAmount + feeInNaira(support),
           currency: support.currency,
           chargeCurrency: support.chargeCurrency,
-          chargeAmount: support.chargeAmount,
+          chargeAmount:
+            support.chargeAmount === null
+              ? null
+              : support.chargeAmount + support.processingFee,
           status: PaymentStatus.PENDING,
         },
       });
@@ -222,6 +239,7 @@ export class PaymentsService {
         currency: true,
         chargeCurrency: true,
         chargeAmount: true,
+        processingFee: true,
         items: {
           select: {
             quantity: true,
@@ -261,7 +279,8 @@ export class PaymentsService {
       paid:
         support.status === SupportStatus.PAID ||
         support.status === SupportStatus.COMPLETED,
-      amount: support.chargeAmount ?? support.totalAmount,
+      amount:
+        (support.chargeAmount ?? support.totalAmount) + support.processingFee,
       currency: support.chargeCurrency,
       yards: yards.toNumber(),
       material: support.items[0]

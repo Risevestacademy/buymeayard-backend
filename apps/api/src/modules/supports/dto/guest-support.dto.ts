@@ -7,6 +7,19 @@ export class SupportQuoteResponseDto {
   @ApiProperty({ example: 5000, description: 'Amount in naira' })
   amount!: number;
 
+  @ApiProperty({
+    example: 75,
+    description:
+      "Bachs's card fee, in `currency`. The supporter pays it on top of `amount`; the creator is credited the gift only",
+  })
+  processingFee!: number;
+
+  @ApiProperty({
+    example: 5075,
+    description: 'What the supporter pays: `amount` + `processingFee`',
+  })
+  totalToPay!: number;
+
   @ApiProperty({ example: 'NGN' })
   currency!: string;
 

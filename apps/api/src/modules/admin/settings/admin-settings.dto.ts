@@ -16,6 +16,18 @@ export class AdminUpdateSettingsDto {
   platformFeePercent?: number;
 
   @ApiPropertyOptional({
+    example: 1.5,
+    description:
+      "Bachs's card-processing fee, 0-50 (percent). Added on top of the gift, so the supporter pays it",
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(50)
+  collectionFeePercent?: number;
+
+  @ApiPropertyOptional({
     example: 1000,
     description: 'Minimum withdrawal in naira',
   })
