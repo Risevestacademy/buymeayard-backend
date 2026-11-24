@@ -31,6 +31,7 @@ describe('SupportsService guest gifting', () => {
       fallback: ankara,
     },
     currencyRates: Record<string, number> = {},
+    collectionFeePercent = 0,
   ) {
     const prisma = {
       creatorProfile: {
@@ -57,9 +58,11 @@ describe('SupportsService guest gifting', () => {
       support: { create: jest.fn().mockResolvedValue({ id: 'support-1' }) },
     };
     const config = {
-      get: jest
-        .fn()
-        .mockResolvedValue({ platformFeePercent: 10, currencyRates }),
+      get: jest.fn().mockResolvedValue({
+        platformFeePercent: 10,
+        collectionFeePercent,
+        currencyRates,
+      }),
     };
     return {
       prisma,
@@ -80,6 +83,8 @@ describe('SupportsService guest gifting', () => {
     expect(res).toEqual({
       supportId: 'support-1',
       amount: 500_000,
+      processingFee: 0,
+      totalToPay: 500_000,
       currency: 'NGN',
       yards: 2.5,
       material: {
@@ -155,6 +160,34 @@ describe('SupportsService guest gifting', () => {
     await expect(
       service.quoteGift('adeola', { amount: 0.01, currency: 'USD' }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('adds Bachs fee on top of the gift without touching the creator split', async () => {
+    const { service, prisma } = setup(
+      {},
+      { themed: adire, fallback: ankara },
+      {},
+      2,
+    );
+
+    const res = await service.createGuestIntent('adeola', { amount: 5000 });
+
+    // ₦5,000 gift grossed up for a 2% fee: 500,000 / 0.98 = 510,205 kobo
+    expect(res).toMatchObject({
+      amount: 500_000,
+      processingFee: 10_205,
+      totalToPay: 510_205,
+    });
+    expect(prisma.support.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          totalAmount: 500_000,
+          platformFee: 50_000,
+          creatorAmount: 450_000,
+          processingFee: 10_205,
+        }),
+      }),
+    );
   });
 
   it('returns the creator thank-you message when they set one', async () => {

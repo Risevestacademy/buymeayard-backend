@@ -1,3 +1,4 @@
+import { processingFeeFor } from './utils/processing-fee.util';
 import {
   Injectable,
   BadRequestException,
@@ -123,7 +124,8 @@ export class SupportsService {
     requestedCurrency: string | undefined,
     unitPrice: number,
   ) {
-    const { currencyRates } = await this.platformSettings.get();
+    const { currencyRates, collectionFeePercent } =
+      await this.platformSettings.get();
     const { currency, rate } = resolveChargeCurrency(
       requestedCurrency,
       currencyRates,
@@ -144,11 +146,15 @@ export class SupportsService {
     const yards = new Prisma.Decimal(amountMinor)
       .div(unitPrice)
       .toDecimalPlaces(YARD_DECIMAL_PLACES);
+    const chargeAmount =
+      currency === 'NGN' ? amountMinor : toChargeMinor(amount);
     return {
       amountMinor,
       yards,
       chargeCurrency: currency,
-      chargeAmount: currency === 'NGN' ? amountMinor : toChargeMinor(amount),
+      chargeAmount,
+      // Bachs's fee, paid by the supporter on top of the gift
+      processingFee: processingFeeFor(chargeAmount, collectionFeePercent),
       rate,
     };
   }
@@ -163,15 +169,14 @@ export class SupportsService {
       creator.id,
       creator.themeMaterialId,
     );
-    const { yards, chargeCurrency, chargeAmount } = await this.priceGift(
-      query.amount,
-      query.currency,
-      material.price,
-    );
+    const { yards, chargeCurrency, chargeAmount, processingFee } =
+      await this.priceGift(query.amount, query.currency, material.price);
 
     const materialName = material.displayName || material.material.name;
     return {
       amount: chargeAmount,
+      processingFee,
+      totalToPay: chargeAmount + processingFee,
       currency: chargeCurrency,
       yards: yards.toNumber(),
       material: toContributionMaterial(
@@ -194,8 +199,14 @@ export class SupportsService {
       creator.id,
       creator.themeMaterialId,
     );
-    const { amountMinor, yards, chargeCurrency, chargeAmount, rate } =
-      await this.priceGift(dto.amount, dto.currency, material.price);
+    const {
+      amountMinor,
+      yards,
+      chargeCurrency,
+      chargeAmount,
+      processingFee,
+      rate,
+    } = await this.priceGift(dto.amount, dto.currency, material.price);
 
     const { platformFeePercent: feePercentage } =
       await this.platformSettings.get();
@@ -217,6 +228,7 @@ export class SupportsService {
         chargeCurrency,
         chargeAmount,
         fxRate: chargeCurrency === 'NGN' ? null : rate,
+        processingFee,
         message: dto.message?.trim() || null,
         visibility:
           dto.visibility ?? (dto.isAnonymous ? 'ANONYMOUS' : 'PUBLIC'),
@@ -240,6 +252,8 @@ export class SupportsService {
     return {
       supportId: support.id,
       amount: chargeAmount,
+      processingFee,
+      totalToPay: chargeAmount + processingFee,
       currency: chargeCurrency,
       yards: yards.toNumber(),
       material: toContributionMaterial(

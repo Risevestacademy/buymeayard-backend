@@ -61,7 +61,9 @@ export const envSchema = z.object({
   POSTHOG_API_KEY: z.string().optional(),
   POSTHOG_HOST: z.string().optional(),
 
-  PLATFORM_FEE_PERCENTAGE: z.coerce.number().min(0).max(100).default(10),
+  PLATFORM_FEE_PERCENTAGE: z.coerce.number().min(0).max(100).default(6),
+  // Bachs's card fee, charged to the supporter on top of the gift
+  COLLECTION_FEE_PERCENTAGE: z.coerce.number().min(0).max(50).default(0),
   DEFAULT_CURRENCY: z.string().default('NGN'),
 
   CREATOR_FRONTEND_URL: z.string().url().default('http://localhost:3001'),
