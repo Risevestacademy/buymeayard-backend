@@ -1,4 +1,8 @@
 import { MoneyUtil } from '../../../common/utils/money.util';
+import {
+  MAX_GIFT_AMOUNT_NAIRA,
+  MIN_GIFT_AMOUNT_NAIRA,
+} from '../../creators/dto/create-support-intent.dto';
 
 export const LEDGER_CURRENCY = 'NGN';
 
@@ -44,4 +48,19 @@ export function toLedgerMinor(chargeMajor: number, rate: number): number {
 /** Charge-currency amount in minor units, as sent to Bachs. */
 export function toChargeMinor(chargeMajor: number): number {
   return MoneyUtil.toMinorUnits(chargeMajor);
+}
+
+/**
+ * Smallest and largest gift in a currency (major units), from the naira limits
+ * at its rate. The minimum rounds up and the maximum down, so any amount
+ * inside the range is accepted.
+ */
+export function giftLimits(rate: number): {
+  minAmount: number;
+  maxAmount: number;
+} {
+  return {
+    minAmount: Math.ceil((MIN_GIFT_AMOUNT_NAIRA / rate) * 100) / 100,
+    maxAmount: Math.floor((MAX_GIFT_AMOUNT_NAIRA / rate) * 100) / 100,
+  };
 }

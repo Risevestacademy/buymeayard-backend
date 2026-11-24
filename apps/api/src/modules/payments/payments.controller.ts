@@ -23,7 +23,10 @@ import {
 } from './dto/initialize-payment.dto';
 import { SupportStatusResponseDto } from './dto/support-status.dto';
 import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
-import { CHARGE_CURRENCIES } from '../supports/utils/charge-currency.util';
+import {
+  CHARGE_CURRENCIES,
+  giftLimits,
+} from '../supports/utils/charge-currency.util';
 import { CurrenciesResponseDto } from './dto/currency-option.dto';
 import { detectCountry } from '../supports/utils/detect-country.util';
 import { lookupIpCountry } from '../supports/utils/ip-country';
@@ -59,10 +62,10 @@ export class PaymentsController {
       defaultCurrency: defaultCurrencyForCountry(country, currencyRates),
       currencies: CHARGE_CURRENCIES.filter(
         (code) => code === 'NGN' || (currencyRates[code] ?? 0) > 0,
-      ).map((code) => ({
-        code,
-        nairaPerUnit: code === 'NGN' ? 1 : currencyRates[code],
-      })),
+      ).map((code) => {
+        const nairaPerUnit = code === 'NGN' ? 1 : currencyRates[code];
+        return { code, nairaPerUnit, ...giftLimits(nairaPerUnit) };
+      }),
     };
   }
 

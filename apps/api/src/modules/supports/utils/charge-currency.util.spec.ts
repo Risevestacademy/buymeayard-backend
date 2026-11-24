@@ -1,4 +1,5 @@
 import {
+  giftLimits,
   resolveChargeCurrency,
   toChargeMinor,
   toLedgerMinor,
@@ -32,5 +33,16 @@ describe('charge currency', () => {
     expect(toLedgerMinor(10, 1500)).toBe(1_500_000);
     expect(toLedgerMinor(0.33, 1500.5)).toBe(49_517);
     expect(toChargeMinor(10.5)).toBe(1050);
+  });
+
+  it('derives the gift limits from the naira limits at the rate', () => {
+    expect(giftLimits(1)).toEqual({ minAmount: 100, maxAmount: 10_000_000 });
+    // ₦100 at 1,500 per USD is $0.0667, rounded up to a whole cent
+    expect(giftLimits(1500)).toEqual({ minAmount: 0.07, maxAmount: 6666.66 });
+  });
+
+  it('never gives a minimum that is under the naira minimum', () => {
+    const { minAmount } = giftLimits(1500);
+    expect(toLedgerMinor(minAmount, 1500)).toBeGreaterThanOrEqual(10_000);
   });
 });
