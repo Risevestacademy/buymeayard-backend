@@ -29,7 +29,10 @@ const DEV_ADMIN_PASSWORD = 'AdminPassword123!';
  * environment can end up with a publicly known admin login.
  */
 function resolveAdminCredentials() {
-  const isProduction = process.env.NODE_ENV === 'production';
+  // Staging is reachable by real clients too, so it gets the same protection
+  const isProduction =
+    process.env.NODE_ENV === 'production' ||
+    process.env.NODE_ENV === 'staging';
   const adminEmail = process.env.ADMIN_EMAIL || DEV_ADMIN_EMAIL;
   const adminPassword = process.env.ADMIN_PASSWORD || '';
 
@@ -39,7 +42,7 @@ function resolveAdminCredentials() {
       adminPassword === DEV_ADMIN_PASSWORD
     ) {
       throw new Error(
-        'Refusing to seed in production: set ADMIN_PASSWORD to a strong, non-default value (12+ characters).',
+        'Refusing to seed in production or staging: set ADMIN_PASSWORD to a strong, non-default value (12+ characters).',
       );
     }
     return { adminEmail, adminPassword };

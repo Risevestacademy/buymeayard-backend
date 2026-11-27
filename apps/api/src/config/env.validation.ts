@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isDeployedEnvironment } from './environment';
 
 export const KYC_CHECKS = [
   'ID_VERIFICATION',
@@ -18,7 +19,7 @@ export function parseKycChecks(value: string | undefined): string[] {
 export const envSchema = z.object({
   PORT: z.coerce.number().default(8000),
   NODE_ENV: z
-    .enum(['development', 'production', 'test'])
+    .enum(['development', 'production', 'test', 'staging'])
     .default('development'),
   API_URL: z.string().url().default('http://localhost:8000'),
 
@@ -102,7 +103,7 @@ export const envSchema = z.object({
 
 // Checked against the raw environment, so variables with a development
 // default (e.g. CREATOR_FRONTEND_URL -> localhost) must still be set
-// explicitly in production.
+// explicitly in production and staging.
 const PRODUCTION_REQUIRED_KEYS = [
   'BACHS_API_KEY',
   'BACHS_WEBHOOK_SECRET',
@@ -122,11 +123,11 @@ export function validateEnv(config: Record<string, unknown>): EnvConfig {
     );
   }
 
-  if (parsed.data.NODE_ENV === 'production') {
+  if (isDeployedEnvironment(parsed.data.NODE_ENV)) {
     const missing = PRODUCTION_REQUIRED_KEYS.filter((key) => !config[key]);
     if (missing.length > 0) {
       throw new Error(
-        `Config validation error: missing required production variables: ${missing.join(', ')}`,
+        `Config validation error: missing required variables for a deployed environment: ${missing.join(', ')}`,
       );
     }
   }
