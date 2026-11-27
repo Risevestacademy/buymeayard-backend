@@ -53,3 +53,29 @@ export function resolveCallbackUrl(
   if (supportId) url.searchParams.set('supportId', supportId);
   return url.toString();
 }
+
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '0.0.0.0']);
+
+/**
+ * Bachs refuses a localhost return URL. On a test deployment that sets
+ * `fallbackOrigin`, a localhost URL is moved onto that site (path and query
+ * kept) so a frontend running on a developer's machine can still check out.
+ * Anything else is returned unchanged.
+ */
+export function withPublicOrigin(
+  returnUrl: string | undefined,
+  fallbackOrigin: string | undefined,
+): string | undefined {
+  if (!returnUrl || !fallbackOrigin) return returnUrl;
+  try {
+    const url = new URL(returnUrl);
+    if (!LOCAL_HOSTS.has(url.hostname)) return returnUrl;
+    const target = new URL(fallbackOrigin);
+    url.protocol = target.protocol;
+    url.hostname = target.hostname;
+    url.port = target.port; // drops the local dev port
+    return url.toString();
+  } catch {
+    return returnUrl;
+  }
+}

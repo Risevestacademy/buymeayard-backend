@@ -8,7 +8,10 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
-import { PAYMENT_PROVIDER } from '../../infrastructure/payments/payment-provider.interface';
+import {
+  PAYMENT_PROVIDER,
+  PaymentProviderRejectedError,
+} from '../../infrastructure/payments/payment-provider.interface';
 import type { PaymentProvider } from '../../infrastructure/payments/payment-provider.interface';
 import { LedgerService } from '../ledger/ledger.service';
 import { ErrorCodes } from '../../common/errors/error-codes';
@@ -34,6 +37,16 @@ const REFUND_EVENTS: Record<string, 'PROCESSED' | 'FAILED' | 'PROCESSING'> = {
   'refund.processing': 'PROCESSING',
   'refund.pending': 'PROCESSING',
 };
+
+/** Bachs's fee in naira kobo, for the payment's ledger-currency amount. */
+function feeInNaira(support: {
+  processingFee: number;
+  fxRate: Prisma.Decimal | null;
+}): number {
+  return support.fxRate
+    ? Math.round(support.fxRate.mul(support.processingFee).toNumber())
+    : support.processingFee;
+}
 
 @Injectable()
 export class PaymentsService {
@@ -96,15 +109,30 @@ export class PaymentsService {
     const payment = await this.getOrCreatePaymentAttempt(support);
 
     // Start the payment with the provider
-    const initResult = await this.paymentProvider.initializePayment({
-      paymentId: payment.id,
-      supportId: support.id,
-      amount: support.totalAmount,
-      currency: support.currency,
-      email: support.guestEmail ?? undefined,
-      callbackUrl: callback,
-      cancelUrl: cancel,
-    });
+    let initResult;
+    try {
+      initResult = await this.paymentProvider.initializePayment({
+        paymentId: payment.id,
+        supportId: support.id,
+        // Bachs charges in what the supporter chose; the ledger stays in naira
+        amount:
+          (support.chargeAmount ?? support.totalAmount) + support.processingFee,
+        currency: support.chargeCurrency,
+        email: support.guestEmail ?? undefined,
+        callbackUrl: callback,
+        cancelUrl: cancel,
+      });
+    } catch (error) {
+      // The provider refused the request itself (e.g. a localhost return
+      // URL), which is the caller's to fix, not a server fault
+      if (error instanceof PaymentProviderRejectedError) {
+        throw new BadRequestException({
+          code: ErrorCodes.VALIDATION_ERROR,
+          message: error.message,
+        });
+      }
+      throw error;
+    }
 
     // Update payment with provider reference
     await this.prisma.payment.update({
@@ -138,6 +166,10 @@ export class PaymentsService {
     id: string;
     totalAmount: number;
     currency: string;
+    chargeCurrency: string;
+    chargeAmount: number | null;
+    processingFee: number;
+    fxRate: Prisma.Decimal | null;
   }) {
     const existing = await this.prisma.payment.findUnique({
       where: { supportId: support.id },
@@ -150,8 +182,14 @@ export class PaymentsService {
           supportId: support.id,
           provider: this.paymentProvider.providerName,
           providerReference: `temp_${Date.now()}_${support.id.slice(0, 8)}`,
-          amount: support.totalAmount,
+          // What the supporter pays: the gift plus Bachs's fee
+          amount: support.totalAmount + feeInNaira(support),
           currency: support.currency,
+          chargeCurrency: support.chargeCurrency,
+          chargeAmount:
+            support.chargeAmount === null
+              ? null
+              : support.chargeAmount + support.processingFee,
           status: PaymentStatus.PENDING,
         },
       });
@@ -199,6 +237,9 @@ export class PaymentsService {
         status: true,
         totalAmount: true,
         currency: true,
+        chargeCurrency: true,
+        chargeAmount: true,
+        processingFee: true,
         items: {
           select: {
             quantity: true,
@@ -206,6 +247,7 @@ export class PaymentsService {
             creatorMaterial: {
               select: {
                 materialId: true,
+                customThumbnailUrl: true,
                 material: {
                   select: {
                     color: true,
@@ -237,8 +279,9 @@ export class PaymentsService {
       paid:
         support.status === SupportStatus.PAID ||
         support.status === SupportStatus.COMPLETED,
-      amount: support.totalAmount,
-      currency: support.currency,
+      amount:
+        (support.chargeAmount ?? support.totalAmount) + support.processingFee,
+      currency: support.chargeCurrency,
       yards: yards.toNumber(),
       material: support.items[0]
         ? toContributionMaterial(
@@ -246,6 +289,7 @@ export class PaymentsService {
             support.items[0].materialNameSnapshot,
             support.items[0].creatorMaterial.material,
             yards.toNumber(),
+            support.items[0].creatorMaterial.customThumbnailUrl,
           )
         : null,
       materialName: support.items[0]?.materialNameSnapshot ?? null,
@@ -410,6 +454,7 @@ export class PaymentsService {
                 payment.support.items[0].materialNameSnapshot,
                 payment.support.items[0].creatorMaterial.material,
                 yards,
+                payment.support.items[0].creatorMaterial.customThumbnailUrl,
               )
             : null,
           amount: payment.support.creatorAmount,

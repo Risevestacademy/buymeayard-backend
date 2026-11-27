@@ -191,16 +191,17 @@ model Material {
 }
 
 model CreatorMaterial {
-  id          String   @id @default(uuid())
-  creatorId   String
-  materialId  String
-  price       Int // Minor units (kobo)
-  currency    String   @default("NGN")
-  displayName String?
-  description String?
-  status      String   @default("ACTIVE") // ACTIVE, INACTIVE
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                 String   @id @default(uuid())
+  creatorId          String
+  materialId         String
+  price              Int // Minor units (kobo)
+  currency           String   @default("NGN")
+  displayName        String?
+  description        String?
+  customThumbnailUrl String? // The creator's own banner for this material; null uses the system thumbnail
+  status             String   @default("ACTIVE") // ACTIVE, INACTIVE
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   creator      CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   material     Material       @relation(fields: [materialId], references: [id], onDelete: Cascade)
@@ -216,20 +217,29 @@ model CreatorMaterial {
 // --------------------------------------------------------
 
 model Support {
-  id            String   @id @default(uuid())
-  creatorId     String
-  subtotal      Int // Minor units
-  platformFee   Int // Minor units
-  creatorAmount Int // Minor units
-  totalAmount   Int // Minor units (creatorAmount + platformFee)
-  currency      String   @default("NGN")
-  guestName     String?
-  guestEmail    String?
-  message       String?
-  visibility    String   @default("PUBLIC") // PUBLIC, CREATOR_ONLY, ANONYMOUS
-  status        String   @default("CREATED") // CREATED, PAYMENT_PENDING, PAID, COMPLETED, PAYMENT_FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id             String   @id @default(uuid())
+  creatorId      String
+  subtotal       Int // Minor units
+  platformFee    Int // Minor units
+  creatorAmount  Int // Minor units
+  totalAmount    Int // Minor units (creatorAmount + platformFee)
+  currency       String   @default("NGN") // Ledger currency; every amount above is in it
+  // What the supporter was charged, when it is not NGN. The amounts above are
+  // the NGN equivalent at `fxRate` (NGN per 1 unit of chargeCurrency), locked
+  // when the gift was created.
+  chargeCurrency String   @default("NGN")
+  chargeAmount   Int? // Minor units of chargeCurrency; null means totalAmount
+  fxRate         Decimal? @db.Decimal(18, 6)
+  // Bachs's card fee the supporter pays on top of the gift, in minor units of
+  // chargeCurrency. Not part of totalAmount, the creator or platform split.
+  processingFee  Int      @default(0)
+  guestName      String?
+  guestEmail     String?
+  message        String?
+  visibility     String   @default("PUBLIC") // PUBLIC, CREATOR_ONLY, ANONYMOUS
+  status         String   @default("CREATED") // CREATED, PAYMENT_PENDING, PAID, COMPLETED, PAYMENT_FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   creator CreatorProfile  @relation("CreatorSupports", fields: [creatorId], references: [id], onDelete: Cascade)
   items   SupportItem[]
@@ -264,8 +274,10 @@ model Payment {
   provider              String    @default("PAYSTACK")
   providerReference     String
   providerTransactionId String?
-  amount                Int // Minor units
+  amount                Int // Minor units, ledger currency
   currency              String    @default("NGN")
+  chargeCurrency        String    @default("NGN") // What Bachs charged the supporter
+  chargeAmount          Int? // Minor units of chargeCurrency; null means amount
   status                String    @default("PENDING") // PENDING, PROCESSING, SUCCESS, FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED, CHARGEBACK
   paidAt                DateTime?
   metadata              Json?
@@ -653,17 +665,19 @@ model ContentReport {
 /// A "Report a creator" submission. Supporters are guests, so the reporter is
 /// identified only by an optional email.
 model CreatorReport {
-  id             String    @id @default(uuid())
-  creatorId      String
-  reporterEmail  String?
-  reason         String // FRAUD_OR_SCAM, IMPERSONATION, INAPPROPRIATE_CONTENT, COPYRIGHT, HARASSMENT, OTHER
-  description    String
-  status         String    @default("PENDING") // PENDING, UNDER_REVIEW, RESOLVED, REJECTED
-  reviewedBy     String?
-  reviewedAt     DateTime?
-  resolutionNote String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  creatorId       String
+  reporterEmail   String?
+  reason          String // BULLYING_AND_HARASSMENT, ILLEGAL_ACTIVITY, SEXUAL_CONTENT, HATE_SPEECH, MISLEADING_INFORMATION, SCAM_OR_FRAUD, INTELLECTUAL_PROPERTY, OTHER (older rows may hold FRAUD_OR_SCAM, IMPERSONATION, INAPPROPRIATE_CONTENT, COPYRIGHT, HARASSMENT)
+  description     String
+  evidenceLinks   String[]  @default([])
+  evidenceFileUrl String?
+  status          String    @default("PENDING") // PENDING, UNDER_REVIEW, RESOLVED, REJECTED
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  resolutionNote  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 

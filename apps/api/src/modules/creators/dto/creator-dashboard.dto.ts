@@ -301,6 +301,15 @@ export class DashboardContributionMaterialDto {
   })
   thumbnailLargeUrl?: string | null;
 
+  @ApiPropertyOptional({
+    example:
+      'https://res.cloudinary.com/buymeayard/image/upload/v1/material-thumbnails/creator-1-ankara.jpg',
+    description:
+      "The creator's own banner image for this material, or null. When present, show it instead of `thumbnailLargeUrl`; when null, use the system thumbnail.",
+    nullable: true,
+  })
+  customMaterialThumbnail?: string | null;
+
   @ApiProperty({
     example: 1,
     description: 'Number of yards gifted',
@@ -356,9 +365,22 @@ export class DashboardContributionDto {
 
   @ApiProperty({
     example: 'NGN',
-    description: 'ISO currency code',
+    description: 'ISO currency code of the naira amounts above',
   })
   currency!: string;
+
+  @ApiProperty({
+    example: 100,
+    description:
+      'What the supporter actually paid, in `paidCurrency` (e.g. 100 = $100). Equals `amount` for a naira gift; the naira figures above are this converted at the rate locked when the gift was made.',
+  })
+  paidAmount!: number;
+
+  @ApiProperty({
+    example: 'USD',
+    description: 'Currency the supporter paid in',
+  })
+  paidCurrency!: string;
 
   @ApiProperty({
     example: 'PAID',

@@ -7,14 +7,27 @@ import { Prisma } from '@prisma/client';
 export interface PlatformSettings {
   /** Share of each contribution kept by the platform, 0-100. */
   platformFeePercent: number;
+  /**
+   * Bachs's card-processing cut, 0-50 (percent). Added on top of the gift so
+   * the supporter, not the creator or platform, pays it.
+   */
+  collectionFeePercent: number;
   minimumWithdrawal: number;
   /** Withdrawals up to this amount pay `payoutFeeUpToLimit`. */
   payoutFeeTierLimit: number;
   payoutFeeUpToLimit: number;
   payoutFeeAboveLimit: number;
+  /**
+   * NGN per 1 unit of a currency we charge supporters in (e.g. USD: 1500).
+   * A currency is offered only once it has a rate. Not money in kobo.
+   */
+  currencyRates: Record<string, number>;
 }
 
-export type PayoutRules = Omit<PlatformSettings, 'platformFeePercent'>;
+export type PayoutRules = Omit<
+  PlatformSettings,
+  'platformFeePercent' | 'collectionFeePercent' | 'currencyRates'
+>;
 
 const SETTINGS_KEY = 'platform';
 const CACHE_TTL_MS = 30_000;
@@ -44,8 +57,11 @@ export class PlatformSettingsService {
   defaults(): PlatformSettings {
     return {
       platformFeePercent:
-        this.configService.get<number>('PLATFORM_FEE_PERCENTAGE') ?? 10,
+        this.configService.get<number>('PLATFORM_FEE_PERCENTAGE') ?? 6,
+      collectionFeePercent:
+        this.configService.get<number>('COLLECTION_FEE_PERCENTAGE') ?? 0,
       ...DEFAULT_PAYOUT_RULES,
+      currencyRates: {},
     };
   }
 

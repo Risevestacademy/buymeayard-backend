@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { PaymentProviderRejectedError } from '../../infrastructure/payments/payment-provider.interface';
 import { PaymentsService } from './payments.service';
 
 describe('PaymentsService.initializePayment contribution gate', () => {
@@ -19,6 +20,8 @@ describe('PaymentsService.initializePayment contribution gate', () => {
           id: 'support-1',
           status: 'CREATED',
           totalAmount: 500_000,
+          processingFee: 0,
+          fxRate: null,
           currency: 'NGN',
           ...support,
           creator: { status: creatorStatus },
@@ -71,6 +74,19 @@ describe('PaymentsService.initializePayment contribution gate', () => {
     expect(provider.initializePayment).toHaveBeenCalled();
   });
 
+  it('returns a 400 with the provider message when it rejects the checkout', async () => {
+    const { service, provider } = setup('ACTIVE');
+    provider.initializePayment.mockRejectedValue(
+      new PaymentProviderRejectedError(
+        'success_url must be a publicly accessible URL (localhost is not allowed)',
+      ),
+    );
+    await expect(service.initializePayment('support-1')).rejects.toMatchObject({
+      status: 400,
+      response: { message: expect.stringContaining('success_url') },
+    });
+  });
+
   it('lets a guest pay with the email they gave on the intent', async () => {
     const { service, provider } = setup('ACTIVE', {
       supporter: null,
@@ -100,6 +116,7 @@ describe('PaymentsService checkout callback and status', () => {
             id: 'support-1',
             status: 'CREATED',
             totalAmount: 500_000,
+            processingFee: 0,
             currency: 'NGN',
             guestEmail: null,
             creator: { status: 'ACTIVE' },
@@ -207,6 +224,7 @@ describe('PaymentsService checkout callback and status', () => {
         color: '#7F3516',
         thumbnailSmallUrl: 'https://cdn/adire-sm.png',
         thumbnailLargeUrl: null,
+        customMaterialThumbnail: null,
         quantity: 1.5,
       },
       materialName: 'Adire',
@@ -457,6 +475,7 @@ describe('PaymentsService.handleWebhook charge.success', () => {
           color: '#7F3516',
           thumbnailSmallUrl: 'https://cdn/adire-sm.png',
           thumbnailLargeUrl: null,
+          customMaterialThumbnail: null,
           quantity: 2.5,
         },
       }),

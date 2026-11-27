@@ -442,7 +442,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Change password for the authenticated user',
     description:
-      'Allows an authenticated user to change their password by providing their current password and a new one.',
+      'Allows an authenticated user to change their password by providing their current password and a new one. Send `revokeOtherSessions: true` to also sign the user out everywhere else; the current session stays signed in.',
   })
   @SwaggerResponse({
     status: 200,
@@ -467,6 +467,7 @@ export class AuthController {
     const webRes = await this.authService.changePassword({
       currentPassword: dto.currentPassword,
       newPassword: dto.newPassword,
+      revokeOtherSessions: dto.revokeOtherSessions ?? dto.revokeOtherSession,
       headers: fromNodeHeaders(req.headers),
     });
     return this.handleAuthResponse(webRes, req, res, HttpStatus.OK);

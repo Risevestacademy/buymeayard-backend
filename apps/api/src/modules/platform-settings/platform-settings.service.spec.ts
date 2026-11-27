@@ -11,7 +11,11 @@ describe('PlatformSettingsService', () => {
         upsert: jest.fn().mockResolvedValue({}),
       },
     };
-    const config = { get: jest.fn().mockReturnValue(envFee) };
+    const config = {
+      get: jest.fn((key: string) =>
+        key === 'PLATFORM_FEE_PERCENTAGE' ? envFee : undefined,
+      ),
+    };
     return {
       prisma,
       service: new PlatformSettingsService(prisma as never, config as never),
@@ -22,7 +26,9 @@ describe('PlatformSettingsService', () => {
     const { service } = setup(null, 12);
     expect(await service.get()).toEqual({
       platformFeePercent: 12,
+      collectionFeePercent: 0,
       ...DEFAULT_PAYOUT_RULES,
+      currencyRates: {},
     });
   });
 

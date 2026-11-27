@@ -1,3 +1,4 @@
+import { processingFeeFor } from './utils/processing-fee.util';
 import {
   Injectable,
   BadRequestException,
@@ -14,8 +15,15 @@ import { ErrorCodes } from '../../common/errors/error-codes';
 import { Prisma } from '@prisma/client';
 import {
   CreateSupportIntentDto,
+  MAX_GIFT_AMOUNT_NAIRA,
+  MIN_GIFT_AMOUNT_NAIRA,
   SupportQuoteQueryDto,
 } from '../creators/dto/create-support-intent.dto';
+import {
+  resolveChargeCurrency,
+  toChargeMinor,
+  toLedgerMinor,
+} from './utils/charge-currency.util';
 import { SupportStatus } from '@buymeayard/types';
 import {
   SupportWallQueryDto,
@@ -107,15 +115,48 @@ export class SupportsService {
     return creator;
   }
 
-  private priceGift(
-    amountNaira: number,
+  /**
+   * Prices a gift. `amount` is in the supporter's currency; everything we
+   * keep (yards, fees, ledger) is in naira at the rate set by an admin.
+   */
+  private async priceGift(
+    amount: number,
+    requestedCurrency: string | undefined,
     unitPrice: number,
-  ): { amountMinor: number; yards: Prisma.Decimal } {
-    const amountMinor = MoneyUtil.toMinorUnits(amountNaira);
+  ) {
+    const { currencyRates, collectionFeePercent } =
+      await this.platformSettings.get();
+    const { currency, rate } = resolveChargeCurrency(
+      requestedCurrency,
+      currencyRates,
+    );
+    const amountMinor =
+      currency === 'NGN'
+        ? MoneyUtil.toMinorUnits(amount)
+        : toLedgerMinor(amount, rate);
+    if (
+      amountMinor < MoneyUtil.toMinorUnits(MIN_GIFT_AMOUNT_NAIRA) ||
+      amountMinor > MoneyUtil.toMinorUnits(MAX_GIFT_AMOUNT_NAIRA)
+    ) {
+      throw new BadRequestException({
+        code: ErrorCodes.VALIDATION_ERROR,
+        message: `Amount must be between ₦${MIN_GIFT_AMOUNT_NAIRA} and ₦${MAX_GIFT_AMOUNT_NAIRA} (or the same in ${currency})`,
+      });
+    }
     const yards = new Prisma.Decimal(amountMinor)
       .div(unitPrice)
       .toDecimalPlaces(YARD_DECIMAL_PLACES);
-    return { amountMinor, yards };
+    const chargeAmount =
+      currency === 'NGN' ? amountMinor : toChargeMinor(amount);
+    return {
+      amountMinor,
+      yards,
+      chargeCurrency: currency,
+      chargeAmount,
+      // Bachs's fee, paid by the supporter on top of the gift
+      processingFee: processingFeeFor(chargeAmount, collectionFeePercent),
+      rate,
+    };
   }
 
   /** Previews the yard equivalent of an amount, before the supporter commits. */
@@ -128,18 +169,22 @@ export class SupportsService {
       creator.id,
       creator.themeMaterialId,
     );
-    const { amountMinor, yards } = this.priceGift(query.amount, material.price);
+    const { yards, chargeCurrency, chargeAmount, processingFee } =
+      await this.priceGift(query.amount, query.currency, material.price);
 
     const materialName = material.displayName || material.material.name;
     return {
-      amount: amountMinor,
-      currency: material.currency,
+      amount: chargeAmount,
+      processingFee,
+      totalToPay: chargeAmount + processingFee,
+      currency: chargeCurrency,
       yards: yards.toNumber(),
       material: toContributionMaterial(
         material.materialId,
         materialName,
         material.material,
         yards.toNumber(),
+        material.customThumbnailUrl,
       ),
       materialName,
     };
@@ -154,7 +199,14 @@ export class SupportsService {
       creator.id,
       creator.themeMaterialId,
     );
-    const { amountMinor, yards } = this.priceGift(dto.amount, material.price);
+    const {
+      amountMinor,
+      yards,
+      chargeCurrency,
+      chargeAmount,
+      processingFee,
+      rate,
+    } = await this.priceGift(dto.amount, dto.currency, material.price);
 
     const { platformFeePercent: feePercentage } =
       await this.platformSettings.get();
@@ -173,6 +225,10 @@ export class SupportsService {
         creatorAmount,
         totalAmount: amountMinor,
         currency: material.currency,
+        chargeCurrency,
+        chargeAmount,
+        fxRate: chargeCurrency === 'NGN' ? null : rate,
+        processingFee,
         message: dto.message?.trim() || null,
         visibility:
           dto.visibility ?? (dto.isAnonymous ? 'ANONYMOUS' : 'PUBLIC'),
@@ -195,14 +251,17 @@ export class SupportsService {
 
     return {
       supportId: support.id,
-      amount: amountMinor,
-      currency: material.currency,
+      amount: chargeAmount,
+      processingFee,
+      totalToPay: chargeAmount + processingFee,
+      currency: chargeCurrency,
       yards: yards.toNumber(),
       material: toContributionMaterial(
         material.materialId,
         materialName,
         material.material,
         yards.toNumber(),
+        material.customThumbnailUrl,
       ),
       materialName,
       thankYouMessage: resolveThankYouMessage(creator.thankYouMessage),

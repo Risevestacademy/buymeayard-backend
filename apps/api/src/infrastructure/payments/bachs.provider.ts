@@ -18,6 +18,7 @@ import {
   VerifyPaymentResult,
   WebhookVerificationResult,
 } from './payment-provider.interface';
+import { withPublicOrigin } from '../../modules/payments/utils/callback-url.util';
 
 const LIVE_API = 'https://api.bachs.io';
 const SANDBOX_API = 'https://sandbox-api.bachs.io';
@@ -135,6 +136,14 @@ export class BachsProvider implements PaymentProvider {
         authorizationUrl: `https://checkout.bachs.io/mock-${params.paymentId}`,
       };
     }
+
+    // Bachs refuses localhost return URLs; test deployments can redirect them
+    const fallback = this.configService.get<string>('LOCALHOST_RETURN_ORIGIN');
+    params = {
+      ...params,
+      callbackUrl: withPublicOrigin(params.callbackUrl, fallback),
+      cancelUrl: withPublicOrigin(params.cancelUrl, fallback),
+    };
 
     const res = await this.request<{
       checkout_id: string;
