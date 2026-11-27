@@ -42,6 +42,7 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AuthGuard } from './common/guards/auth.guard';
 import { AuditLogInterceptor } from './modules/admin/interceptors/audit-log.interceptor';
+import { isDeployedEnvironment } from './config/environment';
 
 @Module({
   imports: [
@@ -53,11 +54,11 @@ import { AuditLogInterceptor } from './modules/admin/interceptors/audit-log.inte
     }),
     LoggerModule.forRoot({
       pinoHttp: {
-        level: process.env.NODE_ENV !== 'production' ? 'debug' : 'info',
-        transport:
-          process.env.NODE_ENV !== 'production'
-            ? { target: 'pino-pretty' }
-            : undefined,
+        level: isDeployedEnvironment(process.env.NODE_ENV) ? 'info' : 'debug',
+        // pretty logs are for a developer's terminal, not deployed environments
+        transport: isDeployedEnvironment(process.env.NODE_ENV)
+          ? undefined
+          : { target: 'pino-pretty' },
         autoLogging: false,
       },
     }),

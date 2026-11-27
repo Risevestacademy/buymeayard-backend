@@ -72,4 +72,17 @@ describe('validateEnv', () => {
       );
     });
   });
+
+  it('accepts staging, and holds it to the same required variables as production', () => {
+    expect(() =>
+      validateEnv({ ...base, ...didit, NODE_ENV: 'staging' }),
+    ).not.toThrow();
+    const env: Record<string, unknown> = {
+      ...base,
+      ...didit,
+      NODE_ENV: 'staging',
+    };
+    delete env.DIDIT_API_KEY;
+    expect(() => validateEnv(env)).toThrow('DIDIT_API_KEY');
+  });
 });
