@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ErrorCodes } from '../../common/errors/error-codes';
+import { primaryRole } from '../auth/role.util';
 
 @Injectable()
 export class UsersService {
@@ -34,6 +35,11 @@ export class UsersService {
             creatorName: true,
             status: true,
             kycStatus: true,
+            kycBlockedReason: true,
+            payoutMethods: {
+              where: { status: 'ACTIVE' },
+              select: { id: true },
+            },
           },
         },
       },
@@ -57,9 +63,14 @@ export class UsersService {
       image: user.image,
       emailVerified: user.emailVerified,
       status: user.status,
+      role: primaryRole(user.roles.map((r) => r.role.name)),
       roles: user.roles.map((r) => r.role.name),
+      isOnboarded: isCompleted,
       isOnboardingCompleted: isCompleted,
       isProfileSetupCompleted: isCompleted,
+      isKycCompleted: user.creatorProfile?.kycStatus === 'VERIFIED',
+      isBankAccountConnected:
+        (user.creatorProfile?.payoutMethods.length ?? 0) > 0,
       creatorProfile: user.creatorProfile
         ? {
             id: user.creatorProfile.id,
@@ -67,6 +78,7 @@ export class UsersService {
             creatorName: user.creatorProfile.creatorName || user.name || '',
             status: user.creatorProfile.status,
             kycStatus: user.creatorProfile.kycStatus,
+            kycBlockedReason: user.creatorProfile.kycBlockedReason ?? null,
           }
         : null,
       createdAt: user.createdAt,

@@ -1,28 +1,173 @@
-import { Controller, Post, Body, Headers, Req } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Headers,
+  Param,
+  ParseUUIDPipe,
+  Req,
+  UseInterceptors,
+} from '@nestjs/common';
+import { NairaResponseInterceptor } from '../../common/interceptors/naira-response.interceptor';
+import { ApiTags, ApiOperation, ApiParam, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiErrors,
+  VALIDATION_ERROR,
+} from '../../common/decorators/api-errors.decorator';
 import { PaymentsService } from './payments.service';
 import { Public } from '../../common/decorators/public.decorator';
+import {
+  InitializePaymentDto,
+  InitializePaymentResponseDto,
+} from './dto/initialize-payment.dto';
+import { SupportStatusResponseDto } from './dto/support-status.dto';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
+import {
+  CHARGE_CURRENCIES,
+  giftLimits,
+} from '../supports/utils/charge-currency.util';
+import { CurrenciesResponseDto } from './dto/currency-option.dto';
+import { detectCountry } from '../supports/utils/detect-country.util';
+import { lookupIpCountry } from '../supports/utils/ip-country';
+import { defaultCurrencyForCountry } from '../supports/utils/country-currency.util';
+import type { Request } from 'express';
 
 @ApiTags('payments')
+@UseInterceptors(NairaResponseInterceptor)
 @Controller()
 export class PaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly platformSettings: PlatformSettingsService,
+  ) {}
 
-  @Post('payments/initialize')
-  @ApiOperation({ summary: 'Initialize Paystack payment for a support order' })
-  async initialize(@Body() body: { supportId: string; email: string }) {
-    return this.paymentsService.initializePayment(body.supportId, body.email);
+  @Public()
+  @Get('payments/currencies')
+  @ApiOperation({
+    summary: 'Currencies a supporter can pay in, and the one to open with',
+    description:
+      "Public. `defaultCurrency` is picked from the visitor's country (from the request's IP or a CDN country header): their own currency if we offer it, otherwise USD, otherwise NGN. Open the support page in it and let the supporter switch to any entry in `currencies`. Send the chosen code as `currency` on the quote and support calls. `nairaPerUnit` is the rate used to turn that currency into naira.",
+  })
+  @ApiResponse({ status: 200, type: CurrenciesResponseDto })
+  async currencies(@Req() req: Request): Promise<CurrenciesResponseDto> {
+    const { currencyRates } = await this.platformSettings.get();
+    const country = detectCountry(
+      req.headers,
+      req.socket?.remoteAddress,
+      lookupIpCountry,
+    );
+    return {
+      country,
+      defaultCurrency: defaultCurrencyForCountry(country, currencyRates),
+      currencies: CHARGE_CURRENCIES.filter(
+        (code) => code === 'NGN' || (currencyRates[code] ?? 0) > 0,
+      ).map((code) => {
+        const nairaPerUnit = code === 'NGN' ? 1 : currencyRates[code];
+        return { code, nairaPerUnit, ...giftLimits(nairaPerUnit) };
+      }),
+    };
   }
 
   @Public()
-  @Post('webhooks/paystack')
-  @ApiOperation({ summary: 'Handle Paystack webhook events' })
-  async handlePaystackWebhook(
-    @Headers('x-paystack-signature') signature: string,
+  @Post('payments/initialize')
+  @ApiOperation({
+    summary: 'Start the payment for a support order',
+    description:
+      'Public, so a guest can pay for the support they just created. The unguessable support id is the only credential, and it only lets the caller pay, never read anything.',
+  })
+  @ApiResponse({ status: 201, type: InitializePaymentResponseDto })
+  @ApiErrors(
+    VALIDATION_ERROR,
+    {
+      status: 400,
+      code: 'PAYMENT_ALREADY_PROCESSED',
+      message: 'This payment has already been processed',
+      when: 'The support is already paid. Show the thank-you screen instead of opening checkout.',
+    },
+    {
+      status: 403,
+      code: 'CREATOR_NOT_ACTIVE',
+      message: 'This creator is not accepting contributions yet',
+      when: 'The creator lost verification or took their page down since the intent was created.',
+    },
+    {
+      status: 404,
+      code: 'NOT_FOUND',
+      message: 'Support transaction not found',
+      when: 'The supportId does not exist.',
+    },
+  )
+  async initialize(@Body() body: InitializePaymentDto) {
+    return this.paymentsService.initializePayment(
+      body.supportId,
+      body.callbackUrl,
+      body.cancelUrl,
+    );
+  }
+
+  @Public()
+  @Get('supports/:supportId/status')
+  @ApiOperation({
+    summary: 'Check whether a gift has been paid',
+    description:
+      'For the page the payment provider sends the supporter back to. The provider confirms the payment by webhook, which can land a few seconds after the redirect, so poll this every second or two (up to about 15 seconds) until `paid` is true, then show `thankYouMessage`. Never treat the redirect itself as proof of payment. The unguessable support id is the only credential.',
+  })
+  @ApiParam({ name: 'supportId', description: 'From the intent/checkout call' })
+  @ApiResponse({ status: 200, type: SupportStatusResponseDto })
+  @ApiErrors(VALIDATION_ERROR, {
+    status: 404,
+    code: 'NOT_FOUND',
+    message: 'Support transaction not found',
+    when: 'The supportId does not exist.',
+  })
+  async supportStatus(
+    @Param('supportId', ParseUUIDPipe) supportId: string,
+  ): Promise<SupportStatusResponseDto> {
+    return this.paymentsService.getSupportStatus(supportId);
+  }
+
+  @Public()
+  @Post('webhooks/bachs')
+  @ApiOperation({
+    summary: 'Handle Bachs webhook events (called by Bachs, not the apps)',
+    description: `Configure in Bachs: *Developer Portal → Webhooks → Add destination* with URL \`https://<api-domain>/webhooks/bachs\` (no \`/api/v1\`), and put the endpoint's signing secret in \`BACHS_WEBHOOK_SECRET\`.
+
+The \`X-Bachs-Signature-V2\` header (\`t=<unix seconds>,v1=<hex>\`) must be the HMAC-SHA256 of \`<t>.<raw body>\`. Deliveries more than 5 minutes old are rejected. The older \`X-Bachs-Signature\` + \`X-Bachs-Timestamp\` pair is accepted too.
+
+Handled events:
+- \`collection.succeeded\`: a checkout payment was paid in full. Credits the creator's balance. Virtual-account deposits and part payments are ignored.
+- \`payout.paid\`: a payout reached the bank. "Money landed" notification.
+- \`payout.failed\`: the payout failed. The full amount goes back to the balance, plus a "Withdrawal didn’t go through" notification.
+- \`refund.paid\` / \`refund.failed\`: settle an open refund.
+
+Repeated deliveries of the same event are ignored (\`{ status: "already_processed" }\`).`,
+  })
+  async handleBachsWebhook(
+    @Headers('x-bachs-signature-v2') signatureV2: string,
+    @Headers('x-bachs-signature') signatureV1: string,
+    @Headers('x-bachs-timestamp') timestamp: string,
     @Body() payload: any,
     @Req() req: any,
   ) {
+    // The older header pair carries the same digest without the `t=` wrapper
+    const signature =
+      signatureV2 ||
+      (signatureV1 && timestamp ? `t=${timestamp},v1=${signatureV1}` : '');
     const rawBody = req.rawBody || JSON.stringify(payload);
     return this.paymentsService.handleWebhook(signature, payload, rawBody);
   }
+
+  // Paystack webhook, switched off with the Paystack provider. Its signature
+  // (HMAC-SHA512 in x-paystack-signature) would fail against the Bachs provider.
+  // @Public()
+  // @Post('webhooks/paystack')
+  // async handlePaystackWebhook(
+  //   @Headers('x-paystack-signature') signature: string,
+  //   @Body() payload: any,
+  //   @Req() req: any,
+  // ) {
+  //   const rawBody = req.rawBody || JSON.stringify(payload);
+  //   return this.paymentsService.handleWebhook(signature, payload, rawBody);
+  // }
 }

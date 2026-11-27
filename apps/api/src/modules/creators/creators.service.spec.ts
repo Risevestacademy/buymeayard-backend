@@ -33,20 +33,43 @@ describe('CreatorsService', () => {
     };
     creatorSocialLink: {
       findFirst: jest.Mock;
+      findMany: jest.Mock;
       create: jest.Mock;
+      createMany: jest.Mock;
       update: jest.Mock;
+      deleteMany: jest.Mock;
     };
     authAccount: {
       findMany: jest.Mock;
     };
     material: {
       findMany: jest.Mock;
+      findFirst: jest.Mock;
+      create: jest.Mock;
     };
     creatorMaterial: {
       findMany: jest.Mock;
+      findFirst: jest.Mock;
+      create: jest.Mock;
       upsert: jest.Mock;
       updateMany: jest.Mock;
+      findUnique: jest.Mock;
+      update: jest.Mock;
     };
+    support: {
+      aggregate: jest.Mock;
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      count: jest.Mock;
+      groupBy: jest.Mock;
+    };
+    payout: {
+      aggregate: jest.Mock;
+    };
+  };
+  let ledgerService: {
+    getOrCreateAccount: jest.Mock;
+    getAccountBalance: jest.Mock;
   };
 
   beforeEach(() => {
@@ -89,23 +112,51 @@ describe('CreatorsService', () => {
       },
       creatorSocialLink: {
         findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
         create: jest.fn(),
+        createMany: jest.fn(),
         update: jest.fn(),
+        deleteMany: jest.fn(),
       },
       authAccount: {
         findMany: jest.fn().mockResolvedValue([]),
       },
       material: {
         findMany: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
       },
       creatorMaterial: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
         findMany: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
         upsert: jest.fn(),
         updateMany: jest.fn(),
       },
+      support: {
+        aggregate: jest.fn(),
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        count: jest.fn(),
+        groupBy: jest.fn().mockResolvedValue([]),
+      },
+      payout: {
+        aggregate: jest.fn(),
+      },
     };
 
-    service = new CreatorsService(prisma as unknown as PrismaService, storage);
+    ledgerService = {
+      getOrCreateAccount: jest.fn().mockResolvedValue({ id: 'acc-creator-1' }),
+      getAccountBalance: jest.fn().mockResolvedValue(9800000),
+    };
+
+    service = new CreatorsService(
+      prisma as unknown as PrismaService,
+      storage,
+      ledgerService as any,
+    );
   });
 
   describe('onboardCreator', () => {
@@ -198,12 +249,34 @@ describe('CreatorsService', () => {
       expect(prisma.creatorSocialLink.create).toHaveBeenCalledWith({
         data: {
           creatorId: 'creator-1',
-          platform: 'twitter',
+          platform: 'x',
           url: 'https://x.com/adeola',
         },
       });
       expect(result?.creatorName).toBe('Adeola Johnson');
       expect(result?.slug).toBe('adeola');
+    });
+
+    it('flags a connected bank account without exposing the accounts', () => {
+      const formatted = service.formatCreatorProfile({
+        id: 'c-1',
+        slug: 'ayoloco',
+        kycStatus: 'VERIFIED',
+        materials: [],
+        payoutMethods: [{ id: 'pm-1' }],
+      });
+      expect(formatted.isKycCompleted).toBe(true);
+      expect(formatted.isBankAccountConnected).toBe(true);
+      expect(formatted).not.toHaveProperty('payoutMethods');
+    });
+
+    it('omits the bank flag when payout accounts were not loaded (public profile)', () => {
+      const formatted = service.formatCreatorProfile({
+        id: 'c-1',
+        slug: 'ayoloco',
+        materials: [],
+      });
+      expect(formatted).not.toHaveProperty('isBankAccountConnected');
     });
 
     it('should format creator profile with only creatorName and clean slug', () => {
@@ -222,6 +295,125 @@ describe('CreatorsService', () => {
       expect(formatted.lastName).toBeUndefined();
       expect(formatted.username).toBeUndefined();
       expect(formatted.personalizedLink).toBeUndefined();
+
+      // Assert live, supporter, and KYC flags
+      expect(formatted.showSupportersOnPage).toBe(true);
+      expect(formatted.isPublished).toBe(false);
+      expect(formatted.isKycCompleted).toBe(false);
+    });
+
+    it('should include formatted material info with thumbnails, color, and price', () => {
+      const formatted = service.formatCreatorProfile({
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
+        materials: [
+          {
+            id: 'cm-1',
+            creatorId: 'c-1',
+            materialId: 'm-1',
+            price: 150000,
+            currency: 'NGN',
+            displayName: 'Special Ankara',
+            material: {
+              id: 'm-1',
+              name: 'Ankara',
+              slug: 'ankara',
+              description: 'African print',
+              color: '#7F3516',
+              thumbnailSmallUrl: 'https://cdn.example.com/ankara-sm.png',
+              thumbnailLargeUrl: 'https://cdn.example.com/ankara-lg.png',
+              defaultPrice: 100000,
+              currency: 'NGN',
+              status: 'ACTIVE',
+            },
+          },
+        ],
+      });
+
+      expect(formatted.materials).toHaveLength(1);
+      expect(formatted.materials[0].name).toBe('Ankara');
+      expect(formatted.materials[0].displayName).toBe('Special Ankara');
+      expect(formatted.materials[0].color).toBe('#7F3516');
+      expect(formatted.materials[0].thumbnailSmallUrl).toBe(
+        'https://cdn.example.com/ankara-sm.png',
+      );
+      expect(formatted.materials[0].thumbnailLargeUrl).toBe(
+        'https://cdn.example.com/ankara-lg.png',
+      );
+      expect(formatted.materials[0].price).toBe(150000);
+      expect(formatted.materials[0].isCustom).toBe(false);
+      expect(formatted.materials[0].material).toBeDefined();
+      expect(formatted.materials[0].material.color).toBe('#7F3516');
+      expect(formatted.material).toBeDefined();
+      expect(formatted.material?.id).toBe('cm-1');
+      expect(formatted.material?.name).toBe('Ankara');
+      expect(formatted.selectedMaterials).toHaveLength(1);
+    });
+
+    it('should return empty materials and null material when creator has no selected materials', () => {
+      const formatted = service.formatCreatorProfile({
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
+        materials: [],
+      });
+
+      expect(formatted.materials).toEqual([]);
+      expect(formatted.selectedMaterials).toEqual([]);
+      expect(formatted.material).toBeNull();
+    });
+
+    it('should return themeMaterial as selected material when themeMaterial is set', () => {
+      const formatted = service.formatCreatorProfile({
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
+        themeMaterialId: 'm-adire',
+        themeMaterial: {
+          id: 'm-adire',
+          name: 'Adire',
+          slug: 'adire',
+          description: 'Indigo dyed cloth',
+          color: '#1A237E',
+          thumbnailSmallUrl: 'https://cdn.example.com/adire-sm.png',
+          thumbnailLargeUrl: 'https://cdn.example.com/adire-lg.png',
+          defaultPrice: 100000,
+          currency: 'NGN',
+          status: 'ACTIVE',
+        },
+        materials: [],
+      });
+
+      expect(formatted.materials).toHaveLength(1);
+      expect(formatted.material).toBeDefined();
+      expect(formatted.material?.id).toBe('m-adire');
+      expect(formatted.material?.name).toBe('Adire');
+      expect(formatted.material?.slug).toBe('adire');
+    });
+
+    it('should filter to only the selected theme material if multiple platform materials are present', () => {
+      const formatted = service.formatCreatorProfile({
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
+        themeMaterialId: 'm-adire',
+        materials: [
+          {
+            id: 'cm-ankara',
+            materialId: 'm-ankara',
+            price: 100000,
+            material: { id: 'm-ankara', name: 'Ankara', creatorId: null },
+          },
+          {
+            id: 'cm-adire',
+            materialId: 'm-adire',
+            price: 120000,
+            material: { id: 'm-adire', name: 'Adire', creatorId: null },
+          },
+        ],
+      });
+
+      expect(formatted.materials).toHaveLength(1);
+      expect(formatted.materials[0].name).toBe('Adire');
+      expect(formatted.material?.id).toBe('cm-adire');
+      expect(formatted.material?.name).toBe('Adire');
     });
   });
 
@@ -305,6 +497,126 @@ describe('CreatorsService', () => {
       expect(res.available).toBe(true);
       expect(res.slug).toBe('aesthetefisayo');
       expect(res.message).toBe('Handle is available');
+    });
+  });
+
+  describe('social links', () => {
+    beforeEach(() => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'creator-1' });
+    });
+
+    it('replaces the whole set with canonical urls in one transaction', async () => {
+      await service.saveSocialLinks('user-1', {
+        links: [
+          { platform: 'instagram', url: '@adeola' },
+          { platform: 'twitter', url: 'https://twitter.com/adeola' },
+        ],
+      });
+
+      expect(prisma.creatorSocialLink.deleteMany).toHaveBeenCalledWith({
+        where: { creatorId: 'creator-1' },
+      });
+      expect(prisma.creatorSocialLink.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            creatorId: 'creator-1',
+            platform: 'instagram',
+            url: 'https://instagram.com/adeola',
+            verified: false,
+          },
+          {
+            creatorId: 'creator-1',
+            platform: 'x',
+            url: 'https://x.com/adeola',
+            verified: false,
+          },
+        ],
+      });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a connected link verified when it is sent back unchanged', async () => {
+      prisma.creatorSocialLink.findMany.mockResolvedValueOnce([
+        {
+          platform: 'discord',
+          url: 'https://discord.com/users/123',
+          verified: true,
+        },
+      ]);
+      await service.saveSocialLinks('user-1', {
+        links: [
+          { platform: 'discord', url: 'https://discord.com/users/123' },
+          { platform: 'instagram', url: '@adeola' },
+        ],
+      });
+      expect(prisma.creatorSocialLink.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            creatorId: 'creator-1',
+            platform: 'discord',
+            url: 'https://discord.com/users/123',
+            verified: true,
+          },
+          {
+            creatorId: 'creator-1',
+            platform: 'instagram',
+            url: 'https://instagram.com/adeola',
+            verified: false,
+          },
+        ],
+      });
+    });
+
+    it('clears every link when given an empty list', async () => {
+      await service.saveSocialLinks('user-1', { links: [] });
+      expect(prisma.creatorSocialLink.deleteMany).toHaveBeenCalled();
+      expect(prisma.creatorSocialLink.createMany).toHaveBeenCalledWith({
+        data: [],
+      });
+    });
+
+    it('rejects an unsupported platform, a bad link and a duplicate platform', async () => {
+      for (const links of [
+        [{ platform: 'linkedin', url: 'ada' }],
+        [{ platform: 'instagram', url: 'https://x.com/ada' }],
+        [
+          { platform: 'x', url: '@ada' },
+          { platform: 'twitter', url: '@ada2' },
+        ],
+      ]) {
+        await expect(
+          service.saveSocialLinks('user-1', { links }),
+        ).rejects.toThrow(BadRequestException);
+      }
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('404s when the user has no creator profile', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(service.getSocialLinks('user-1')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('removes one platform, accepting the twitter alias', async () => {
+      await service.deleteSocialLink('user-1', 'Twitter');
+      expect(prisma.creatorSocialLink.deleteMany).toHaveBeenCalledWith({
+        where: { creatorId: 'creator-1', platform: 'x' },
+      });
+      await expect(
+        service.deleteSocialLink('user-1', 'linkedin'),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects a bad onboarding link before creating anything', async () => {
+      await expect(
+        service.onboardCreator('user-1', {
+          creatorName: 'Adeola',
+          slug: 'adeola',
+          socialLinks: [{ platform: 'instagram', url: 'https://x.com/ada' }],
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.creatorProfile.create).not.toHaveBeenCalled();
     });
   });
 
@@ -404,6 +716,80 @@ describe('CreatorsService', () => {
     });
   });
 
+  describe('material thumbnail override', () => {
+    const file = { buffer: Buffer.from('img') } as Express.Multer.File;
+
+    beforeEach(() => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'creator-1' });
+      prisma.creatorMaterial.findUnique.mockResolvedValue({ id: 'cm-1' });
+    });
+
+    it('stores the uploaded image on the creator material', async () => {
+      storage.uploadFile.mockResolvedValue({
+        secureUrl: 'https://cdn.buymeayard.com/custom.jpg',
+      });
+
+      const res = await service.uploadMaterialThumbnail(
+        'user-1',
+        'mat-1',
+        file,
+      );
+
+      expect(storage.uploadFile).toHaveBeenCalledWith(file.buffer, {
+        folder: 'material-thumbnails',
+        publicId: 'creator-creator-1-mat-1',
+        resourceType: 'image',
+      });
+      expect(prisma.creatorMaterial.update).toHaveBeenCalledWith({
+        where: { id: 'cm-1' },
+        data: { customThumbnailUrl: 'https://cdn.buymeayard.com/custom.jpg' },
+      });
+      expect(res).toEqual({
+        materialId: 'mat-1',
+        customMaterialThumbnail: 'https://cdn.buymeayard.com/custom.jpg',
+      });
+    });
+
+    it('refuses a material that is not on the creator menu', async () => {
+      prisma.creatorMaterial.findUnique.mockResolvedValue(null);
+      await expect(
+        service.uploadMaterialThumbnail('user-1', 'mat-9', file),
+      ).rejects.toThrow(NotFoundException);
+      expect(storage.uploadFile).not.toHaveBeenCalled();
+    });
+
+    it('clears the override and removes the stored image on reset', async () => {
+      const res = await service.resetMaterialThumbnail('user-1', 'mat-1');
+
+      expect(prisma.creatorMaterial.update).toHaveBeenCalledWith({
+        where: { id: 'cm-1' },
+        data: { customThumbnailUrl: null },
+      });
+      expect(storage.deleteFile).toHaveBeenCalledWith(
+        'material-thumbnails/creator-creator-1-mat-1',
+      );
+      expect(res).toEqual({
+        materialId: 'mat-1',
+        customMaterialThumbnail: null,
+      });
+    });
+
+    it('returns the override on the creator menu', async () => {
+      prisma.creatorMaterial.findMany.mockResolvedValue([
+        {
+          id: 'cm-1',
+          materialId: 'mat-1',
+          customThumbnailUrl: 'https://cdn.buymeayard.com/custom.jpg',
+          material: { name: 'Ankara' },
+        },
+      ]);
+      const [item] = await service.getCreatorMaterials('user-1');
+      expect(item.customMaterialThumbnail).toBe(
+        'https://cdn.buymeayard.com/custom.jpg',
+      );
+    });
+  });
+
   describe('getCreatorMaterials', () => {
     it('should throw NotFoundException if profile does not exist', async () => {
       prisma.creatorProfile.findUnique.mockResolvedValue(null);
@@ -434,6 +820,51 @@ describe('CreatorsService', () => {
         include: { material: true },
         orderBy: { createdAt: 'asc' },
       });
+    });
+  });
+
+  describe('createCustomMaterial', () => {
+    it('should create custom material scoped to creator and link to creator materials', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'creator-1',
+        slug: 'fisayo',
+      });
+      prisma.material.findFirst.mockResolvedValue({
+        id: 'mat-primary',
+        defaultPrice: 100000,
+        currency: 'NGN',
+      });
+      prisma.material.create.mockResolvedValue({
+        id: 'mat-custom-1',
+        name: 'Silk Velvet',
+        creatorId: 'creator-1',
+        defaultPrice: 100000,
+        currency: 'NGN',
+      });
+      prisma.creatorMaterial.create.mockResolvedValue({
+        id: 'cm-custom-1',
+        creatorId: 'creator-1',
+        materialId: 'mat-custom-1',
+        price: 100000,
+        displayName: 'Silk Velvet',
+        material: { id: 'mat-custom-1', creatorId: 'creator-1' },
+      });
+
+      const res = await service.createCustomMaterial('user-1', {
+        name: 'Silk Velvet',
+        description: 'Luxury custom fabric',
+      });
+
+      expect(res.isCustom).toBe(true);
+      expect(prisma.material.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          creatorId: 'creator-1',
+          name: 'Silk Velvet',
+          defaultPrice: 100000,
+          currency: 'NGN',
+        }),
+      });
+      expect(prisma.creatorMaterial.create).toHaveBeenCalled();
     });
   });
 
@@ -584,6 +1015,752 @@ describe('CreatorsService', () => {
       await expect(service.getShareLinkBySlug('nonexistent')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('updateCreatorSettings', () => {
+    it('should update thank-you message', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        thankYouMessage: 'Thank you for your generosity! 🎉',
+      });
+
+      const res = await service.updateCreatorSettings('u-1', {
+        thankYouMessage: 'Thank you for your generosity! 🎉',
+      });
+
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: {
+            thankYouMessage: 'Thank you for your generosity! 🎉',
+          },
+        }),
+      );
+      expect(res.thankYouMessage).toBe('Thank you for your generosity! 🎉');
+    });
+
+    it('should toggle showSupportersOnPage setting', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        showSupportersOnPage: false,
+      });
+
+      const res = await service.updateCreatorSettings('u-1', {
+        showSupportersOnPage: false,
+      });
+
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: {
+            showSupportersOnPage: false,
+          },
+        }),
+      );
+      expect(res.showSupportersOnPage).toBe(false);
+    });
+
+    it('should set theme material when a valid platform material id is given', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.material.findFirst.mockResolvedValue({
+        id: 'mat-ankara',
+        name: 'Ankara',
+        status: 'ACTIVE',
+        creatorId: null,
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        themeMaterialId: 'mat-ankara',
+      });
+
+      const res = await service.updateCreatorSettings('u-1', {
+        themeMaterialId: 'mat-ankara',
+      });
+
+      expect(prisma.material.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            id: 'mat-ankara',
+            status: 'ACTIVE',
+            creatorId: null,
+          }),
+        }),
+      );
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: { themeMaterialId: 'mat-ankara' },
+        }),
+      );
+      expect(res.themeMaterialId).toBe('mat-ankara');
+    });
+
+    it('should throw BadRequestException for an invalid or unknown themeMaterialId', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.material.findFirst.mockResolvedValue(null); // not found
+
+      await expect(
+        service.updateCreatorSettings('u-1', {
+          themeMaterialId: 'bad-id',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('updatePageStatus', () => {
+    it('should reject publishing if required setup fields are incomplete', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        creatorName: 'Adeola',
+        slug: 'adeola',
+        bio: null, // missing bio
+        avatarUrl: null, // missing avatar
+        thankYouMessage: null, // missing thank-you message
+        materials: [], // missing materials
+      });
+
+      await expect(
+        service.updatePageStatus('u-1', { isPublished: true }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should allow publishing when all required setup fields are filled', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        creatorName: 'Adeola Johnson',
+        slug: 'adeola',
+        bio: 'Fashion designer in Lagos',
+        avatarUrl: 'https://example.com/avatar.jpg',
+        thankYouMessage: 'Thank you so much! 🙏',
+        materials: [{ id: 'cm-1', status: 'ACTIVE' }],
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        isPublished: true,
+      });
+
+      const res = await service.updatePageStatus('u-1', { isPublished: true });
+
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: { isPublished: true },
+        }),
+      );
+      expect(res.isPublished).toBe(true);
+    });
+
+    it('should allow unpublishing without validating completeness', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        creatorName: null,
+      });
+      prisma.creatorProfile.update.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        isPublished: false,
+      });
+
+      const res = await service.updatePageStatus('u-1', { isPublished: false });
+
+      expect(prisma.creatorProfile.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'c-1' },
+          data: { isPublished: false },
+        }),
+      );
+      expect(res.isPublished).toBe(false);
+    });
+  });
+
+  const activePayoutMethod = {
+    id: 'pm-1',
+    status: 'ACTIVE',
+    isDefault: true,
+    bankName: 'Guaranty Trust Bank',
+    bankCode: '058',
+    accountName: 'FISAYO ROTIBI',
+    accountIdentifier: '0123454589',
+    recipientCode: 'RCP_1',
+    verifiedAt: new Date(),
+  };
+
+  describe('getDashboardOverview', () => {
+    it('should throw NotFoundException if creator profile not found', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(
+        service.getDashboardOverview('non-existent'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return complete dashboard overview with metrics, balance, recent contributions and chart', async () => {
+      const mockCreator = {
+        id: 'c-1',
+        userId: 'u-1',
+        creatorName: 'Fisayo Rotibi',
+        slug: 'aesthetefisayo',
+        avatarUrl: 'https://cdn.example.com/avatar.jpg',
+        status: 'ACTIVE',
+        kycStatus: 'VERIFIED',
+        isPublished: true,
+        payoutMethods: [activePayoutMethod],
+      };
+
+      prisma.creatorProfile.findUnique.mockResolvedValue(mockCreator);
+
+      prisma.support.aggregate.mockImplementation((args: any) =>
+        Promise.resolve(
+          args.where?.payment
+            ? { _sum: { creatorAmount: 1600000 } } // contributions still processing
+            : {
+                _count: { id: 24 },
+                _sum: {
+                  totalAmount: 12000000,
+                  creatorAmount: 11400000,
+                  platformFee: 600000,
+                },
+              },
+        ),
+      );
+
+      prisma.payout.aggregate.mockResolvedValue({
+        _sum: { netAmount: 2000000 }, // withdrawn
+      });
+
+      prisma.support.findMany.mockResolvedValue([
+        {
+          id: 'sup-1',
+          totalAmount: 500000,
+          creatorAmount: 475000,
+          currency: 'NGN',
+          message: 'Love your work!',
+          visibility: 'PUBLIC',
+          createdAt: new Date('2026-10-05T12:00:00Z'),
+          guestName: 'Ada Okafor',
+          items: [
+            {
+              quantity: 2,
+              materialNameSnapshot: 'Ankara',
+              creatorMaterial: {
+                material: {
+                  color: '#FF6B6B',
+                  imageUrl: 'https://cdn.example.com/ankara.jpg',
+                  thumbnailSmallUrl: 'https://cdn.example.com/ankara_sm.jpg',
+                },
+              },
+            },
+          ],
+        },
+      ]);
+
+      const result = await service.getDashboardOverview('u-1', '30d');
+
+      expect(result).toHaveProperty('creator');
+      expect(result.creator.creatorName).toBe('Fisayo Rotibi');
+      expect(result.creator.pageStatus).toBe('LIVE');
+      expect(result.creator.pageStatusLabel).toBe('Page is live');
+      expect(result.creator.publicUrl).toContain('aesthetefisayo');
+
+      expect(result.metrics.totalContributions).toBe(24);
+      expect(result.metrics.totalContributionAmount).toBe(12000000);
+      expect(result.metrics.netEarnings).toBe(11400000);
+      expect(result.metrics.platformFees).toBe(600000);
+
+      expect(result.balance.availableBalance).toBe(9800000);
+      expect(result.balance.pendingBalance).toBe(1600000);
+      expect(result.balance.withdrawnToDate).toBe(2000000);
+      expect(result.balance.canWithdraw).toBe(true);
+
+      expect(result.recentContributions).toHaveLength(1);
+      expect(result.recentContributions[0].supporter.initials).toBe('AO');
+      expect(result.recentContributions[0].material?.name).toBe('Ankara');
+
+      expect(result.earningsChart.period).toBe('30d');
+      expect(result.earningsChart.dataPoints.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('getDashboardBalance', () => {
+    it('should throw NotFoundException if creator does not exist', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(service.getDashboardBalance('non-existent')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    function mockBalance(creator: Record<string, unknown>) {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+        status: 'ACTIVE',
+        kycStatus: 'VERIFIED',
+        payoutMethods: [activePayoutMethod],
+        ...creator,
+      });
+      prisma.support.aggregate.mockResolvedValue({
+        _sum: { creatorAmount: 0 },
+      });
+      prisma.payout.aggregate.mockResolvedValue({ _sum: { netAmount: 0 } });
+    }
+
+    it('should compute canWithdraw as false if KYC is not verified', async () => {
+      mockBalance({ kycStatus: 'PENDING' });
+
+      const balance = await service.getDashboardBalance('u-1');
+      expect(balance.canWithdraw).toBe(false);
+      expect(balance.setupStep).toBe('VERIFY_IDENTITY');
+    });
+
+    it('should compute canWithdraw as false if no payout method is added', async () => {
+      mockBalance({ payoutMethods: [] });
+
+      const balance = await service.getDashboardBalance('u-1');
+      expect(balance.canWithdraw).toBe(false);
+      expect(balance.setupStep).toBe('CONNECT_BANK');
+      expect(balance.payoutMethod).toBeNull();
+    });
+
+    it('ignores replaced payout accounts', async () => {
+      mockBalance({
+        payoutMethods: [{ ...activePayoutMethod, status: 'INACTIVE' }],
+      });
+
+      const balance = await service.getDashboardBalance('u-1');
+      expect(balance.hasPayoutMethod).toBe(false);
+    });
+
+    it('blocks withdrawal below the ₦1,000 minimum', async () => {
+      mockBalance({});
+      ledgerService.getAccountBalance.mockResolvedValueOnce(75000);
+
+      const balance = await service.getDashboardBalance('u-1');
+      expect(balance.canWithdraw).toBe(false);
+      expect(balance.minimumWithdrawal).toBe(100000);
+    });
+
+    it('returns the payout account card when ready', async () => {
+      mockBalance({});
+
+      const balance = await service.getDashboardBalance('u-1');
+      expect(balance.canWithdraw).toBe(true);
+      expect(balance.setupStep).toBe('READY');
+      expect(balance.payoutMethod).toEqual({
+        id: 'pm-1',
+        bankName: 'Guaranty Trust Bank',
+        bankCode: '058',
+        accountName: 'FISAYO ROTIBI',
+        accountNumberLast4: '4589',
+        verified: true,
+      });
+    });
+  });
+
+  describe('getDashboardEarnings', () => {
+    it('should throw NotFoundException if creator not found', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(
+        service.getDashboardEarnings('non-existent'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return earnings chart points for period 7d', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.support.findMany.mockResolvedValue([]);
+
+      const chart = await service.getDashboardEarnings('u-1', { period: '7d' });
+      expect(chart.period).toBe('7d');
+      expect(chart.dataPoints.length).toBe(7);
+    });
+
+    it('should return earnings chart points for period 12m with only month tickers as labels', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.support.findMany.mockResolvedValue([]);
+
+      const chart = await service.getDashboardEarnings('u-1', {
+        period: '12m',
+      });
+      expect(chart.period).toBe('12m');
+      expect(chart.dataPoints.length).toBe(12);
+      for (const point of chart.dataPoints) {
+        expect(point.label).toMatch(/^[A-Z][a-z]{2}$/);
+      }
+    });
+  });
+
+  describe('getDashboardContributions', () => {
+    it('should throw NotFoundException if creator not found', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(
+        service.getDashboardContributions('non-existent'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return paginated contributions with supporter initials and anonymous handling', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({
+        id: 'c-1',
+        userId: 'u-1',
+      });
+      prisma.support.count.mockResolvedValue(2);
+      prisma.support.findMany.mockResolvedValue([
+        {
+          id: 's-1',
+          totalAmount: 100000,
+          creatorAmount: 95000,
+          currency: 'NGN',
+          message: null,
+          visibility: 'ANONYMOUS',
+          createdAt: new Date('2026-10-06T10:00:00Z'),
+          supporter: null,
+          items: [],
+        },
+        {
+          id: 's-2',
+          totalAmount: 200000,
+          creatorAmount: 190000,
+          currency: 'NGN',
+          message: 'Congrats!',
+          visibility: 'PUBLIC',
+          createdAt: new Date('2026-10-06T11:00:00Z'),
+          guestName: 'Chidi Nwosu',
+          items: [
+            {
+              quantity: 1,
+              materialNameSnapshot: 'Lace',
+              creatorMaterial: { material: { color: '#00FF00' } },
+            },
+          ],
+        },
+      ]);
+
+      const res = await service.getDashboardContributions('u-1', {
+        page: 1,
+        limit: 10,
+      });
+
+      expect(res.pagination.total).toBe(2);
+      expect(res.items).toHaveLength(2);
+      expect(res.items[0].supporter.name).toBe('Anonymous');
+      expect(res.items[0].supporter.initials).toBe('AN');
+      expect(res.items[1].supporter.name).toBe('Chidi Nwosu');
+      expect(res.items[1].supporter.initials).toBe('CN');
+      expect(res.items[1].material?.name).toBe('Lace');
+    });
+
+    it('shows the name a guest typed, and hides it when they asked to be anonymous', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.count.mockResolvedValue(2);
+      const base = {
+        totalAmount: 500000,
+        platformFee: 50000,
+        creatorAmount: 450000,
+        currency: 'NGN',
+        status: 'PAID',
+        message: null,
+        supporter: null,
+        items: [],
+        payment: { providerReference: 'ref-9' },
+        createdAt: new Date('2026-10-06T10:00:00Z'),
+      };
+      prisma.support.findMany.mockResolvedValue([
+        { ...base, id: 's-1', visibility: 'PUBLIC', guestName: 'Ada Okafor' },
+        { ...base, id: 's-2', visibility: 'ANONYMOUS', guestName: 'Tomi' },
+      ]);
+
+      const res = await service.getDashboardContributions('u-1');
+
+      expect(res.items[0].supporter.name).toBe('Ada Okafor');
+      expect(res.items[1].supporter.name).toBe('Anonymous');
+      expect(res.items[0]).toMatchObject({
+        platformFee: 50000,
+        status: 'PAID',
+        reference: 'ref-9',
+      });
+    });
+
+    it('shows the creator the name and message of a creator-only gift but not an anonymous one', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.count.mockResolvedValue(2);
+      const base = {
+        totalAmount: 500000,
+        platformFee: 50000,
+        creatorAmount: 450000,
+        currency: 'NGN',
+        status: 'PAID',
+        guestName: 'Tomi',
+        message: 'Keep creating',
+        supporter: null,
+        items: [],
+        payment: { providerReference: 'ref-9' },
+        createdAt: new Date('2026-10-06T10:00:00Z'),
+      };
+      prisma.support.findMany.mockResolvedValue([
+        { ...base, id: 's-1', visibility: 'CREATOR_ONLY' },
+        { ...base, id: 's-2', visibility: 'ANONYMOUS' },
+      ]);
+
+      const res = await service.getDashboardContributions('u-1');
+
+      expect(res.items[0].supporter.name).toBe('Tomi');
+      expect(res.items[0].message).toBe('Keep creating');
+      expect(res.items[1].supporter.name).toBe('Anonymous');
+      expect(res.items[1].message).toBeNull();
+    });
+
+    it('searches names and messages but never the name of an anonymous supporter', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.count.mockResolvedValue(0);
+      prisma.support.findMany.mockResolvedValue([]);
+
+      await service.getDashboardContributions('u-1', {
+        search: ' ada ',
+        order: 'asc',
+      } as never);
+
+      const contains = { contains: 'ada', mode: 'insensitive' };
+      expect(prisma.support.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            creatorId: 'c-1',
+            status: { in: ['PAID', 'COMPLETED'] },
+            OR: [
+              { visibility: { not: 'ANONYMOUS' }, guestName: contains },
+              { visibility: { not: 'ANONYMOUS' }, message: contains },
+            ],
+          },
+          orderBy: [{ createdAt: 'asc' }, { id: 'desc' }],
+        }),
+      );
+    });
+  });
+
+  describe('getDashboardContribution', () => {
+    it('only looks inside the signed-in creator contributions, so another creator id is a 404', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getDashboardContribution('u-1', 'support-of-someone-else'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.support.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            id: 'support-of-someone-else',
+            creatorId: 'c-1',
+            status: { in: ['PAID', 'COMPLETED'] },
+          },
+        }),
+      );
+    });
+
+    it('returns the amount breakdown and payment reference', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.findFirst.mockResolvedValue({
+        id: 's-1',
+        totalAmount: 1250000,
+        platformFee: 5000,
+        creatorAmount: 1245000,
+        currency: 'NGN',
+        status: 'COMPLETED',
+        message: 'Loved the video',
+        visibility: 'PUBLIC',
+        guestName: 'Ada Okafor',
+        payment: { providerReference: 'BMY-1' },
+        items: [],
+        createdAt: new Date('2026-01-06T11:42:00Z'),
+      });
+
+      const dto = await service.getDashboardContribution('u-1', 's-1');
+
+      expect(dto).toMatchObject({
+        id: 's-1',
+        amount: 1250000,
+        platformFee: 5000,
+        creatorAmount: 1245000,
+        reference: 'BMY-1',
+        supporter: { name: 'Ada Okafor' },
+      });
+    });
+  });
+
+  describe('findAll (discover)', () => {
+    it('returns a page of creators with the shared pagination block', async () => {
+      (prisma.creatorProfile as unknown as { count: jest.Mock }).count = jest
+        .fn()
+        .mockResolvedValue(45);
+      prisma.creatorProfile.findMany.mockResolvedValue([{ id: 'c-1' }]);
+      jest
+        .spyOn(service as never, 'formatCreatorProfile')
+        .mockImplementation((c: { id: string }) => ({ id: c.id }) as never);
+
+      const res = await service.findAll({ page: 2, limit: 20 });
+
+      expect(prisma.creatorProfile.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 20, take: 20 }),
+      );
+      expect(res).toEqual({
+        items: [{ id: 'c-1' }],
+        pagination: { page: 2, limit: 20, total: 45, totalPages: 3 },
+      });
+    });
+  });
+
+  describe('getDashboardMetrics', () => {
+    it('should throw NotFoundException if creator profile not found', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(service.getDashboardMetrics('non-existent')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should return aggregated KPI metrics for creator', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.aggregate.mockResolvedValue({
+        _count: { id: 15 },
+        _sum: {
+          totalAmount: 7500000,
+          creatorAmount: 7125000,
+          platformFee: 375000,
+        },
+      });
+
+      const metrics = await service.getDashboardMetrics('u-1');
+      expect(metrics.totalContributions).toBe(15);
+      expect(metrics.totalContributionAmount).toBe(7500000);
+      expect(metrics.netEarnings).toBe(7125000);
+      expect(metrics.platformFees).toBe(375000);
+      expect(metrics.currency).toBe('NGN');
+    });
+
+    it('compares this month with last month', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.aggregate
+        .mockResolvedValueOnce({
+          _count: { id: 15 },
+          _sum: { totalAmount: 9000000, creatorAmount: 0, platformFee: 0 },
+        })
+        .mockResolvedValueOnce({
+          _count: { id: 4 },
+          _sum: { totalAmount: 1120000 },
+        })
+        .mockResolvedValueOnce({ _sum: { totalAmount: 1000000 } });
+
+      const metrics = await service.getDashboardMetrics('u-1');
+
+      expect(metrics).toMatchObject({
+        thisMonthContributions: 4,
+        thisMonthAmount: 1120000,
+        lastMonthAmount: 1000000,
+        thisMonthChangePercent: 12,
+      });
+    });
+
+    it('counts supporters by email and flags those new this month', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.aggregate.mockResolvedValue({
+        _count: { id: 0 },
+        _sum: {},
+      });
+      const startOfMonth = new Date(
+        Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1),
+      );
+      const before = new Date(startOfMonth.getTime() - 86_400_000);
+      prisma.support.groupBy.mockResolvedValue([
+        {
+          guestEmail: 'a@x.com',
+          _count: { _all: 3 },
+          _min: { createdAt: before },
+        },
+        {
+          guestEmail: 'b@x.com',
+          _count: { _all: 1 },
+          _min: { createdAt: startOfMonth },
+        },
+        { guestEmail: null, _count: { _all: 2 }, _min: { createdAt: before } },
+      ]);
+      prisma.support.count.mockResolvedValue(1);
+
+      const metrics = await service.getDashboardMetrics('u-1');
+
+      expect(metrics.supporters).toBe(4); // a, b and two emailless gifts
+      expect(metrics.newSupportersThisMonth).toBe(2); // b and one emailless gift
+    });
+
+    it('has no percentage when nothing was received last month', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.aggregate.mockResolvedValue({
+        _count: { id: 0 },
+        _sum: {},
+      });
+
+      const metrics = await service.getDashboardMetrics('u-1');
+
+      expect(metrics.thisMonthChangePercent).toBeNull();
+    });
+  });
+
+  describe('getDashboardRecentContributions', () => {
+    it('should throw NotFoundException if creator profile not found', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue(null);
+      await expect(
+        service.getDashboardRecentContributions('non-existent'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should return recent contributions list with limit', async () => {
+      prisma.creatorProfile.findUnique.mockResolvedValue({ id: 'c-1' });
+      prisma.support.findMany.mockResolvedValue([
+        {
+          id: 's-1',
+          totalAmount: 500000,
+          creatorAmount: 475000,
+          currency: 'NGN',
+          message: 'Great work!',
+          visibility: 'PUBLIC',
+          createdAt: new Date('2026-10-06T12:00:00Z'),
+          guestName: 'Ada Okafor',
+          items: [
+            {
+              quantity: 1,
+              materialNameSnapshot: 'Ankara',
+              creatorMaterial: { material: { color: '#FF0000' } },
+            },
+          ],
+        },
+      ]);
+
+      const list = await service.getDashboardRecentContributions('u-1', 5);
+      expect(list).toHaveLength(1);
+      expect(list[0].id).toBe('s-1');
+      expect(list[0].supporter.name).toBe('Ada Okafor');
+      expect(list[0].material?.name).toBe('Ankara');
     });
   });
 });

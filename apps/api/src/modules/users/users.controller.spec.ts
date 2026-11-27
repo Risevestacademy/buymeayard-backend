@@ -50,6 +50,7 @@ describe('UsersController', () => {
           slug: 'alice',
           status: 'PROFILE_CREATED',
           kycStatus: 'NOT_SUBMITTED',
+          kycBlockedReason: null,
         },
       };
       usersService.findByIdWithRoles.mockResolvedValue(mockProfile);
@@ -58,8 +59,6 @@ describe('UsersController', () => {
       expect(result).toEqual(mockProfile);
       expect(result.isOnboardingCompleted).toBe(true);
       expect(result.isProfileSetupCompleted).toBe(true);
-      // Strictly verify no obsolete redundant aliases are present
-      expect((result as any).isOnboarded).toBeUndefined();
       expect((result as any).isProfileCompleted).toBeUndefined();
       expect((result.creatorProfile as any)?.username).toBeUndefined();
       expect((result.creatorProfile as any)?.personalizedLink).toBeUndefined();
@@ -71,7 +70,7 @@ describe('UsersController', () => {
         id: 'user-2',
         name: 'Bob',
         email: 'bob@example.com',
-        roles: ['SUPPORTER'],
+        roles: ['CREATOR'],
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
         creatorProfile: null,
@@ -81,7 +80,6 @@ describe('UsersController', () => {
       const result = await controller.getProfile('user-2');
       expect(result.isOnboardingCompleted).toBe(false);
       expect(result.isProfileSetupCompleted).toBe(false);
-      expect((result as any).isOnboarded).toBeUndefined();
       expect((result as any).isProfileCompleted).toBeUndefined();
     });
   });
@@ -122,7 +120,7 @@ describe('UsersController', () => {
         id: 'user-2',
         name: 'Bob',
         email: 'bob@example.com',
-        roles: ['SUPPORTER'],
+        roles: ['CREATOR'],
       };
       usersService.findByIdWithRoles.mockResolvedValue(mockUser);
 
@@ -145,7 +143,7 @@ describe('UsersController', () => {
 
       const result = await controller.getUserById('user-2', {
         id: 'user-1',
-        roles: ['SUPPORTER'],
+        roles: ['CREATOR'],
       });
       expect(result).toEqual(mockPublicUser);
       expect(usersService.getPublicProfile).toHaveBeenCalledWith('user-2');

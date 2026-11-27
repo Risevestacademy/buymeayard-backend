@@ -1,6 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CreatorsController } from './creators.controller';
 import { CreatorsService } from './creators.service';
+import { SupportsService } from '../supports/supports.service';
+import { PaymentsService } from '../payments/payments.service';
+import { SupportAlertsService } from '../supports/support-alerts.service';
 
 describe('CreatorsController', () => {
   let controller: CreatorsController;
@@ -16,8 +19,17 @@ describe('CreatorsController', () => {
     uploadAvatar: jest.Mock;
     getCreatorMaterials: jest.Mock;
     saveCreatorMaterials: jest.Mock;
+    createCustomMaterial: jest.Mock;
     getShareLink: jest.Mock;
     getShareLinkBySlug: jest.Mock;
+    updateCreatorSettings: jest.Mock;
+    updatePageStatus: jest.Mock;
+    getDashboardOverview: jest.Mock;
+    getDashboardBalance: jest.Mock;
+    getDashboardEarnings: jest.Mock;
+    getDashboardContributions: jest.Mock;
+    getDashboardMetrics: jest.Mock;
+    getDashboardRecentContributions: jest.Mock;
   };
 
   const rawCreatorProfile = {
@@ -43,8 +55,17 @@ describe('CreatorsController', () => {
       uploadAvatar: jest.fn(),
       getCreatorMaterials: jest.fn(),
       saveCreatorMaterials: jest.fn(),
+      createCustomMaterial: jest.fn(),
       getShareLink: jest.fn(),
       getShareLinkBySlug: jest.fn(),
+      updateCreatorSettings: jest.fn(),
+      updatePageStatus: jest.fn(),
+      getDashboardOverview: jest.fn(),
+      getDashboardBalance: jest.fn(),
+      getDashboardEarnings: jest.fn(),
+      getDashboardContributions: jest.fn(),
+      getDashboardMetrics: jest.fn(),
+      getDashboardRecentContributions: jest.fn(),
       formatCreatorProfile: jest.fn((p) => {
         if (!p) return p;
         const {
@@ -70,6 +91,18 @@ describe('CreatorsController', () => {
         {
           provide: CreatorsService,
           useValue: creatorsService,
+        },
+        {
+          provide: PaymentsService,
+          useValue: { initializePayment: jest.fn() },
+        },
+        {
+          provide: SupportsService,
+          useValue: {},
+        },
+        {
+          provide: SupportAlertsService,
+          useValue: {},
         },
       ],
     }).compile();
@@ -164,7 +197,9 @@ describe('CreatorsController', () => {
       ];
       creatorsService.findAll.mockResolvedValue(mockCreators);
 
-      const result = await controller.getCreators({ search: 'adeola' });
+      const result = await controller.getCreators({
+        search: 'adeola',
+      } as never);
 
       expect(creatorsService.findAll).toHaveBeenCalledWith({
         search: 'adeola',
@@ -257,6 +292,26 @@ describe('CreatorsController', () => {
     });
   });
 
+  describe('createCustomMaterial (POST /creators/me/materials/custom)', () => {
+    it('should create custom material for creator', async () => {
+      const dto = { name: 'Silk Velvet', description: 'Custom' };
+      const mockResult = {
+        id: 'cm-custom',
+        displayName: 'Silk Velvet',
+        isCustom: true,
+      };
+      creatorsService.createCustomMaterial.mockResolvedValue(mockResult);
+
+      const result = await controller.createCustomMaterial('user-1', dto);
+
+      expect(creatorsService.createCustomMaterial).toHaveBeenCalledWith(
+        'user-1',
+        dto,
+      );
+      expect(result).toEqual(mockResult);
+    });
+  });
+
   describe('getMyShareLink (GET /creators/me/share-link)', () => {
     it('should delegate share link generation to service for logged in creator', async () => {
       const mockShareData = {
@@ -304,6 +359,223 @@ describe('CreatorsController', () => {
 
       expect(creatorsService.getShareLinkBySlug).toHaveBeenCalledWith('adeola');
       expect(result).toEqual(mockShareData);
+    });
+  });
+
+  describe('updateCreatorSettings (PATCH /creators/me/settings)', () => {
+    it('should update thank-you message and showSupportersOnPage flag', async () => {
+      creatorsService.updateCreatorSettings.mockResolvedValue({
+        ...rawCreatorProfile,
+        thankYouMessage: 'Thank you for your generous yards! 🙏',
+        showSupportersOnPage: true,
+      });
+
+      const result = await controller.updateCreatorSettings('user-1', {
+        thankYouMessage: 'Thank you for your generous yards! 🙏',
+        showSupportersOnPage: true,
+      });
+
+      expect(creatorsService.updateCreatorSettings).toHaveBeenCalledWith(
+        'user-1',
+        {
+          thankYouMessage: 'Thank you for your generous yards! 🙏',
+          showSupportersOnPage: true,
+        },
+      );
+      expect(creatorsService.formatCreatorProfile).toHaveBeenCalled();
+      expect(result.thankYouMessage).toBe(
+        'Thank you for your generous yards! 🙏',
+      );
+    });
+  });
+
+  describe('updatePageStatus (PATCH /creators/me/page-status)', () => {
+    it('should update page published status and format profile', async () => {
+      creatorsService.updatePageStatus.mockResolvedValue({
+        ...rawCreatorProfile,
+        isPublished: true,
+      });
+
+      const result = await controller.updatePageStatus('user-1', {
+        isPublished: true,
+      });
+
+      expect(creatorsService.updatePageStatus).toHaveBeenCalledWith('user-1', {
+        isPublished: true,
+      });
+      expect(creatorsService.formatCreatorProfile).toHaveBeenCalled();
+      expect(result.isPublished).toBe(true);
+    });
+  });
+
+  describe('getDashboard (GET /creators/me/dashboard)', () => {
+    it('should delegate to creatorsService.getDashboardOverview with default or query period', async () => {
+      const mockDashboard = {
+        creator: { id: 'c-1', creatorName: 'Adeola', pageStatus: 'LIVE' },
+        metrics: { totalContributions: 24, totalContributionAmount: 12000000 },
+        balance: { availableBalance: 9800000, canWithdraw: true },
+        recentContributions: [],
+        earningsChart: { period: '30d', points: [] },
+      };
+      creatorsService.getDashboardOverview.mockResolvedValue(mockDashboard);
+
+      const res = await controller.getDashboard('user-1', '30d');
+      expect(creatorsService.getDashboardOverview).toHaveBeenCalledWith(
+        'user-1',
+        '30d',
+      );
+      expect(res).toBe(mockDashboard);
+    });
+  });
+
+  describe('getOverview (GET /creators/me/overview)', () => {
+    it('should alias to getDashboardOverview', async () => {
+      const mockDashboard = { creator: { id: 'c-1' } };
+      creatorsService.getDashboardOverview.mockResolvedValue(mockDashboard);
+
+      const res = await controller.getOverview('user-1', '7d');
+      expect(creatorsService.getDashboardOverview).toHaveBeenCalledWith(
+        'user-1',
+        '7d',
+      );
+      expect(res).toBe(mockDashboard);
+    });
+  });
+
+  describe('getDashboardEarnings (GET /creators/me/dashboard/earnings)', () => {
+    it('should delegate to creatorsService.getDashboardEarnings', async () => {
+      const mockEarnings = {
+        period: '90d',
+        totalGrossAmount: 15000000,
+        points: [],
+      };
+      creatorsService.getDashboardEarnings.mockResolvedValue(mockEarnings);
+
+      const res = await controller.getDashboardEarnings('user-1', {
+        period: '90d',
+      });
+      expect(creatorsService.getDashboardEarnings).toHaveBeenCalledWith(
+        'user-1',
+        { period: '90d' },
+      );
+      expect(res).toBe(mockEarnings);
+    });
+  });
+
+  describe('getDashboardContributions (GET /creators/me/dashboard/contributions)', () => {
+    it('should delegate to creatorsService.getDashboardContributions', async () => {
+      const mockContributions = {
+        items: [],
+        pagination: { total: 0, page: 1, limit: 10, totalPages: 1 },
+      };
+      creatorsService.getDashboardContributions.mockResolvedValue(
+        mockContributions,
+      );
+
+      const res = await controller.getDashboardContributions('user-1', {
+        page: 1,
+        limit: 10,
+      });
+      expect(creatorsService.getDashboardContributions).toHaveBeenCalledWith(
+        'user-1',
+        { page: 1, limit: 10 },
+      );
+      expect(res).toBe(mockContributions);
+    });
+  });
+
+  describe('getDashboardBalance (GET /creators/me/dashboard/balance)', () => {
+    it('should delegate to creatorsService.getDashboardBalance', async () => {
+      const mockBalance = {
+        availableBalance: 5000000,
+        pendingBalance: 1000000,
+        withdrawnToDate: 2000000,
+        canWithdraw: true,
+      };
+      creatorsService.getDashboardBalance.mockResolvedValue(mockBalance);
+
+      const res = await controller.getDashboardBalance('user-1');
+      expect(creatorsService.getDashboardBalance).toHaveBeenCalledWith(
+        'user-1',
+      );
+      expect(res).toBe(mockBalance);
+    });
+  });
+
+  describe('getDashboardMetrics (GET /creators/me/dashboard/metrics and /creators/me/metrics)', () => {
+    it('should delegate to creatorsService.getDashboardMetrics', async () => {
+      const mockMetrics = {
+        totalContributions: 24,
+        totalContributionAmount: 12000000,
+        netEarnings: 11400000,
+        platformFees: 600000,
+        currency: 'NGN',
+      };
+      creatorsService.getDashboardMetrics.mockResolvedValue(mockMetrics);
+
+      const res = await controller.getDashboardMetrics('user-1');
+      expect(creatorsService.getDashboardMetrics).toHaveBeenCalledWith(
+        'user-1',
+      );
+      expect(res).toBe(mockMetrics);
+
+      const aliasRes = await controller.getMetricsAlias('user-1');
+      expect(aliasRes).toBe(mockMetrics);
+    });
+  });
+
+  describe('getDashboardRecentContributions (GET /creators/me/dashboard/recent-contributions)', () => {
+    it('should delegate to creatorsService.getDashboardRecentContributions', async () => {
+      const mockRecent = [
+        {
+          id: 's-1',
+          amount: 500000,
+          supporter: { name: 'Ada', initials: 'AO' },
+        },
+      ];
+      creatorsService.getDashboardRecentContributions.mockResolvedValue(
+        mockRecent,
+      );
+
+      const res = await controller.getDashboardRecentContributions('user-1', {
+        limit: 5,
+      });
+      expect(
+        creatorsService.getDashboardRecentContributions,
+      ).toHaveBeenCalledWith('user-1', 5);
+      expect(res).toBe(mockRecent);
+
+      const aliasRes = await controller.getRecentContributionsAlias('user-1', {
+        limit: 5,
+      });
+      expect(aliasRes).toBe(mockRecent);
+    });
+  });
+
+  describe('Aliases (/creators/me/balance and /creators/me/analytics/earnings)', () => {
+    it('should delegate balance alias to getDashboardBalance', async () => {
+      const mockBalance = { availableBalance: 5000000 };
+      creatorsService.getDashboardBalance.mockResolvedValue(mockBalance);
+
+      const res = await controller.getBalanceAlias('user-1');
+      expect(creatorsService.getDashboardBalance).toHaveBeenCalledWith(
+        'user-1',
+      );
+      expect(res).toBe(mockBalance);
+    });
+
+    it('should delegate earnings alias to getDashboardEarnings', async () => {
+      const mockEarnings = { period: '30d', points: [] };
+      creatorsService.getDashboardEarnings.mockResolvedValue(mockEarnings);
+
+      const res = await controller.getEarningsAlias('user-1', {
+        period: '30d',
+      });
+      expect(creatorsService.getDashboardEarnings).toHaveBeenCalledWith(
+        'user-1',
+        { period: '30d' },
+      );
+      expect(res).toBe(mockEarnings);
     });
   });
 });

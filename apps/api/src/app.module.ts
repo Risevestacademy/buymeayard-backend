@@ -5,6 +5,8 @@ import { validateEnv } from './config/env.validation';
 import { AppController } from './app.controller';
 import { LoggerModule } from 'nestjs-pino';
 import { TerminusModule } from '@nestjs/terminus';
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 
 // Infrastructure
 import { DatabaseModule } from './infrastructure/database/database.module';
@@ -17,27 +19,34 @@ import { QueuesModule } from './infrastructure/queues/queues.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { CreatorsModule } from './modules/creators/creators.module';
-import { SupportersModule } from './modules/supporters/supporters.module';
 import { MaterialsModule } from './modules/materials/materials.module';
 import { SupportsModule } from './modules/supports/supports.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { LedgerModule } from './modules/ledger/ledger.module';
 import { PayoutsModule } from './modules/payouts/payouts.module';
 import { ContentModule } from './modules/content/content.module';
-import { FollowsModule } from './modules/follows/follows.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
+import { CreatorReportsModule } from './modules/creator-reports/creator-reports.module';
+import { PushNotificationsModule } from './modules/push-notifications/push-notifications.module';
 import { KycModule } from './modules/kyc/kyc.module';
 import { ModerationModule } from './modules/moderation/moderation.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { WaitlistModule } from './modules/waitlist/waitlist.module';
+import { SettingsModule } from './modules/settings/settings.module';
+import { SupportTicketsModule } from './modules/support-tickets/support-tickets.module';
+import { PlatformSettingsModule } from './modules/platform-settings/platform-settings.module';
 
 // Common
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { AuthGuard } from './common/guards/auth.guard';
+import { AuditLogInterceptor } from './modules/admin/interceptors/audit-log.interceptor';
 
 @Module({
   imports: [
+    EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       validate: validateEnv,
@@ -63,19 +72,23 @@ import { AuthGuard } from './common/guards/auth.guard';
     AuthModule,
     UsersModule,
     CreatorsModule,
-    SupportersModule,
     MaterialsModule,
     SupportsModule,
     PaymentsModule,
     LedgerModule,
     PayoutsModule,
     ContentModule,
-    FollowsModule,
     NotificationsModule,
+    PushNotificationsModule,
+    CreatorReportsModule,
     KycModule,
     ModerationModule,
     AdminModule,
     AnalyticsModule,
+    WaitlistModule,
+    SettingsModule,
+    SupportTicketsModule,
+    PlatformSettingsModule,
   ],
   controllers: [AppController],
   providers: [
@@ -86,6 +99,10 @@ import { AuthGuard } from './common/guards/auth.guard';
     {
       provide: APP_INTERCEPTOR,
       useClass: TransformInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditLogInterceptor,
     },
     {
       provide: APP_GUARD,

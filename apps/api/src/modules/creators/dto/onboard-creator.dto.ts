@@ -6,14 +6,15 @@ export class SocialLinkDto {
   @ApiProperty({
     example: 'twitter',
     description:
-      'Social platform name (e.g., twitter, instagram, tiktok, youtube)',
+      'youtube, twitch, x, facebook, instagram, tiktok or discord (`twitter` is accepted as x)',
   })
   @IsString()
   platform: string;
 
   @ApiProperty({
     example: 'https://x.com/adeola',
-    description: 'URL to creator social profile',
+    description:
+      'Handle (@adeola) or profile URL. Stored as a canonical https URL. Discord needs an invite link.',
   })
   @IsString()
   url: string;

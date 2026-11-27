@@ -39,7 +39,7 @@ RUN apk add --no-cache openssl dumb-init
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=8000
 
 # Copy only what's needed to run
 COPY --from=installer /app/apps/api/dist ./apps/api/dist
@@ -50,7 +50,7 @@ COPY --from=installer /app/node_modules ./node_modules
 COPY --from=installer /app/packages ./packages
 COPY --from=installer /app/package.json ./package.json
 
-EXPOSE 3000
+EXPOSE 8000
 
 # dumb-init properly handles PID 1 and signal forwarding
 CMD ["dumb-init", "node", "apps/api/dist/main.js"]

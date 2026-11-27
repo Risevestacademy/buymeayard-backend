@@ -1,3 +1,4 @@
+import { ErrorResponseDto } from '../../common/dto/error-response.dto';
 import {
   Controller,
   Post,
@@ -17,6 +18,8 @@ import {
   ApiOperation,
   ApiResponse as SwaggerResponse,
   ApiBearerAuth,
+  ApiBody,
+  ApiCookieAuth,
   ApiHeader,
   ApiParam,
   ApiQuery,
@@ -33,6 +36,7 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { LinkSocialDto } from './dto/link-social.dto';
 import {
   SocialSignInDto,
   SocialSignInResponseDto,
@@ -42,6 +46,9 @@ import { ErrorCodes } from '../../common/errors/error-codes';
 import {
   isMobileRequest,
   extractSessionToken,
+  extractSessionTokenFromCookie,
+  isMobileRedirectUrl,
+  appendTokenToUrl,
 } from '../../common/utils/client-detection.util';
 
 @ApiTags('auth')
@@ -70,16 +77,29 @@ export class AuthController {
   @SwaggerResponse({
     status: 400,
     description: 'Invalid input data or validation error.',
+    type: ErrorResponseDto,
   })
   @SwaggerResponse({
     status: 409,
     description: 'User with this email already exists.',
+    type: ErrorResponseDto,
   })
   async register(
     @Body() dto: RegisterDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    if (isMobileRequest(req.headers)) {
+      throw new HttpException(
+        {
+          code: ErrorCodes.REGISTRATION_WEB_ONLY,
+          message:
+            'Account registration is only available on web. Please visit our website to create an account.',
+        },
+        HttpStatus.FORBIDDEN,
+      );
+    }
+
     const webRes = await this.authService.signUpEmail({
       ...dto,
       headers: fromNodeHeaders(req.headers),
@@ -91,7 +111,10 @@ export class AuthController {
       HttpStatus.CREATED,
     );
     if (body && typeof body === 'object' && body.user?.id) {
-      const authFlags = await this.authService.getUserAuthFlags(body.user.id);
+      const authFlags = {
+        ...(await this.authService.getUserAuthFlags(body.user.id)),
+        ...(await this.authService.getUserRoleInfo(body.user.id)),
+      };
       Object.assign(body, authFlags);
       if (body.user && typeof body.user === 'object') {
         Object.assign(body.user, authFlags);
@@ -115,19 +138,45 @@ export class AuthController {
   @SwaggerResponse({
     status: 400,
     description: 'Invalid credentials or validation error.',
+    type: ErrorResponseDto,
   })
   async login(
     @Body() dto: LoginDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const isMobile = isMobileRequest(req.headers);
     const webRes = await this.authService.signInEmail({
       ...dto,
       headers: fromNodeHeaders(req.headers),
     });
     const body = await this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
+
+    if (isMobile && body && typeof body === 'object' && body.user?.id) {
+      const isCreator = await this.authService.userHasRole(
+        body.user.id,
+        'CREATOR',
+      );
+      if (!isCreator) {
+        if (body.token) {
+          await this.authService.revokeSessionByToken(body.token);
+        }
+        throw new HttpException(
+          {
+            code: ErrorCodes.MOBILE_ACCESS_DENIED,
+            message:
+              'The mobile app is only available for creators. Please use the web platform or apply to become a creator.',
+          },
+          HttpStatus.FORBIDDEN,
+        );
+      }
+    }
+
     if (body && typeof body === 'object' && body.user?.id) {
-      const authFlags = await this.authService.getUserAuthFlags(body.user.id);
+      const authFlags = {
+        ...(await this.authService.getUserAuthFlags(body.user.id)),
+        ...(await this.authService.getUserRoleInfo(body.user.id)),
+      };
       Object.assign(body, authFlags);
       if (body.user && typeof body.user === 'object') {
         Object.assign(body.user, authFlags);
@@ -152,22 +201,39 @@ export class AuthController {
   @SwaggerResponse({
     status: 400,
     description: 'Invalid provider or parameters.',
+    type: ErrorResponseDto,
   })
   async socialSignIn(
     @Body() dto: SocialSignInDto,
     @Req() req: Request,
+    @Res({ passthrough: true }) res?: Response,
   ): Promise<SocialSignInResponseDto> {
     const isMobile = isMobileRequest(req.headers);
     const callbackURL =
       dto.callbackURL || (isMobile ? 'buymeayard://oauth-callback' : undefined);
+    const errorCallbackURL = dto.errorCallbackURL || callbackURL;
 
     const result = await this.authService.signInSocial({
       provider: dto.provider,
       callbackURL,
-      errorCallbackURL: dto.errorCallbackURL,
+      errorCallbackURL,
       newUserCallbackURL: dto.newUserCallbackURL,
       headers: fromNodeHeaders(req.headers),
     });
+
+    if (res && result.headers) {
+      if (typeof (result.headers as any).getSetCookie === 'function') {
+        const setCookies = (result.headers as any).getSetCookie();
+        if (Array.isArray(setCookies) && setCookies.length > 0) {
+          res.setHeader('set-cookie', setCookies);
+        }
+      } else {
+        const setCookie = result.headers.get('set-cookie');
+        if (setCookie) {
+          res.setHeader('set-cookie', setCookie);
+        }
+      }
+    }
 
     return {
       url: result.url,
@@ -196,6 +262,13 @@ export class AuthController {
     example: 'buymeayard://oauth-callback',
   })
   @ApiQuery({
+    name: 'errorCallbackURL',
+    required: false,
+    description:
+      'Where to redirect if an OAuth error occurs (e.g. user denied consent, state mismatch)',
+    example: 'buymeayard://oauth-callback',
+  })
+  @ApiQuery({
     name: 'redirect',
     required: false,
     type: Boolean,
@@ -216,16 +289,37 @@ export class AuthController {
     @Query('redirect') redirectParam: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
+    @Query('errorCallbackURL') errorCallbackURL?: string,
   ) {
     const isMobile = isMobileRequest(req.headers);
     const effectiveCallback =
       callbackURL || (isMobile ? 'buymeayard://oauth-callback' : undefined);
+    const effectiveErrorCallback =
+      errorCallbackURL ||
+      (req.query?.errorCallbackURL as string | undefined) ||
+      effectiveCallback;
 
     const result = await this.authService.signInSocial({
       provider,
       callbackURL: effectiveCallback,
+      errorCallbackURL: effectiveErrorCallback,
       headers: fromNodeHeaders(req.headers),
     });
+
+    // Forward Set-Cookie headers from Better Auth (state cookie, etc.)
+    if (result.headers) {
+      if (typeof (result.headers as any).getSetCookie === 'function') {
+        const setCookies = (result.headers as any).getSetCookie();
+        if (Array.isArray(setCookies) && setCookies.length > 0) {
+          res.setHeader('set-cookie', setCookies);
+        }
+      } else {
+        const setCookie = result.headers.get('set-cookie');
+        if (setCookie) {
+          res.setHeader('set-cookie', setCookie);
+        }
+      }
+    }
 
     const wantsJson =
       redirectParam === 'false' ||
@@ -254,7 +348,11 @@ export class AuthController {
     status: 200,
     description: 'User successfully logged out.',
   })
-  @SwaggerResponse({ status: 401, description: 'No active session found.' })
+  @SwaggerResponse({
+    status: 401,
+    description: 'No active session found.',
+    type: ErrorResponseDto,
+  })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const webRes = await this.authService.signOut({
       headers: fromNodeHeaders(req.headers),
@@ -274,6 +372,7 @@ export class AuthController {
   @SwaggerResponse({
     status: 401,
     description: 'Unauthorized. No active session.',
+    type: ErrorResponseDto,
   })
   async getSession(@Req() req: Request) {
     return this.authService.getSessionFromNodeHeaders(req.headers);
@@ -294,6 +393,7 @@ export class AuthController {
   @SwaggerResponse({
     status: 400,
     description: 'Validation error for the email.',
+    type: ErrorResponseDto,
   })
   async forgotPassword(
     @Body() dto: ForgotPasswordDto,
@@ -322,6 +422,7 @@ export class AuthController {
   @SwaggerResponse({
     status: 400,
     description: 'Invalid or expired reset token, or weak password.',
+    type: ErrorResponseDto,
   })
   async resetPassword(
     @Body() dto: ResetPasswordDto,
@@ -341,7 +442,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Change password for the authenticated user',
     description:
-      'Allows an authenticated user to change their password by providing their current password and a new one.',
+      'Allows an authenticated user to change their password by providing their current password and a new one. Send `revokeOtherSessions: true` to also sign the user out everywhere else; the current session stays signed in.',
   })
   @SwaggerResponse({
     status: 200,
@@ -351,10 +452,12 @@ export class AuthController {
     status: 400,
     description:
       'Current password does not match (PASSWORD_MISMATCH) or new password is too weak.',
+    type: ErrorResponseDto,
   })
   @SwaggerResponse({
     status: 401,
     description: 'Unauthorized. Active session required.',
+    type: ErrorResponseDto,
   })
   async changePassword(
     @Body() dto: ChangePasswordDto,
@@ -364,6 +467,7 @@ export class AuthController {
     const webRes = await this.authService.changePassword({
       currentPassword: dto.currentPassword,
       newPassword: dto.newPassword,
+      revokeOtherSessions: dto.revokeOtherSessions ?? dto.revokeOtherSession,
       headers: fromNodeHeaders(req.headers),
     });
     return this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
@@ -381,6 +485,7 @@ export class AuthController {
   @SwaggerResponse({
     status: 400,
     description: 'Invalid or expired verification token.',
+    type: ErrorResponseDto,
   })
   async verifyEmail(
     @Body() dto: VerifyEmailDto,
@@ -408,11 +513,13 @@ export class AuthController {
   @SwaggerResponse({
     status: 401,
     description: 'Unauthorized. Active session required.',
+    type: ErrorResponseDto,
   })
   @SwaggerResponse({
     status: 429,
     description:
       'Too many requests. Please wait before requesting another email.',
+    type: ErrorResponseDto,
   })
   async sendVerificationEmail(
     @Req() req: Request,
@@ -426,21 +533,131 @@ export class AuthController {
     return this.handleAuthResponse(webRes, req, res, HttpStatus.OK);
   }
 
+  /**
+   * Documented route for a Better Auth endpoint. It must stay above the
+   * catch-all below and forwards to the same handler, so behaviour is unchanged.
+   * Better Auth checks the session itself and answers 401 without one.
+   */
+  @Public()
+  @Post('link-social')
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Connect a social account (YouTube, X, Twitch, ...)',
+    description:
+      'Starts the OAuth flow that connects a platform account to the signed-in creator. Redirect the browser to the returned `url`. After consent the API stores a verified social link and sends the browser to `callbackURL` (or `errorCallbackURL` with `?error=<code>`). Then call `GET /creators/me/social-links` to show the result. This never signs in or creates a user. Requires an active session.',
+  })
+  @ApiBody({
+    type: LinkSocialDto,
+    examples: {
+      youtube: {
+        summary: 'Connect YouTube',
+        value: {
+          provider: 'youtube',
+          callbackURL:
+            'https://creator.buymeayard.com/settings/socials?connected=youtube',
+          errorCallbackURL:
+            'https://creator.buymeayard.com/settings/socials?failed=youtube',
+        },
+      },
+    },
+  })
+  @SwaggerResponse({
+    status: 200,
+    description:
+      'Authorization URL of the platform. Send the user there (`redirect` is true).',
+    type: SocialSignInResponseDto,
+  })
+  @SwaggerResponse({
+    status: 401,
+    description: 'No active session.',
+    type: ErrorResponseDto,
+  })
+  @SwaggerResponse({
+    status: 400,
+    description: 'Unknown provider or untrusted callback URL.',
+    type: ErrorResponseDto,
+  })
+  async linkSocial(@Req() req: Request, @Res() res: Response) {
+    return this.handleBetterAuth(req, res);
+  }
+
   @Public()
   @All('*')
   @ApiExcludeEndpoint()
   @ApiOperation({ summary: 'Better Auth native SDK handler endpoint' })
   async handleBetterAuth(@Req() req: Request, @Res() res: Response) {
-    // If mobile request header is present, suppress Set-Cookie from native handler
-    if (isMobileRequest(req.headers)) {
-      const originalSetHeader = res.setHeader.bind(res);
-      res.setHeader = function (name: string, value: any) {
-        if (name.toLowerCase() === 'set-cookie') {
+    const isMobileReq = isMobileRequest(req.headers);
+    let capturedSetCookie: any;
+
+    const originalSetHeader = res.setHeader.bind(res);
+    const originalWriteHead = res.writeHead.bind(res);
+
+    res.setHeader = function (name: string, value: any) {
+      if (name.toLowerCase() === 'set-cookie') {
+        capturedSetCookie = value;
+        if (isMobileReq) {
           return res;
         }
-        return originalSetHeader(name, value);
-      };
-    }
+      }
+      return originalSetHeader(name, value);
+    };
+
+    res.writeHead = function (statusCode: any, ...rest: any[]) {
+      let headersObj: Record<string, any> | undefined;
+      if (rest.length > 0) {
+        const lastArg = rest[rest.length - 1];
+        if (
+          typeof lastArg === 'object' &&
+          lastArg !== null &&
+          !Array.isArray(lastArg)
+        ) {
+          headersObj = lastArg;
+        }
+      }
+
+      const location =
+        headersObj?.location ||
+        headersObj?.Location ||
+        res.getHeader('location');
+
+      if (
+        typeof location === 'string' &&
+        isMobileRedirectUrl(location, req.headers)
+      ) {
+        const cookieVal =
+          capturedSetCookie ||
+          headersObj?.['set-cookie'] ||
+          headersObj?.['Set-Cookie'] ||
+          res.getHeader('set-cookie');
+
+        const token =
+          extractSessionTokenFromCookie(cookieVal) ||
+          (res.getHeader('set-auth-token') as string | undefined) ||
+          headersObj?.['set-auth-token'];
+
+        if (typeof res.removeHeader === 'function') {
+          res.removeHeader('set-cookie');
+        }
+        if (headersObj) {
+          delete headersObj['set-cookie'];
+          delete headersObj['Set-Cookie'];
+        }
+
+        if (token) {
+          const updatedLocation = appendTokenToUrl(location, token);
+          if (headersObj) {
+            if ('location' in headersObj) headersObj.location = updatedLocation;
+            if ('Location' in headersObj) headersObj.Location = updatedLocation;
+          }
+          originalSetHeader('location', updatedLocation);
+        }
+      }
+
+      return (originalWriteHead as any)(statusCode, ...rest);
+    };
+
     return toNodeHandler(this.authService.getAuth())(req, res);
   }
 

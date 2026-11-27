@@ -2,7 +2,9 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
-import * as cookieParser from 'cookie-parser';
+// cookie-parser is CommonJS (`export =`) and esModuleInterop is off, so a default import would be undefined at runtime
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import cookieParser = require('cookie-parser');
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 
@@ -16,7 +18,7 @@ async function bootstrap() {
   app.useLogger(logger);
 
   const configService = app.get(ConfigService);
-  const port = configService.get<number>('PORT') || 3000;
+  const port = configService.get<number>('PORT') || 8000;
 
   // Global prefix: /api/v1
   app.setGlobalPrefix('api/v1', {
@@ -33,6 +35,18 @@ async function bootstrap() {
       'https://buymeayard-main-dev.up.railway.app',
       'https://buymeayard-creator-dev.up.railway.app',
       'https://buymeayard-admin-dev.up.railway.app',
+      'https://buymeayard-backend-staging.up.railway.app',
+      'https://api.buymeayard.com',
+      'https://creator.buymeayard.com',
+      'https://admin.buymeayard.com',
+      'https://buymeayard.com',
+      'bmay://',
+      'bmay-dev://',
+      'bmay-preview://',
+      'buymeayard://',
+      ...(process.env.ADDITIONAL_TRUSTED_ORIGINS
+        ? process.env.ADDITIONAL_TRUSTED_ORIGINS.split(',').map((o) => o.trim())
+        : []),
     ],
     credentials: true,
   });
@@ -62,6 +76,18 @@ async function bootstrap() {
     .setVersion('1.0')
     .addBearerAuth()
     .addCookieAuth('better-auth.session_token')
+    .addTag(
+      'payouts',
+      'Bank account, withdrawals and payout history. Amounts are in naira. Success responses are wrapped as `{ data, meta }`; errors as `{ error: { code, message } }`. Full guide: docs/PAYOUTS_INTEGRATION.md',
+    )
+    .addTag(
+      'support-tickets',
+      'Contact support messages, optionally about a payout or contribution',
+    )
+    .addTag(
+      'push-tokens',
+      "Register the device's Expo push token after login and remove it on logout. The backend sends push for payouts and contributions with `data.url` (in-app route) plus `payoutId` or `contributionId`. Only sent when the matching `pushOn*` notification preference is on.",
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);

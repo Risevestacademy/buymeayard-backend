@@ -523,14 +523,13 @@
 * `POST /api/v1/creators/me/payouts` — request payout (exists, but for withdrawal, not bank account setup)
 * `GET  /api/v1/creators/me/balance` — balance check
 
-**APIs / backend work still required:**
-* ⏳ `GET  /api/v1/payouts/banks` — list supported Nigerian banks (from Paystack)
-* ⏳ `POST /api/v1/payouts/resolve-account` — resolve bank account name via Paystack
-* ⏳ `POST /api/v1/creators/me/payout-methods` — save bank account details
-* ⏳ `GET  /api/v1/creators/me/payout-methods` — list saved payout methods
-* ⏳ `PUT  /api/v1/creators/me/payout-methods/:id` — update payout method
-* ⏳ `DELETE /api/v1/creators/me/payout-methods/:id` — remove payout method
-* ⏳ Paystack bank resolution integration in `PaymentProvider` / `PaystackProvider`
+Full integration guide: [PAYOUTS_INTEGRATION.md](./PAYOUTS_INTEGRATION.md)
+
+**Implemented APIs:**
+* ✅ `GET  /api/v1/creators/me/balance` — setup step (`VERIFY_IDENTITY` → `CONNECT_BANK` → `READY`), payout account card, available / pending / withdrawn balances, minimum withdrawal
+* ✅ `GET  /api/v1/payouts/banks` — supported Nigerian banks (Paystack, cached 24h)
+* ✅ `POST /api/v1/creators/me/payout-methods/resolve` — account name lookup for "Is this you?"; nothing is saved
+* ✅ `POST /api/v1/creators/me/payout-methods` — re-verifies and saves the account, replacing the current one. A creator has one payout account; changing it replaces it (no list/update/delete)
 
 **Design gaps / questions:**
 * ❓ Frame #1486:9101 is labeled "Sign up" but appears in the payout section — likely a success/completion modal. Needs design label correction.
@@ -579,13 +578,16 @@
 * `POST /api/v1/creators/me/payouts` — request payout (exists, needs bank details integration)
 * `GET  /api/v1/creators/me/balance` — check balance
 
-**APIs / backend work still required:**
-* ⏳ Paystack transfer API integration (initiate bank transfer)
-* ⏳ `POST /api/v1/webhooks/paystack` — handle `transfer.success` / `transfer.failed` events (webhook handler exists but may not handle transfer events yet)
-* ⏳ `GET  /api/v1/creators/me/payouts` — list payout history
-* ⏳ `GET  /api/v1/creators/me/payouts/:id` — get specific payout status
-* ⏳ Payout fee calculation logic (design shows fee deduction: ₦5,000 fee)
-* ⚠️ Fund reservation logic — immediate ledger DEBIT on payout request (documented in architecture but needs implementation verification)
+**Implemented APIs:**
+* ✅ `GET  /api/v1/creators/me/payouts/quote?amount=` — fee, amount received, minimum (₦1,000) and balance checks
+* ✅ `POST /api/v1/creators/me/payouts` — reserves the amount, sends the Paystack transfer, supports an `Idempotency-Key` header
+* ✅ `GET  /api/v1/creators/me/payouts?status=&sort=&page=&limit=` — payout history (All / Successful / Failed / In Progress, newest or oldest first)
+* ✅ `GET  /api/v1/creators/me/payouts/:id` — payout details drawer
+* ✅ `POST /webhooks/paystack` — `transfer.success`, `transfer.failed`, `transfer.reversed`
+* ✅ `POST /api/v1/support-tickets` — "Contact support", with the payout or contribution attached
+* ✅ Reconciler (every 10 min) — settles payouts whose webhook was missed and sends "Payout is taking longer than usual" after 30 minutes
+
+**Rules:** the processing fee is taken out of the withdrawal (₦50 up to ₦50,000, ₦100 above). A failed or reversed payout returns the full amount, fee included, to the balance.
 
 **Design gaps / questions:**
 * ❓ What is the minimum withdrawal amount? The spec mentions `minimumWithdrawalKobo: 100000` (₦1,000) — confirm with product.
@@ -598,9 +600,9 @@
 **User goal:** Creator views all contributions/gifts received, with supporter messages and material details.
 
 **Figma screens:**
-* Multiple `Buy Me a Yard creator overview` frames in the lower section:
-  * #1486:9339, #1486:9443 — contributions list views
-  * #1486:9495, #1486:9586, #1486:9747, #1486:9916, #1486:10007, #1486:10179, #1486:10351 — various dashboard sub-views (contributions detail, filters, pagination states)
+* `Contribution` (#2129:15976), `contribution details` (#2129:16180), `Contribution-empty` (#2129:16106)
+
+> Note: the `Buy Me a Yard creator overview` frames #1486:9339, #1486:9443, #1486:9495, #1486:9586, #1486:9747, #1486:9916, #1486:10007, #1486:10179 and #1486:10351 are **payout** screens (below-minimum modal, payout history, payout details, contact support), covered in Flow 13.
 
 **Flow:**
 

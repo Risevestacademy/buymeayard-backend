@@ -9,6 +9,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { NairaToKobo } from '../../../common/decorators/naira-to-kobo.decorator';
 
 export class CreatorMaterialItemDto {
   @ApiProperty({
@@ -18,13 +19,17 @@ export class CreatorMaterialItemDto {
   @IsUUID()
   materialId: string;
 
-  @ApiProperty({
-    example: 500000,
-    description: 'Custom price per yard in minor units (kobo). 500000 = ₦5,000',
+  @ApiPropertyOptional({
+    example: 1000,
+    description:
+      'Optional price per yard in naira. If omitted, inherits the platform universal base price.',
   })
+  @IsOptional()
+  @Type(() => Number)
+  @NairaToKobo()
   @IsInt()
   @Min(100)
-  price: number;
+  price?: number;
 
   @ApiPropertyOptional({
     example: 'My Ankara',
@@ -41,8 +46,8 @@ export class SaveCreatorMaterialsDto {
     description:
       'List of materials the creator wants to offer with custom pricing. Replaces the current material menu.',
     example: [
-      { materialId: 'uuid-ankara', price: 500000 },
-      { materialId: 'uuid-lace', price: 1000000, displayName: 'Premium Lace' },
+      { materialId: 'uuid-ankara', price: 5000 },
+      { materialId: 'uuid-lace', price: 10000, displayName: 'Premium Lace' },
     ],
   })
   @IsArray()

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 const mockBetterAuthInstance = {
   api: {
@@ -28,6 +29,7 @@ describe('AuthService', () => {
   let service: AuthService;
   let configService: { get: jest.Mock };
   let prismaService: Record<string, any>;
+  let eventEmitter: { emit: jest.Mock };
 
   beforeEach(async () => {
     configService = {
@@ -45,17 +47,21 @@ describe('AuthService', () => {
       userRole: {
         upsert: jest.fn(),
         findFirst: jest.fn(),
+        findMany: jest.fn(),
       },
       creatorProfile: {
         findUnique: jest.fn(),
       },
     };
 
+    eventEmitter = { emit: jest.fn() };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
         { provide: ConfigService, useValue: configService },
         { provide: PrismaService, useValue: prismaService },
+        { provide: EventEmitter2, useValue: eventEmitter },
       ],
     }).compile();
 
@@ -72,7 +78,7 @@ describe('AuthService', () => {
 
   it('should initialize betterAuth with config onModuleInit', () => {
     service.onModuleInit();
-    expect(createBetterAuth).toHaveBeenCalledWith(prismaService, {
+    expect(createBetterAuth).toHaveBeenCalledWith(prismaService, eventEmitter, {
       secret: 'test-secret',
       baseURL: 'http://localhost:3000',
     });
@@ -443,11 +449,10 @@ describe('AuthService', () => {
 
       const result = await service.getUserAuthFlags('u-creator');
       expect(result).toEqual({
+        isOnboarded: true,
         isOnboardingCompleted: true,
         isProfileSetupCompleted: true,
       });
-      // Verify no obsolete keys
-      expect((result as any).isOnboarded).toBeUndefined();
       expect((result as any).isProfileCompleted).toBeUndefined();
     });
 
@@ -456,8 +461,32 @@ describe('AuthService', () => {
 
       const result = await service.getUserAuthFlags('u-new');
       expect(result).toEqual({
+        isOnboarded: false,
         isOnboardingCompleted: false,
         isProfileSetupCompleted: false,
+      });
+    });
+  });
+
+  describe('getUserRoleInfo', () => {
+    it('returns every role and ADMIN as the primary one', async () => {
+      prismaService.userRole.findMany.mockResolvedValue([
+        { role: { name: 'CREATOR' } },
+        { role: { name: 'ADMIN' } },
+      ]);
+
+      await expect(service.getUserRoleInfo('u-admin')).resolves.toEqual({
+        role: 'ADMIN',
+        roles: ['CREATOR', 'ADMIN'],
+      });
+    });
+
+    it('returns a null role when the user has none', async () => {
+      prismaService.userRole.findMany.mockResolvedValue([]);
+
+      await expect(service.getUserRoleInfo('u-none')).resolves.toEqual({
+        role: null,
+        roles: [],
       });
     });
   });
@@ -478,12 +507,40 @@ describe('AuthService', () => {
         body: {
           provider: 'google',
           callbackURL: 'buymeayard://oauth-callback',
-          errorCallbackURL: undefined,
+          errorCallbackURL: 'buymeayard://oauth-callback',
           newUserCallbackURL: undefined,
         },
+        asResponse: true,
       });
       expect(res.url).toContain('accounts.google.com');
       expect(res.redirect).toBe(true);
+    });
+
+    it('should parse Response object and extract headers and location', async () => {
+      const headers = new Headers();
+      headers.set(
+        'location',
+        'https://accounts.google.com/o/oauth2/v2/auth?client_id=resp_test',
+      );
+      headers.set('set-cookie', 'better-auth.state=xyz; Path=/; HttpOnly');
+      const mockResponse = new Response(
+        JSON.stringify({
+          url: 'https://accounts.google.com/o/oauth2/v2/auth?client_id=resp_test',
+          redirect: true,
+        }),
+        { status: 200, headers },
+      );
+      mockBetterAuthInstance.api.signInSocial.mockResolvedValue(mockResponse);
+
+      const res = await service.signInSocial({
+        provider: 'google',
+        callbackURL: 'http://localhost:3000/callback',
+        errorCallbackURL: 'http://localhost:3000/error',
+      });
+
+      expect(res.url).toContain('resp_test');
+      expect(res.redirect).toBe(true);
+      expect(res.headers?.get('set-cookie')).toContain('better-auth.state=xyz');
     });
   });
 });

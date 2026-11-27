@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  Optional,
   NotFoundException,
   ConflictException,
   BadRequestException,
@@ -10,20 +11,77 @@ import {
   STORAGE_PROVIDER,
   StorageProvider,
 } from '../../infrastructure/storage/storage-provider.interface';
+import { LedgerService } from '../ledger/ledger.service';
+import { AccountType, PaymentStatus, PayoutStatus } from '@buymeayard/types';
+import { PayoutMethod } from '@prisma/client';
+import { PayoutMethodsService } from '../payouts/payout-methods.service';
+import { MINIMUM_WITHDRAWAL } from '../payouts/payout-fees';
+import { PlatformSettingsService } from '../platform-settings/platform-settings.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { USER_EVENTS } from '../analytics/events/user.events';
+
+const PENDING_CONTRIBUTION_WINDOW_MS = 60 * 60 * 1000;
+import { ErrorCodes } from '../../common/errors/error-codes';
 import { OnboardCreatorDto } from './dto/onboard-creator.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { SaveSocialLinksDto } from './dto/social-links.dto';
+import {
+  normalizeSocialLink,
+  resolveSocialPlatform,
+  SocialLinkError,
+} from './social-links.util';
+import {
+  DEFAULT_PAGE_LIMIT,
+  MAX_PAGE_LIMIT,
+} from '../../common/dto/page-query.dto';
+import { DiscoverCreatorsQueryDto } from './dto/discover-creators-query.dto';
 import { SaveCreatorMaterialsDto } from './dto/save-creator-materials.dto';
+import { CreateCustomMaterialDto } from './dto/create-custom-material.dto';
 import { CreatorShareLinkDataDto } from './dto/share-link.dto';
+import { UpdateCreatorSettingsDto } from './dto/update-creator-settings.dto';
+import { UpdatePageStatusDto } from './dto/update-page-status.dto';
+import {
+  CreatorDashboardResponseDto,
+  DashboardMetricsDto,
+  DashboardBalanceDto,
+  DashboardContributionDto,
+  DashboardEarningsChartDto,
+  DashboardEarningsQueryDto,
+  DashboardContributionsQueryDto,
+  DashboardContributionsListResponseDto,
+} from './dto/creator-dashboard.dto';
+import { Prisma } from '@prisma/client';
+import { creatorMessage } from '../supports/utils/support-visibility.util';
+import { buildPagination } from '../../common/utils/pagination.util';
+
+const CONTRIBUTION_INCLUDE = {
+  payment: { select: { providerReference: true } },
+  items: { include: { creatorMaterial: { include: { material: true } } } },
+} satisfies Prisma.SupportInclude;
+
+type ContributionRow = Prisma.SupportGetPayload<{
+  include: typeof CONTRIBUTION_INCLUDE;
+}>;
 
 @Injectable()
 export class CreatorsService {
+  private readonly ledger: LedgerService;
+
   constructor(
     private readonly prisma: PrismaService,
     @Inject(STORAGE_PROVIDER)
     private readonly storage: StorageProvider,
-  ) {}
+    @Optional()
+    ledgerService?: LedgerService,
+    @Optional()
+    private readonly platformSettings?: PlatformSettingsService,
+    @Optional()
+    private readonly eventEmitter?: EventEmitter2,
+  ) {
+    this.ledger = ledgerService || new LedgerService(this.prisma);
+  }
 
-  async findAll(_query?: { search?: string }) {
+  async findAll(_query?: DiscoverCreatorsQueryDto) {
     const where: any = {
       status: 'ACTIVE',
     };
@@ -36,22 +94,43 @@ export class CreatorsService {
       ];
     }
 
-    const creators = await this.prisma.creatorProfile.findMany({
-      where,
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            image: true,
+    const page = _query?.page ?? 1;
+    const limit = _query?.limit ?? DEFAULT_PAGE_LIMIT;
+
+    const [total, creators] = await Promise.all([
+      this.prisma.creatorProfile.count({ where }),
+      this.prisma.creatorProfile.findMany({
+        where,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: (page - 1) * limit,
+        take: limit,
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+              image: true,
+            },
+          },
+          socialLinks: true,
+          themeMaterial: true,
+          materials: {
+            where: {
+              status: 'ACTIVE',
+            },
+            include: {
+              material: true,
+            },
           },
         },
-        socialLinks: true,
-      },
-    });
+      }),
+    ]);
 
-    return creators.map((creator) => this.formatCreatorProfile(creator));
+    return {
+      items: creators.map((creator) => this.formatCreatorProfile(creator)),
+      pagination: buildPagination(page, limit, total),
+    };
   }
 
   async findBySlug(slug: string) {
@@ -73,6 +152,7 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
+        themeMaterial: true,
         materials: {
           where: {
             status: 'ACTIVE',
@@ -268,6 +348,7 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
+        themeMaterial: true,
         materials: {
           where: {
             status: 'ACTIVE',
@@ -275,6 +356,11 @@ export class CreatorsService {
           include: {
             material: true,
           },
+        },
+        // IDs only: formatCreatorProfile turns this into isBankAccountConnected
+        payoutMethods: {
+          where: { status: 'ACTIVE' },
+          select: { id: true },
         },
       },
     });
@@ -287,6 +373,8 @@ export class CreatorsService {
   }
 
   async onboardCreator(userId: string, dto: OnboardCreatorDto) {
+    // Reject a bad link before anything is created.
+    const socialLinks = this.toValidLinks(dto.socialLinks ?? []);
     // 1. Resolve Creator Name
     const creatorName = (
       dto.creatorName ||
@@ -347,6 +435,10 @@ export class CreatorsService {
     const existingProfile = await this.prisma.creatorProfile.findUnique({
       where: { userId },
     });
+
+    // First completion of onboarding (no profile yet, or still REGISTERED)
+    const isFirstOnboarding =
+      !existingProfile || existingProfile.status === 'REGISTERED';
 
     let profile;
 
@@ -410,89 +502,17 @@ export class CreatorsService {
       });
     }
 
-    // 5. Sync social links if passed in DTO
-    if (dto.socialLinks && dto.socialLinks.length > 0) {
-      for (const link of dto.socialLinks) {
-        if (link.platform && link.url) {
-          const platform = link.platform.toLowerCase().trim();
-          const existing = await this.prisma.creatorSocialLink.findFirst({
-            where: { creatorId: profile.id, platform },
-          });
-
-          if (existing) {
-            await this.prisma.creatorSocialLink.update({
-              where: { id: existing.id },
-              data: { url: link.url.trim() },
-            });
-          } else {
-            await this.prisma.creatorSocialLink.create({
-              data: {
-                creatorId: profile.id,
-                platform,
-                url: link.url.trim(),
-              },
-            });
-          }
-        }
-      }
+    // 5. Save social links if passed in DTO
+    if (socialLinks.length > 0) {
+      await this.upsertSocialLinks(profile.id, socialLinks);
     }
 
-    // 6. Also sync any OAuth social accounts connected via Better Auth
-    try {
-      const authAccounts = await this.prisma.authAccount.findMany({
-        where: {
-          userId,
-          providerId: { notIn: ['credential', 'email'] },
-        },
+    if (isFirstOnboarding && profile.user?.email) {
+      this.eventEmitter?.emit(USER_EVENTS.ONBOARDED, {
+        userId,
+        email: profile.user.email,
+        name: creatorName,
       });
-
-      for (const acc of authAccounts) {
-        let url = '';
-        const provider = acc.providerId.toLowerCase();
-        switch (provider) {
-          case 'twitter':
-            url = `https://x.com/intent/user?user_id=${acc.accountId}`;
-            break;
-          case 'facebook':
-            url = `https://facebook.com/${acc.accountId}`;
-            break;
-          case 'instagram':
-            url = `https://instagram.com/${acc.accountId}`;
-            break;
-          case 'tiktok':
-            url = `https://tiktok.com/@${acc.accountId}`;
-            break;
-          case 'youtube':
-            url = `https://youtube.com/channel/${acc.accountId}`;
-            break;
-          default:
-            if (provider !== 'google' && provider !== 'apple') {
-              url = `https://${provider}.com/${acc.accountId}`;
-            }
-        }
-
-        if (url) {
-          const existing = await this.prisma.creatorSocialLink.findFirst({
-            where: { creatorId: profile.id, platform: provider },
-          });
-
-          if (!existing) {
-            await this.prisma.creatorSocialLink.create({
-              data: {
-                creatorId: profile.id,
-                platform: provider,
-                url,
-              },
-            });
-          }
-        }
-      }
-    } catch (err) {
-      // Non-critical background sync
-      console.warn(
-        '[CreatorsService] Failed to auto-sync OAuth social accounts:',
-        err,
-      );
     }
 
     // Return refreshed profile with socialLinks and materials
@@ -508,7 +528,11 @@ export class CreatorsService {
           },
         },
         socialLinks: true,
-        materials: true,
+        themeMaterial: true,
+        materials: {
+          where: { status: 'ACTIVE' },
+          include: { material: true },
+        },
       },
     });
 
@@ -518,6 +542,129 @@ export class CreatorsService {
   // -----------------------------------------------------------
   // Profile Update (post-onboarding edits)
   // -----------------------------------------------------------
+
+  private toValidLinks(links: { platform: string; url: string }[]) {
+    const seen = new Set<string>();
+    return links.map((link) => {
+      try {
+        const normalized = normalizeSocialLink(link.platform, link.url);
+        if (seen.has(normalized.platform)) {
+          throw new SocialLinkError(
+            `Only one ${normalized.platform} link is allowed`,
+          );
+        }
+        seen.add(normalized.platform);
+        return normalized;
+      } catch (err) {
+        if (err instanceof SocialLinkError) {
+          throw new BadRequestException({
+            code: ErrorCodes.VALIDATION_ERROR,
+            message: err.message,
+          });
+        }
+        throw err;
+      }
+    });
+  }
+
+  /** Adds or updates the given links and leaves the others alone. */
+  private async upsertSocialLinks(
+    creatorId: string,
+    links: { platform: string; url: string }[],
+  ) {
+    for (const { platform, url } of links) {
+      const existing = await this.prisma.creatorSocialLink.findFirst({
+        where: { creatorId, platform },
+      });
+      if (existing) {
+        await this.prisma.creatorSocialLink.update({
+          where: { id: existing.id },
+          data: existing.url === url ? {} : { url, verified: false },
+        });
+      } else {
+        await this.prisma.creatorSocialLink.create({
+          data: { creatorId, platform, url },
+        });
+      }
+    }
+  }
+
+  private async getProfileId(userId: string): Promise<string> {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!profile) throw new NotFoundException('Creator profile not found');
+    return profile.id;
+  }
+
+  async getSocialLinks(userId: string) {
+    const creatorId = await this.getProfileId(userId);
+    return this.prisma.creatorSocialLink.findMany({
+      where: { creatorId },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  /**
+   * Replaces the creator's links with exactly the given set. A link that was
+   * connected through OAuth keeps its verified flag when it is sent back
+   * unchanged; anything typed in is stored as unverified.
+   */
+  async saveSocialLinks(userId: string, dto: SaveSocialLinksDto) {
+    const creatorId = await this.getProfileId(userId);
+    const connected = await this.prisma.creatorSocialLink.findMany({
+      where: { creatorId, verified: true },
+    });
+    const isConnected = (l: { platform: string; url: string }) =>
+      connected.some(
+        (c) =>
+          c.platform === resolveSocialPlatform(l.platform) &&
+          c.url === l.url?.trim(),
+      );
+
+    const kept = dto.links.filter(isConnected).map((l) => ({
+      platform: resolveSocialPlatform(l.platform) as string,
+      url: l.url.trim(),
+      verified: true,
+    }));
+    const typed = this.toValidLinks(
+      dto.links.filter((l) => !isConnected(l)),
+    ).map((l) => ({ ...l, verified: false }));
+
+    const clash = typed.find((t) =>
+      kept.some((k) => k.platform === t.platform),
+    );
+    if (clash) {
+      throw new BadRequestException({
+        code: ErrorCodes.VALIDATION_ERROR,
+        message: `Only one ${clash.platform} link is allowed`,
+      });
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.creatorSocialLink.deleteMany({ where: { creatorId } });
+      await tx.creatorSocialLink.createMany({
+        data: [...kept, ...typed].map((l) => ({ creatorId, ...l })),
+      });
+    });
+    return this.getSocialLinks(userId);
+  }
+
+  async deleteSocialLink(userId: string, platformInput: string) {
+    const creatorId = await this.getProfileId(userId);
+    const platform = resolveSocialPlatform(platformInput);
+    if (!platform) {
+      throw new BadRequestException({
+        code: ErrorCodes.VALIDATION_ERROR,
+        message: `"${platformInput}" is not a supported platform`,
+      });
+    }
+    await this.prisma.creatorSocialLink.deleteMany({
+      where: { creatorId, platform },
+    });
+    return this.getSocialLinks(userId);
+  }
 
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     const profile = await this.prisma.creatorProfile.findUnique({
@@ -594,6 +741,75 @@ export class CreatorsService {
   }
 
   // -----------------------------------------------------------
+  // Custom material thumbnail
+  // -----------------------------------------------------------
+
+  private async findOwnCreatorMaterial(userId: string, materialId: string) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+    const creatorMaterial = await this.prisma.creatorMaterial.findUnique({
+      where: {
+        creatorId_materialId: { creatorId: profile.id, materialId },
+      },
+      select: { id: true },
+    });
+    if (!creatorMaterial) {
+      throw new NotFoundException('This material is not on your menu');
+    }
+    return { profileId: profile.id, creatorMaterialId: creatorMaterial.id };
+  }
+
+  /** Sets the creator's own banner for one of their materials. Live at once. */
+  async uploadMaterialThumbnail(
+    userId: string,
+    materialId: string,
+    file: Express.Multer.File,
+  ) {
+    const { profileId, creatorMaterialId } = await this.findOwnCreatorMaterial(
+      userId,
+      materialId,
+    );
+
+    const result = await this.storage.uploadFile(file.buffer, {
+      folder: 'material-thumbnails',
+      publicId: `creator-${profileId}-${materialId}`,
+      resourceType: 'image',
+    });
+
+    await this.prisma.creatorMaterial.update({
+      where: { id: creatorMaterialId },
+      data: { customThumbnailUrl: result.secureUrl },
+    });
+
+    return { materialId, customMaterialThumbnail: result.secureUrl };
+  }
+
+  /** Goes back to the system thumbnail for one of the creator's materials. */
+  async resetMaterialThumbnail(userId: string, materialId: string) {
+    const { profileId, creatorMaterialId } = await this.findOwnCreatorMaterial(
+      userId,
+      materialId,
+    );
+
+    await this.prisma.creatorMaterial.update({
+      where: { id: creatorMaterialId },
+      data: { customThumbnailUrl: null },
+    });
+
+    // The image is no longer referenced; a failed clean-up is not the creator's problem
+    await this.storage
+      .deleteFile(`material-thumbnails/creator-${profileId}-${materialId}`)
+      .catch(() => false);
+
+    return { materialId, customMaterialThumbnail: null };
+  }
+
+  // -----------------------------------------------------------
   // Creator Materials (Yard Menu)
   // -----------------------------------------------------------
 
@@ -606,11 +822,110 @@ export class CreatorsService {
       throw new NotFoundException('Creator profile not found');
     }
 
-    return this.prisma.creatorMaterial.findMany({
+    const items = await this.prisma.creatorMaterial.findMany({
       where: { creatorId: profile.id, status: 'ACTIVE' },
       include: { material: true },
       orderBy: { createdAt: 'asc' },
     });
+
+    if (items.length === 0 && profile.themeMaterialId) {
+      const themeMat = await this.prisma.material.findUnique({
+        where: { id: profile.themeMaterialId },
+      });
+      if (themeMat) {
+        return [
+          {
+            id: themeMat.id,
+            creatorId: profile.id,
+            materialId: themeMat.id,
+            price: themeMat.defaultPrice,
+            currency: themeMat.currency,
+            displayName: themeMat.name,
+            name: themeMat.name,
+            slug: themeMat.slug,
+            color: themeMat.color,
+            thumbnailSmallUrl: themeMat.thumbnailSmallUrl,
+            thumbnailLargeUrl: themeMat.thumbnailLargeUrl,
+            customMaterialThumbnail: null,
+            imageUrl: themeMat.imageUrl,
+            status: themeMat.status,
+            isCustom: Boolean(themeMat.creatorId),
+            material: themeMat,
+            createdAt: themeMat.createdAt,
+            updatedAt: themeMat.updatedAt,
+          },
+        ];
+      }
+    }
+
+    return items.map((item) => ({
+      ...item,
+      name: item.material?.name || item.displayName,
+      slug: item.material?.slug,
+      color: item.material?.color,
+      thumbnailSmallUrl: item.material?.thumbnailSmallUrl,
+      thumbnailLargeUrl: item.material?.thumbnailLargeUrl,
+      customMaterialThumbnail: item.customThumbnailUrl ?? null,
+      isCustom: Boolean(item.material?.creatorId),
+    }));
+  }
+
+  async createCustomMaterial(userId: string, dto: CreateCustomMaterialDto) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    const baseSlug = (dto.name || 'custom')
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    const randomSuffix = Math.random().toString(36).substring(2, 7);
+    const slug = `${profile.slug}-${baseSlug}-${randomSuffix}`;
+
+    const primaryMat = await this.prisma.material.findFirst({
+      where: { status: 'ACTIVE', creatorId: null },
+    });
+    const defaultPrice = primaryMat?.defaultPrice ?? 100000;
+    const currency = primaryMat?.currency ?? 'NGN';
+
+    const material = await this.prisma.material.create({
+      data: {
+        creatorId: profile.id,
+        name: dto.name.trim(),
+        slug,
+        description: dto.description?.trim() || null,
+        imageUrl: dto.imageUrl?.trim() || null,
+        thumbnailSmallUrl: dto.thumbnailSmallUrl?.trim() || null,
+        thumbnailLargeUrl: dto.thumbnailLargeUrl?.trim() || null,
+        color: dto.color?.trim() || null,
+        defaultPrice,
+        currency,
+        status: 'ACTIVE',
+      },
+    });
+
+    const creatorMaterial = await this.prisma.creatorMaterial.create({
+      data: {
+        creatorId: profile.id,
+        materialId: material.id,
+        price: defaultPrice,
+        currency,
+        displayName: dto.name.trim(),
+        description: dto.description?.trim() || null,
+        status: 'ACTIVE',
+      },
+      include: { material: true },
+    });
+
+    return {
+      ...creatorMaterial,
+      isCustom: true,
+    };
   }
 
   async saveCreatorMaterials(userId: string, dto: SaveCreatorMaterialsDto) {
@@ -622,10 +937,14 @@ export class CreatorsService {
       throw new NotFoundException('Creator profile not found');
     }
 
-    // Validate that all referenced materials exist in the platform catalogue
+    // Validate that all referenced materials exist in the catalogue (platform or owned by this creator)
     const materialIds = dto.materials.map((m) => m.materialId);
     const catalogueMaterials = await this.prisma.material.findMany({
-      where: { id: { in: materialIds }, status: 'ACTIVE' },
+      where: {
+        id: { in: materialIds },
+        status: 'ACTIVE',
+        OR: [{ creatorId: null }, { creatorId: profile.id }],
+      },
     });
 
     const foundIds = new Set(catalogueMaterials.map((m) => m.id));
@@ -636,10 +955,16 @@ export class CreatorsService {
       );
     }
 
+    const catalogueMap = new Map(catalogueMaterials.map((c) => [c.id, c]));
+
     // Use a transaction: upsert each submitted material, deactivate the rest
     await this.prisma.$transaction(async (tx) => {
       // Upsert each material the creator wants active
       for (const item of dto.materials) {
+        const defaultPrice =
+          catalogueMap.get(item.materialId)?.defaultPrice ?? 100000;
+        const price = item.price ?? defaultPrice;
+
         await tx.creatorMaterial.upsert({
           where: {
             creatorId_materialId: {
@@ -650,12 +975,12 @@ export class CreatorsService {
           create: {
             creatorId: profile.id,
             materialId: item.materialId,
-            price: item.price,
+            price,
             displayName: item.displayName || null,
             status: 'ACTIVE',
           },
           update: {
-            price: item.price,
+            price,
             displayName: item.displayName || null,
             status: 'ACTIVE',
           },
@@ -676,11 +1001,234 @@ export class CreatorsService {
     });
 
     // Return the updated menu
-    return this.prisma.creatorMaterial.findMany({
+    const menu = await this.prisma.creatorMaterial.findMany({
       where: { creatorId: profile.id, status: 'ACTIVE' },
       include: { material: true },
       orderBy: { createdAt: 'asc' },
     });
+    return menu.map((item) => ({
+      ...item,
+      customMaterialThumbnail: item.customThumbnailUrl ?? null,
+    }));
+  }
+
+  // Helper to guarantee a creator always has material items available
+  async ensureCreatorMaterials(profileId: string) {
+    try {
+      const active = await this.prisma.creatorMaterial.findMany({
+        where: { creatorId: profileId, status: 'ACTIVE' },
+        include: { material: true },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (active && active.length > 0) {
+        return active;
+      }
+
+      const platformMaterials = await this.prisma.material.findMany({
+        where: { status: 'ACTIVE', creatorId: null },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      if (platformMaterials && platformMaterials.length > 0) {
+        for (const mat of platformMaterials) {
+          await this.prisma.creatorMaterial.upsert({
+            where: {
+              creatorId_materialId: {
+                creatorId: profileId,
+                materialId: mat.id,
+              },
+            },
+            create: {
+              creatorId: profileId,
+              materialId: mat.id,
+              price: mat.defaultPrice,
+              currency: mat.currency,
+              displayName: mat.name,
+              status: 'ACTIVE',
+            },
+            update: {
+              status: 'ACTIVE',
+            },
+          });
+        }
+
+        return this.prisma.creatorMaterial.findMany({
+          where: { creatorId: profileId, status: 'ACTIVE' },
+          include: { material: true },
+          orderBy: { createdAt: 'asc' },
+        });
+      }
+    } catch (err) {
+      console.warn(
+        '[CreatorsService] ensureCreatorMaterials non-critical error:',
+        err,
+      );
+    }
+    return [];
+  }
+
+  // -----------------------------------------------------------
+  // Supporter Settings & Page Status
+  // -----------------------------------------------------------
+
+  async updateCreatorSettings(userId: string, dto: UpdateCreatorSettingsDto) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    const data: Record<string, any> = {};
+
+    // ── Appearance: theme material ──────────────────────────────────────────
+    if (dto.themeMaterialId !== undefined) {
+      if (dto.themeMaterialId === null) {
+        data.themeMaterialId = null;
+      } else {
+        // Validate it's an active platform material
+        const material = await this.prisma.material.findFirst({
+          where: {
+            id: dto.themeMaterialId,
+            status: 'ACTIVE',
+            creatorId: null, // platform materials only
+          },
+        });
+        if (!material) {
+          throw new BadRequestException(
+            `Material with id "${dto.themeMaterialId}" not found or is not a valid platform theme.`,
+          );
+        }
+        data.themeMaterialId = dto.themeMaterialId;
+
+        // Ensure active creatorMaterial record exists for the selected theme material
+        await this.prisma.creatorMaterial.upsert({
+          where: {
+            creatorId_materialId: {
+              creatorId: profile.id,
+              materialId: dto.themeMaterialId,
+            },
+          },
+          create: {
+            creatorId: profile.id,
+            materialId: dto.themeMaterialId,
+            price: material.defaultPrice,
+            currency: material.currency,
+            displayName: material.name,
+            status: 'ACTIVE',
+          },
+          update: {
+            status: 'ACTIVE',
+          },
+        });
+
+        // Deactivate other platform materials so only the selected theme is active
+        await this.prisma.creatorMaterial.updateMany({
+          where: {
+            creatorId: profile.id,
+            materialId: { not: dto.themeMaterialId },
+            material: { creatorId: null },
+          },
+          data: { status: 'INACTIVE' },
+        });
+      }
+    }
+
+    // ── Supporter Interactions ──────────────────────────────────────────────
+    if (dto.thankYouMessage !== undefined) {
+      data.thankYouMessage = dto.thankYouMessage.trim() || null;
+    }
+    if (dto.showSupportersOnPage !== undefined) {
+      data.showSupportersOnPage = dto.showSupportersOnPage;
+    }
+
+    const updated = await this.prisma.creatorProfile.update({
+      where: { id: profile.id },
+      data,
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+        socialLinks: true,
+        materials: {
+          where: { status: 'ACTIVE' },
+          include: { material: true },
+        },
+        themeMaterial: true,
+      },
+    });
+
+    return updated;
+  }
+
+  async updatePageStatus(userId: string, dto: UpdatePageStatusDto) {
+    const profile = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      include: {
+        materials: {
+          where: { status: 'ACTIVE' },
+          include: { material: true },
+        },
+      },
+    });
+
+    if (!profile) {
+      throw new NotFoundException('Creator profile not found');
+    }
+
+    if (dto.isPublished) {
+      // Validate all required setup fields before publishing
+      const missingFields: string[] = [];
+      if (!profile.creatorName?.trim()) missingFields.push('creatorName');
+      if (!profile.slug?.trim()) missingFields.push('slug');
+      if (!profile.bio?.trim()) missingFields.push('bio');
+      if (!profile.avatarUrl?.trim()) missingFields.push('avatarUrl');
+      if (!profile.thankYouMessage?.trim())
+        missingFields.push('thankYouMessage');
+
+      const activeMaterialsCount = profile.materials?.length || 0;
+      if (activeMaterialsCount === 0 && !profile.themeMaterialId) {
+        missingFields.push('materials (theme)');
+      }
+
+      if (missingFields.length > 0) {
+        throw new BadRequestException(
+          `Cannot publish creator page. All setup fields must be completed. Missing: ${missingFields.join(', ')}`,
+        );
+      }
+    }
+
+    const updated = await this.prisma.creatorProfile.update({
+      where: { id: profile.id },
+      data: {
+        isPublished: dto.isPublished,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        },
+        socialLinks: true,
+        themeMaterial: true,
+        materials: {
+          where: { status: 'ACTIVE' },
+          include: { material: true },
+        },
+      },
+    });
+
+    return updated;
   }
 
   formatCreatorProfile(profile: any) {
@@ -704,13 +1252,139 @@ export class CreatorsService {
       lastName: _lastName,
       username: _username,
       personalizedLink: _personalizedLink,
+      materials: rawMaterials,
+      payoutMethods,
       ...cleanProfile
     } = profile;
+
+    // If a theme material is set and rawMaterials contains multiple platform materials,
+    // filter to only the selected theme material and any custom creator materials.
+    let targetMaterials = rawMaterials || [];
+    if (
+      profile.themeMaterialId &&
+      Array.isArray(rawMaterials) &&
+      rawMaterials.length > 1
+    ) {
+      const filtered = rawMaterials.filter(
+        (item: any) =>
+          item.materialId === profile.themeMaterialId ||
+          item.id === profile.themeMaterialId ||
+          Boolean(item.material?.creatorId),
+      );
+      if (filtered.length > 0) {
+        targetMaterials = filtered;
+      }
+    }
+
+    let materials = targetMaterials
+      ? targetMaterials.map((item: any) => {
+          const mat = item.material || {};
+          return {
+            id: item.id,
+            creatorId: item.creatorId,
+            materialId: item.materialId,
+            price: item.price ?? mat.defaultPrice ?? 100000,
+            currency: item.currency || mat.currency || 'NGN',
+            displayName: item.displayName || mat.name || null,
+            name: mat.name || item.displayName || '',
+            slug: mat.slug || '',
+            description: item.description || mat.description || null,
+            color: mat.color || null,
+            thumbnailSmallUrl: mat.thumbnailSmallUrl || null,
+            thumbnailLargeUrl: mat.thumbnailLargeUrl || null,
+            customMaterialThumbnail: item.customThumbnailUrl || null,
+            imageUrl: mat.imageUrl || null,
+            status: item.status || 'ACTIVE',
+            isCustom: Boolean(mat.creatorId),
+            material: item.material
+              ? {
+                  id: mat.id,
+                  name: mat.name,
+                  slug: mat.slug,
+                  description: mat.description,
+                  iconUrl: mat.imageUrl,
+                  thumbnailSmallUrl: mat.thumbnailSmallUrl,
+                  thumbnailLargeUrl: mat.thumbnailLargeUrl,
+                  color: mat.color,
+                  basePrice: mat.defaultPrice,
+                  status: mat.status,
+                }
+              : undefined,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+          };
+        })
+      : [];
+
+    // Fallback: If no materials in materials array, but themeMaterial exists on profile
+    if (materials.length === 0 && profile.themeMaterial) {
+      const mat = profile.themeMaterial;
+      const themeItem = {
+        id: mat.id,
+        creatorId: profile.id,
+        materialId: mat.id,
+        price: mat.defaultPrice ?? 100000,
+        currency: mat.currency || 'NGN',
+        displayName: mat.name,
+        name: mat.name,
+        slug: mat.slug,
+        description: mat.description || null,
+        color: mat.color || null,
+        thumbnailSmallUrl: mat.thumbnailSmallUrl || null,
+        thumbnailLargeUrl: mat.thumbnailLargeUrl || null,
+        customMaterialThumbnail: null,
+        imageUrl: mat.imageUrl || null,
+        status: mat.status || 'ACTIVE',
+        isCustom: Boolean(mat.creatorId),
+        material: {
+          id: mat.id,
+          name: mat.name,
+          slug: mat.slug,
+          description: mat.description,
+          iconUrl: mat.imageUrl,
+          thumbnailSmallUrl: mat.thumbnailSmallUrl,
+          thumbnailLargeUrl: mat.thumbnailLargeUrl,
+          color: mat.color,
+          basePrice: mat.defaultPrice,
+          status: mat.status,
+        },
+        createdAt: mat.createdAt,
+        updatedAt: mat.updatedAt,
+      };
+      materials = [themeItem];
+    }
+
+    // Determine primary selected material
+    let selectedMaterial = null;
+    if (profile.themeMaterialId) {
+      selectedMaterial =
+        materials.find(
+          (m: any) =>
+            m.materialId === profile.themeMaterialId ||
+            m.id === profile.themeMaterialId,
+        ) || null;
+    }
+    if (!selectedMaterial && materials.length > 0) {
+      selectedMaterial = materials[0];
+    }
+
+    const isPublished = Boolean(profile.isPublished);
+    const isKycCompleted = profile.kycStatus === 'VERIFIED';
 
     return {
       ...cleanProfile,
       creatorName,
       slug: cleanSlug,
+      material: selectedMaterial || null,
+      materials,
+      selectedMaterials: materials,
+      showSupportersOnPage: profile.showSupportersOnPage ?? true,
+      isPublished,
+      isKycCompleted,
+      // Only for the creator's own profile, which loads their payout accounts
+      ...(Array.isArray(payoutMethods) && {
+        isBankAccountConnected: payoutMethods.length > 0,
+      }),
     };
   }
 
@@ -796,5 +1470,678 @@ export class CreatorsService {
         telegram: `https://t.me/share/url?url=${encodeURIComponent(publicUrl)}&text=${encodeURIComponent(shareText)}`,
       },
     };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Creator Overview Dashboard Methods
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  async getDashboardOverview(
+    userId: string,
+    period: '7d' | '30d' | '90d' | '12m' | 'all' = '30d',
+  ): Promise<CreatorDashboardResponseDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      include: {
+        payoutMethods: true,
+        user: true,
+      },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    const [metrics, balance, recentContributions, earningsChart] =
+      await Promise.all([
+        this.calculateDashboardMetrics(creator.id),
+        this.getDashboardBalanceForCreator(creator),
+        this.getRecentContributions(creator.id, 5),
+        this.buildEarningsChart(creator.id, period),
+      ]);
+
+    const frontendUrl =
+      process.env.FRONTEND_URL ||
+      process.env.CREATOR_FRONTEND_URL ||
+      'http://localhost:3000';
+
+    let pageStatus = 'DRAFT';
+    let pageStatusLabel = 'Draft';
+    if (creator.status === 'ACTIVE' && creator.isPublished) {
+      pageStatus = 'LIVE';
+      pageStatusLabel = 'Page is live';
+    } else if (creator.isPublished) {
+      pageStatus = 'PUBLISHED';
+      pageStatusLabel = 'Published';
+    } else if (creator.status === 'SUSPENDED') {
+      pageStatus = 'SUSPENDED';
+      pageStatusLabel = 'Suspended';
+    }
+
+    const cleanSlug = (creator.slug || '').replace(/^@+/, '').trim();
+    const publicUrl = `${frontendUrl.replace(/\/+$/, '')}/${cleanSlug}`;
+
+    return {
+      creator: {
+        id: creator.id,
+        creatorName: creator.creatorName || creator.user?.name || '',
+        slug: cleanSlug,
+        avatarUrl: creator.avatarUrl,
+        status: creator.status,
+        isPublished: creator.isPublished,
+        pageStatus,
+        pageStatusLabel,
+        publicUrl,
+      },
+      metrics,
+      balance,
+      recentContributions,
+      earningsChart,
+    };
+  }
+
+  async getDashboardBalance(userId: string): Promise<DashboardBalanceDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      include: {
+        payoutMethods: true,
+      },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    return this.getDashboardBalanceForCreator(creator);
+  }
+
+  async getDashboardEarnings(
+    userId: string,
+    query?: DashboardEarningsQueryDto,
+  ): Promise<DashboardEarningsChartDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    return this.buildEarningsChart(creator.id, query?.period || '30d');
+  }
+
+  async getDashboardContributions(
+    userId: string,
+    query?: DashboardContributionsQueryDto,
+  ): Promise<DashboardContributionsListResponseDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    const page = Math.max(1, query?.page || 1);
+    const limit = Math.min(
+      MAX_PAGE_LIMIT,
+      Math.max(1, query?.limit || DEFAULT_PAGE_LIMIT),
+    );
+    const skip = (page - 1) * limit;
+    const where = this.contributionsWhere(creator.id, query?.search);
+
+    const [total, supports] = await Promise.all([
+      this.prisma.support.count({ where }),
+      this.prisma.support.findMany({
+        where,
+        orderBy: [
+          { createdAt: query?.order === 'asc' ? 'asc' : 'desc' },
+          { id: 'desc' },
+        ],
+        skip,
+        take: limit,
+        include: CONTRIBUTION_INCLUDE,
+      }),
+    ]);
+
+    return {
+      items: supports.map((support) => this.toContributionDto(support)),
+      pagination: buildPagination(page, limit, total),
+    };
+  }
+
+  async getDashboardContribution(
+    userId: string,
+    supportId: string,
+  ): Promise<DashboardContributionDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    // Scoped to the signed-in creator, so another creator's id is just a 404.
+    const support = await this.prisma.support.findFirst({
+      where: { id: supportId, ...this.contributionsWhere(creator.id) },
+      include: CONTRIBUTION_INCLUDE,
+    });
+
+    if (!support) {
+      throw new NotFoundException({
+        code: ErrorCodes.NOT_FOUND,
+        message: 'Contribution not found',
+      });
+    }
+
+    return this.toContributionDto(support);
+  }
+
+  /** Paid gifts received by one creator, optionally narrowed by a search term. */
+  private contributionsWhere(
+    creatorId: string,
+    search?: string,
+  ): Prisma.SupportWhereInput {
+    const term = search?.trim();
+    const where: Prisma.SupportWhereInput = {
+      creatorId,
+      status: { in: ['PAID', 'COMPLETED'] },
+    };
+    if (!term) return where;
+
+    // Anonymous gifts hide both name and message from the creator, so they
+    // can't be searched for either.
+    const contains = { contains: term, mode: 'insensitive' as const };
+    where.OR = [
+      { visibility: { not: 'ANONYMOUS' }, guestName: contains },
+      { visibility: { not: 'ANONYMOUS' }, message: contains },
+    ];
+    return where;
+  }
+
+  private toContributionDto(
+    support: ContributionRow,
+  ): DashboardContributionDto {
+    const isAnonymous = support.visibility === 'ANONYMOUS';
+    const supporterName = isAnonymous
+      ? 'Anonymous'
+      : support.guestName?.trim() || 'Supporter';
+
+    const firstItem = support.items[0];
+    const material = firstItem
+      ? {
+          id: firstItem.creatorMaterial?.materialId,
+          name: firstItem.materialNameSnapshot,
+          color: firstItem.creatorMaterial?.material?.color || null,
+          thumbnailSmallUrl:
+            firstItem.creatorMaterial?.material?.thumbnailSmallUrl || null,
+          thumbnailLargeUrl:
+            firstItem.creatorMaterial?.material?.thumbnailLargeUrl || null,
+          customMaterialThumbnail:
+            firstItem.creatorMaterial?.customThumbnailUrl || null,
+          quantity: support.items
+            .reduce((acc, it) => acc.add(it.quantity), new Prisma.Decimal(0))
+            .toNumber(),
+        }
+      : null;
+
+    return {
+      id: support.id,
+      supporter: {
+        id: null,
+        name: supporterName,
+        initials: this.extractInitials(supporterName),
+        avatarUrl: null,
+        isAnonymous,
+      },
+      material,
+      message: creatorMessage(support),
+      amount: support.totalAmount,
+      platformFee: support.platformFee,
+      creatorAmount: support.creatorAmount,
+      currency: support.currency,
+      paidAmount: support.chargeAmount ?? support.totalAmount,
+      paidCurrency: support.chargeCurrency,
+      status: support.status,
+      reference: support.payment?.providerReference ?? null,
+      createdAt: support.createdAt,
+    };
+  }
+
+  async getDashboardMetrics(userId: string): Promise<DashboardMetricsDto> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    return this.calculateDashboardMetrics(creator.id);
+  }
+
+  async getDashboardRecentContributions(
+    userId: string,
+    limit = 5,
+  ): Promise<DashboardContributionDto[]> {
+    const creator = await this.prisma.creatorProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+
+    if (!creator) {
+      throw new NotFoundException({
+        code: ErrorCodes.CREATOR_NOT_FOUND,
+        message: 'Creator profile not found',
+      });
+    }
+
+    const clampedLimit = Math.min(20, Math.max(1, limit || 5));
+    return this.getRecentContributions(creator.id, clampedLimit);
+  }
+
+  private async calculateDashboardMetrics(
+    creatorId: string,
+  ): Promise<DashboardMetricsDto> {
+    const received = {
+      creatorId,
+      status: { in: ['PAID', 'COMPLETED'] },
+    };
+    const now = new Date();
+    const startOfMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+    const startOfLastMonth = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1),
+    );
+
+    const [agg, thisMonth, lastMonth, supporterGroups, anonymousThisMonth] =
+      await Promise.all([
+        this.prisma.support.aggregate({
+          where: received,
+          _count: { id: true },
+          _sum: {
+            totalAmount: true,
+            creatorAmount: true,
+            platformFee: true,
+          },
+        }),
+        this.prisma.support.aggregate({
+          where: { ...received, createdAt: { gte: startOfMonth } },
+          _count: { id: true },
+          _sum: { totalAmount: true },
+        }),
+        this.prisma.support.aggregate({
+          where: {
+            ...received,
+            createdAt: { gte: startOfLastMonth, lt: startOfMonth },
+          },
+          _sum: { totalAmount: true },
+        }),
+        // Supporters have no accounts, so one email is one supporter
+        this.prisma.support.groupBy({
+          by: ['guestEmail'],
+          where: received,
+          _count: { _all: true },
+          _min: { createdAt: true },
+        }),
+        this.prisma.support.count({
+          where: {
+            ...received,
+            guestEmail: null,
+            createdAt: { gte: startOfMonth },
+          },
+        }),
+      ]);
+
+    // Gifts left without an email can't be matched, so each counts as one
+    let supporters = 0;
+    let newSupportersThisMonth = anonymousThisMonth;
+    for (const group of supporterGroups) {
+      if (group.guestEmail === null) {
+        supporters += group._count._all;
+      } else {
+        supporters += 1;
+        if (group._min.createdAt && group._min.createdAt >= startOfMonth) {
+          newSupportersThisMonth += 1;
+        }
+      }
+    }
+
+    const thisMonthAmount = thisMonth._sum.totalAmount || 0;
+    const lastMonthAmount = lastMonth._sum.totalAmount || 0;
+
+    return {
+      totalContributions: agg._count.id || 0,
+      totalContributionAmount: agg._sum.totalAmount || 0,
+      netEarnings: agg._sum.creatorAmount || 0,
+      platformFees: agg._sum.platformFee || 0,
+      supporters,
+      newSupportersThisMonth,
+      thisMonthContributions: thisMonth._count.id || 0,
+      thisMonthAmount,
+      lastMonthAmount,
+      thisMonthChangePercent:
+        lastMonthAmount > 0
+          ? Math.round(
+              ((thisMonthAmount - lastMonthAmount) / lastMonthAmount) * 100,
+            )
+          : null,
+      currency: 'NGN',
+    };
+  }
+
+  private async getDashboardBalanceForCreator(
+    creator: any,
+  ): Promise<DashboardBalanceDto> {
+    const account = await this.ledger.getOrCreateAccount(
+      AccountType.CREATOR,
+      creator.id,
+      'NGN',
+    );
+    const availableBalance = await this.ledger.getAccountBalance(account.id);
+
+    // "Contributions still processing": checkouts opened recently that Bachs
+    // has not confirmed yet. Abandoned checkouts are never marked failed, so
+    // only recent ones count.
+    const pendingContributionsAgg = await this.prisma.support.aggregate({
+      where: {
+        creatorId: creator.id,
+        payment: {
+          status: PaymentStatus.PROCESSING,
+          updatedAt: {
+            gte: new Date(Date.now() - PENDING_CONTRIBUTION_WINDOW_MS),
+          },
+        },
+      },
+      _sum: {
+        creatorAmount: true,
+      },
+    });
+    const pendingBalance = pendingContributionsAgg._sum.creatorAmount || 0;
+
+    // "Total sent to your bank account": what reached the bank, after fees
+    const completedPayoutsAgg = await this.prisma.payout.aggregate({
+      where: {
+        creatorId: creator.id,
+        status: PayoutStatus.SUCCESS,
+      },
+      _sum: {
+        netAmount: true,
+      },
+    });
+    const withdrawnToDate = completedPayoutsAgg._sum.netAmount || 0;
+
+    const activeMethod = (creator.payoutMethods || []).find(
+      (m: PayoutMethod) => m.status === 'ACTIVE',
+    );
+    const hasPayoutMethod = !!activeMethod;
+    const isKycVerified = creator.kycStatus === 'VERIFIED';
+    const minimumWithdrawal = this.platformSettings
+      ? (await this.platformSettings.get()).minimumWithdrawal
+      : MINIMUM_WITHDRAWAL;
+    const canWithdraw =
+      isKycVerified &&
+      creator.status === 'ACTIVE' &&
+      availableBalance >= minimumWithdrawal &&
+      !!activeMethod?.recipientCode;
+
+    return {
+      availableBalance,
+      pendingBalance,
+      withdrawnToDate,
+      currency: 'NGN',
+      canWithdraw,
+      kycStatus: creator.kycStatus,
+      hasPayoutMethod,
+      minimumWithdrawal,
+      setupStep: !isKycVerified
+        ? 'VERIFY_IDENTITY'
+        : !hasPayoutMethod
+          ? 'CONNECT_BANK'
+          : 'READY',
+      payoutMethod: activeMethod
+        ? PayoutMethodsService.toDto(activeMethod)
+        : null,
+    };
+  }
+
+  private async getRecentContributions(
+    creatorId: string,
+    limit = 5,
+  ): Promise<DashboardContributionDto[]> {
+    const supports = await this.prisma.support.findMany({
+      where: this.contributionsWhere(creatorId),
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit,
+      include: CONTRIBUTION_INCLUDE,
+    });
+
+    return supports.map((support) => this.toContributionDto(support));
+  }
+
+  private async buildEarningsChart(
+    creatorId: string,
+    period: '7d' | '30d' | '90d' | '12m' | 'all' = '30d',
+  ): Promise<DashboardEarningsChartDto> {
+    const now = new Date();
+    let startDate: Date | null = null;
+    let interval: 'day' | 'week' | 'month' = 'day';
+
+    if (period === '7d') {
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 6);
+      startDate.setHours(0, 0, 0, 0);
+      interval = 'day';
+    } else if (period === '30d') {
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 29);
+      startDate.setHours(0, 0, 0, 0);
+      interval = 'day';
+    } else if (period === '90d') {
+      startDate = new Date(now);
+      startDate.setDate(now.getDate() - 89);
+      startDate.setHours(0, 0, 0, 0);
+      interval = 'week';
+    } else if (period === '12m') {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+      interval = 'month';
+    } else if (period === 'all') {
+      const earliest = await this.prisma.support.findFirst({
+        where: { creatorId, status: { in: ['PAID', 'COMPLETED'] } },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      });
+      startDate = earliest
+        ? new Date(
+            earliest.createdAt.getFullYear(),
+            earliest.createdAt.getMonth(),
+            1,
+          )
+        : new Date(now.getFullYear(), now.getMonth() - 5, 1);
+      interval = 'month';
+    }
+
+    const buckets: {
+      key: string;
+      date: string;
+      label: string;
+      startDate: Date;
+      endDate: Date;
+      grossAmount: number;
+      netAmount: number;
+      contributionsCount: number;
+    }[] = [];
+
+    if (interval === 'day') {
+      const cur = new Date(startDate!);
+      while (cur <= now) {
+        const key = cur.toISOString().split('T')[0];
+        const dayStart = new Date(cur);
+        dayStart.setHours(0, 0, 0, 0);
+        const dayEnd = new Date(cur);
+        dayEnd.setHours(23, 59, 59, 999);
+        const label = cur.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        });
+        buckets.push({
+          key,
+          date: key,
+          label,
+          startDate: dayStart,
+          endDate: dayEnd,
+          grossAmount: 0,
+          netAmount: 0,
+          contributionsCount: 0,
+        });
+        cur.setDate(cur.getDate() + 1);
+      }
+    } else if (interval === 'week') {
+      const cur = new Date(startDate!);
+      let weekIndex = 1;
+      while (cur <= now) {
+        const key = cur.toISOString().split('T')[0];
+        const weekStart = new Date(cur);
+        weekStart.setHours(0, 0, 0, 0);
+        const nextCur = new Date(cur);
+        nextCur.setDate(cur.getDate() + 6);
+        nextCur.setHours(23, 59, 59, 999);
+        const label = cur.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        });
+        buckets.push({
+          key: `w-${weekIndex}-${key}`,
+          date: key,
+          label,
+          startDate: weekStart,
+          endDate: nextCur,
+          grossAmount: 0,
+          netAmount: 0,
+          contributionsCount: 0,
+        });
+        cur.setDate(cur.getDate() + 7);
+        weekIndex++;
+      }
+    } else {
+      const cur = new Date(startDate!.getFullYear(), startDate!.getMonth(), 1);
+      while (cur <= now) {
+        const key = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`;
+        const mStart = new Date(
+          cur.getFullYear(),
+          cur.getMonth(),
+          1,
+          0,
+          0,
+          0,
+          0,
+        );
+        const mEnd = new Date(
+          cur.getFullYear(),
+          cur.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        );
+        const label = cur.toLocaleDateString('en-US', {
+          month: 'short',
+        });
+        buckets.push({
+          key,
+          date: key,
+          label,
+          startDate: mStart,
+          endDate: mEnd,
+          grossAmount: 0,
+          netAmount: 0,
+          contributionsCount: 0,
+        });
+        cur.setMonth(cur.getMonth() + 1);
+      }
+    }
+
+    const supports = await this.prisma.support.findMany({
+      where: {
+        creatorId,
+        status: { in: ['PAID', 'COMPLETED'] },
+        ...(startDate ? { createdAt: { gte: startDate, lte: now } } : {}),
+      },
+      select: {
+        totalAmount: true,
+        creatorAmount: true,
+        platformFee: true,
+        createdAt: true,
+      },
+    });
+
+    let totalGross = 0;
+    let totalFees = 0;
+    let totalNet = 0;
+
+    for (const sup of supports) {
+      totalGross += sup.totalAmount;
+      totalFees += sup.platformFee;
+      totalNet += sup.creatorAmount;
+
+      const t = sup.createdAt.getTime();
+      const bucket = buckets.find(
+        (b) => t >= b.startDate.getTime() && t <= b.endDate.getTime(),
+      );
+      if (bucket) {
+        bucket.grossAmount += sup.totalAmount;
+        bucket.netAmount += sup.creatorAmount;
+        bucket.contributionsCount += 1;
+      }
+    }
+
+    const dataPoints = buckets.map((b) => ({
+      date: b.date,
+      label: b.label,
+      grossAmount: b.grossAmount,
+      netAmount: b.netAmount,
+      contributionsCount: b.contributionsCount,
+    }));
+
+    return {
+      period,
+      totalGross,
+      totalFees,
+      totalNet,
+      currency: 'NGN',
+      dataPoints,
+    };
+  }
+
+  private extractInitials(name: string): string {
+    if (!name || !name.trim()) return '??';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) {
+      return parts[0].substring(0, 2).toUpperCase();
+    }
+    return (parts[0][0] + parts[1][0]).toUpperCase();
   }
 }

@@ -1,0 +1,650 @@
+import { Prisma } from '@prisma/client';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { PaymentProviderRejectedError } from '../../infrastructure/payments/payment-provider.interface';
+import { PaymentsService } from './payments.service';
+
+describe('PaymentsService.initializePayment contribution gate', () => {
+  function setup(
+    creatorStatus: string,
+    support: Record<string, unknown> = {
+      supporter: { email: 's@example.com' },
+    },
+  ) {
+    const prisma = {
+      support: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'support-1',
+          status: 'CREATED',
+          totalAmount: 500_000,
+          processingFee: 0,
+          fxRate: null,
+          currency: 'NGN',
+          ...support,
+          creator: { status: creatorStatus },
+        }),
+        update: jest.fn(),
+      },
+      payment: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'payment-1' }),
+        update: jest.fn(),
+      },
+    };
+    const provider = {
+      providerName: 'PAYSTACK',
+      initializePayment: jest.fn().mockResolvedValue({
+        providerReference: 'ref-1',
+        authorizationUrl: 'https://checkout',
+      }),
+    };
+    const eventEmitter = { emit: jest.fn() };
+    return {
+      prisma,
+      provider,
+      eventEmitter,
+      service: new PaymentsService(
+        prisma as never,
+        provider as never,
+        {} as never,
+        eventEmitter as never,
+        {} as never,
+        {} as never,
+      ),
+    };
+  }
+
+  it('refuses checkout when the creator is no longer active', async () => {
+    const { service, prisma, provider } = setup('PROFILE_CREATED');
+    await expect(service.initializePayment('support-1')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+    expect(provider.initializePayment).not.toHaveBeenCalled();
+  });
+
+  it('initializes checkout for an active creator', async () => {
+    const { service, provider } = setup('ACTIVE');
+    await expect(service.initializePayment('support-1')).resolves.toMatchObject(
+      { paymentId: 'payment-1' },
+    );
+    expect(provider.initializePayment).toHaveBeenCalled();
+  });
+
+  it('returns a 400 with the provider message when it rejects the checkout', async () => {
+    const { service, provider } = setup('ACTIVE');
+    provider.initializePayment.mockRejectedValue(
+      new PaymentProviderRejectedError(
+        'success_url must be a publicly accessible URL (localhost is not allowed)',
+      ),
+    );
+    await expect(service.initializePayment('support-1')).rejects.toMatchObject({
+      status: 400,
+      response: { message: expect.stringContaining('success_url') },
+    });
+  });
+
+  it('lets a guest pay with the email they gave on the intent', async () => {
+    const { service, provider } = setup('ACTIVE', {
+      supporter: null,
+      guestEmail: 'guest@example.com',
+    });
+    await service.initializePayment('support-1');
+    expect(provider.initializePayment).toHaveBeenCalledWith(
+      expect.objectContaining({ email: 'guest@example.com' }),
+    );
+  });
+
+  it('lets the checkout collect the email when none is known', async () => {
+    const { service, provider } = setup('ACTIVE', { guestEmail: null });
+    await service.initializePayment('support-1');
+    expect(provider.initializePayment).toHaveBeenCalledWith(
+      expect.objectContaining({ email: undefined }),
+    );
+  });
+});
+
+describe('PaymentsService checkout callback and status', () => {
+  function setup(support: Record<string, unknown> | null) {
+    const prisma = {
+      support: {
+        findUnique: jest.fn().mockResolvedValue(
+          support && {
+            id: 'support-1',
+            status: 'CREATED',
+            totalAmount: 500_000,
+            processingFee: 0,
+            currency: 'NGN',
+            guestEmail: null,
+            creator: { status: 'ACTIVE' },
+            ...support,
+          },
+        ),
+        update: jest.fn(),
+      },
+      payment: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'payment-1' }),
+        update: jest.fn(),
+      },
+    };
+    const provider = {
+      providerName: 'PAYSTACK',
+      initializePayment: jest.fn().mockResolvedValue({
+        providerReference: 'ref-1',
+        authorizationUrl: 'https://checkout',
+      }),
+    };
+    return {
+      prisma,
+      provider,
+      service: new PaymentsService(
+        prisma as never,
+        provider as never,
+        {} as never,
+        { emit: jest.fn() } as never,
+        {} as never,
+        {} as never,
+      ),
+    };
+  }
+
+  it('sends the supporter back to the callback page with the support id', async () => {
+    process.env.FRONTEND_URL = 'https://buymeayard.com';
+    const { service, provider } = setup({});
+    await service.initializePayment(
+      'support-1',
+      'https://buymeayard.com/adeola/thanks',
+    );
+    expect(provider.initializePayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callbackUrl: 'https://buymeayard.com/adeola/thanks?supportId=support-1',
+        // No cancelUrl given: cancel goes to the same page
+        cancelUrl: 'https://buymeayard.com/adeola/thanks?supportId=support-1',
+      }),
+    );
+  });
+
+  it('sends a cancelled or failed payment to its own page', async () => {
+    process.env.FRONTEND_URL = 'https://buymeayard.com';
+    const { service, provider } = setup({});
+    await service.initializePayment(
+      'support-1',
+      'https://buymeayard.com/adeola/thanks',
+      'https://buymeayard.com/adeola?payment=failed',
+    );
+    expect(provider.initializePayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callbackUrl: 'https://buymeayard.com/adeola/thanks?supportId=support-1',
+        cancelUrl:
+          'https://buymeayard.com/adeola?payment=failed&supportId=support-1',
+      }),
+    );
+  });
+
+  it('refuses a callback page on another site before creating a payment', async () => {
+    process.env.FRONTEND_URL = 'https://buymeayard.com';
+    const { service, prisma } = setup({});
+    await expect(
+      service.initializePayment('support-1', 'https://evil.com/x'),
+    ).rejects.toMatchObject({ response: { code: 'VALIDATION_ERROR' } });
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('reports a paid gift with the thank-you message', async () => {
+    const { service } = setup({
+      status: 'PAID',
+      items: [
+        {
+          quantity: 1.5,
+          materialNameSnapshot: 'Adire',
+          creatorMaterial: {
+            materialId: 'mat-adire',
+            material: {
+              color: '#7F3516',
+              thumbnailSmallUrl: 'https://cdn/adire-sm.png',
+              imageUrl: null,
+            },
+          },
+        },
+      ],
+      creator: { creatorName: 'Adeola', thankYouMessage: ' Thanks! ' },
+    });
+    await expect(service.getSupportStatus('support-1')).resolves.toMatchObject({
+      paid: true,
+      status: 'PAID',
+      amount: 500_000,
+      yards: 1.5,
+      material: {
+        id: 'mat-adire',
+        name: 'Adire',
+        color: '#7F3516',
+        thumbnailSmallUrl: 'https://cdn/adire-sm.png',
+        thumbnailLargeUrl: null,
+        customMaterialThumbnail: null,
+        quantity: 1.5,
+      },
+      materialName: 'Adire',
+      thankYouMessage: 'Thanks!',
+    });
+  });
+
+  it('is not paid while the webhook is still pending', async () => {
+    const { service } = setup({
+      status: 'PAYMENT_PENDING',
+      items: [],
+      creator: { creatorName: 'Adeola', thankYouMessage: null },
+    });
+    const res = await service.getSupportStatus('support-1');
+    expect(res.paid).toBe(false);
+    expect(res.thankYouMessage).toContain('Thank you');
+  });
+
+  it('404s for an unknown support', async () => {
+    const { service } = setup(null);
+    await expect(service.getSupportStatus('nope')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+});
+
+describe('PaymentsService.handleWebhook transfer events', () => {
+  function setup(opts: { existingEvent?: boolean; payout?: unknown } = {}) {
+    const prisma = {
+      paymentEvent: {
+        findUnique: jest
+          .fn()
+          .mockResolvedValue(opts.existingEvent ? { id: 'evt' } : null),
+        create: jest.fn(),
+      },
+    };
+    const provider = {
+      providerName: 'PAYSTACK',
+      verifyWebhookSignature: jest.fn().mockResolvedValue({ isValid: true }),
+    };
+    const payouts = {
+      findByProviderReference: jest
+        .fn()
+        .mockResolvedValue('payout' in opts ? opts.payout : { id: 'payout-1' }),
+      applyTransferOutcome: jest.fn().mockResolvedValue(true),
+    };
+    const service = new PaymentsService(
+      prisma as never,
+      provider as never,
+      {} as never,
+      { emit: jest.fn() } as never,
+      payouts as never,
+      {} as never,
+    );
+    return { service, prisma, payouts };
+  }
+
+  const event = (type: string) => ({
+    event: type,
+    data: { id: 9001, reference: 'pyt-20250925-0041' },
+  });
+
+  it.each([
+    ['transfer.success', 'SUCCESS'],
+    ['transfer.failed', 'FAILED'],
+    ['transfer.reversed', 'REVERSED'],
+  ])('applies %s to the matching payout', async (type, outcome) => {
+    const { service, prisma, payouts } = setup();
+
+    await service.handleWebhook('sig', event(type), 'raw');
+
+    expect(payouts.findByProviderReference).toHaveBeenCalledWith(
+      'pyt-20250925-0041',
+    );
+    expect(payouts.applyTransferOutcome).toHaveBeenCalledWith(
+      'payout-1',
+      outcome,
+    );
+    expect(prisma.paymentEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        payoutId: 'payout-1',
+        providerEventId: `${type}:9001`,
+      }),
+    });
+  });
+
+  it('keys events by type so failed then reversed are both processed', async () => {
+    const { service, prisma } = setup();
+
+    await service.handleWebhook('sig', event('transfer.reversed'), 'raw');
+
+    expect(prisma.paymentEvent.findUnique).toHaveBeenCalledWith({
+      where: {
+        provider_providerEventId: {
+          provider: 'PAYSTACK',
+          providerEventId: 'transfer.reversed:9001',
+        },
+      },
+    });
+  });
+
+  it('skips events it has already processed', async () => {
+    const { service, payouts } = setup({ existingEvent: true });
+
+    await expect(
+      service.handleWebhook('sig', event('transfer.success'), 'raw'),
+    ).resolves.toEqual({ status: 'already_processed' });
+    expect(payouts.applyTransferOutcome).not.toHaveBeenCalled();
+  });
+
+  it('ignores transfers that are not ours', async () => {
+    const { service, prisma, payouts } = setup({ payout: null });
+
+    await service.handleWebhook('sig', event('transfer.success'), 'raw');
+
+    expect(payouts.applyTransferOutcome).not.toHaveBeenCalled();
+    expect(prisma.paymentEvent.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('PaymentsService.handleWebhook refund events', () => {
+  function setup() {
+    const prisma = {
+      paymentEvent: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
+      payment: { findFirst: jest.fn().mockResolvedValue({ id: 'pay-1' }) },
+    };
+    const provider = {
+      providerName: 'PAYSTACK',
+      verifyWebhookSignature: jest.fn().mockResolvedValue({ isValid: true }),
+    };
+    const refunds = { applyProviderEvent: jest.fn().mockResolvedValue(true) };
+    const service = new PaymentsService(
+      prisma as never,
+      provider as never,
+      {} as never,
+      { emit: jest.fn() } as never,
+      {} as never,
+      refunds as never,
+    );
+    return { service, prisma, refunds };
+  }
+
+  it.each([
+    ['refund.processed', 'PROCESSED'],
+    ['refund.failed', 'FAILED'],
+    ['refund.processing', 'PROCESSING'],
+  ])(
+    'applies %s to the refund of the original payment',
+    async (type, status) => {
+      const { service, refunds, prisma } = setup();
+
+      await service.handleWebhook(
+        'sig',
+        { event: type, data: { id: 55, transaction_reference: 'ref-1' } },
+        'raw',
+      );
+
+      expect(refunds.applyProviderEvent).toHaveBeenCalledWith(
+        'ref-1',
+        status,
+        '55',
+        undefined,
+      );
+      expect(prisma.paymentEvent.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          paymentId: 'pay-1',
+          providerEventId: `${type}:55`,
+        }),
+      });
+    },
+  );
+});
+
+describe('PaymentsService.handleWebhook charge.success', () => {
+  it('tells the creator which fabric was gifted, in the dashboard material shape', async () => {
+    const payment = {
+      id: 'payment-1',
+      supportId: 'support-1',
+      status: 'PROCESSING',
+      currency: 'NGN',
+      support: {
+        id: 'support-1',
+        creatorId: 'creator-1',
+        creatorAmount: 450_000,
+        platformFee: 50_000,
+        visibility: 'PUBLIC',
+        guestName: 'Tomi',
+        guestEmail: 'tomi@example.com',
+        message: 'Keep creating',
+        creator: { userId: 'user-1' },
+        items: [
+          {
+            quantity: 2.5,
+            materialNameSnapshot: 'Adire',
+            creatorMaterial: {
+              materialId: 'mat-adire',
+              material: {
+                color: '#7F3516',
+                thumbnailSmallUrl: 'https://cdn/adire-sm.png',
+                imageUrl: null,
+              },
+            },
+          },
+        ],
+      },
+    };
+    const tx = {
+      payment: { update: jest.fn() },
+      support: { update: jest.fn() },
+      paymentEvent: { create: jest.fn() },
+    };
+    const prisma = {
+      paymentEvent: { findUnique: jest.fn().mockResolvedValue(null) },
+      payment: { findUnique: jest.fn().mockResolvedValue(payment) },
+      $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)),
+    };
+    const provider = {
+      providerName: 'PAYSTACK',
+      verifyWebhookSignature: jest.fn().mockResolvedValue({ isValid: true }),
+    };
+    const ledger = { recordSupportPayment: jest.fn() };
+    const eventEmitter = { emit: jest.fn() };
+    const service = new PaymentsService(
+      prisma as never,
+      provider as never,
+      ledger as never,
+      eventEmitter as never,
+      {} as never,
+      {} as never,
+    );
+
+    await service.handleWebhook(
+      'sig',
+      { event: 'charge.success', data: { id: 1, reference: 'ref-1' } },
+      'raw',
+    );
+
+    expect(eventEmitter.emit).toHaveBeenCalledWith(
+      'contribution.received',
+      expect.objectContaining({
+        materialName: 'Adire',
+        material: {
+          id: 'mat-adire',
+          name: 'Adire',
+          color: '#7F3516',
+          thumbnailSmallUrl: 'https://cdn/adire-sm.png',
+          thumbnailLargeUrl: null,
+          customMaterialThumbnail: null,
+          quantity: 2.5,
+        },
+      }),
+    );
+  });
+});
+
+describe('PaymentsService.handleWebhook with a provider that normalizes events', () => {
+  function setup(found: unknown = { id: 'pay-1', providerReference: 'chk_1' }) {
+    const prisma = {
+      paymentEvent: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
+      payment: { findFirst: jest.fn().mockResolvedValue(found) },
+    };
+    const provider = {
+      providerName: 'BACHS',
+      verifyWebhookSignature: jest.fn().mockResolvedValue({ isValid: true }),
+      normalizeWebhook: jest.fn((p: any): any => ({
+        event: 'refund.processed',
+        event_id: p.id,
+        data: { id: 'rf_1', charge_id: 'ch_1' },
+      })),
+    };
+    const refunds = { applyProviderEvent: jest.fn().mockResolvedValue(true) };
+    const service = new PaymentsService(
+      prisma as never,
+      provider as never,
+      {} as never,
+      { emit: jest.fn() } as never,
+      {} as never,
+      refunds as never,
+    );
+    return { service, prisma, provider, refunds };
+  }
+
+  const raw = { id: 'evt_9', type: 'refund.paid', data: {} };
+
+  it('finds the refunded payment by the provider charge id', async () => {
+    const { service, prisma, refunds } = setup();
+
+    await service.handleWebhook('sig', raw, 'raw');
+
+    expect(prisma.payment.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { provider: 'BACHS', providerTransactionId: 'ch_1' },
+      }),
+    );
+    expect(refunds.applyProviderEvent).toHaveBeenCalledWith(
+      'chk_1',
+      'PROCESSED',
+      'rf_1',
+      undefined,
+    );
+  });
+
+  it('stores the provider’s original body on the event, not the normalized one', async () => {
+    const { service, prisma } = setup();
+
+    await service.handleWebhook('sig', raw, 'raw');
+
+    expect(prisma.paymentEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        payload: raw,
+        providerEventId: 'refund.processed:evt_9',
+      }),
+    });
+  });
+
+  it('does nothing for an event the provider marks as ignored', async () => {
+    const { service, prisma, provider, refunds } = setup();
+    provider.normalizeWebhook.mockReturnValue({ event: 'ignored' });
+
+    await service.handleWebhook('sig', raw, 'raw');
+
+    expect(refunds.applyProviderEvent).not.toHaveBeenCalled();
+    expect(prisma.payment.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe('PaymentsService.initializePayment retries', () => {
+  function setup(existing: Record<string, unknown> | null) {
+    const prisma = {
+      support: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'support-1',
+          status: 'CREATED',
+          totalAmount: 500_000,
+          currency: 'NGN',
+          creator: { status: 'ACTIVE' },
+        }),
+        update: jest.fn(),
+      },
+      payment: {
+        findUnique: jest.fn().mockResolvedValue(existing),
+        create: jest.fn().mockResolvedValue({ id: 'payment-new' }),
+        update: jest.fn(),
+      },
+    };
+    const provider = {
+      providerName: 'BACHS',
+      initializePayment: jest.fn().mockResolvedValue({
+        providerReference: 'chk_1',
+        authorizationUrl: 'https://checkout',
+      }),
+    };
+    const service = new PaymentsService(
+      prisma as never,
+      provider as never,
+      {} as never,
+      { emit: jest.fn() } as never,
+      {} as never,
+      {} as never,
+    );
+    return { service, prisma, provider };
+  }
+
+  it('reuses the row a failed first attempt left behind', async () => {
+    const { service, prisma, provider } = setup({
+      id: 'payment-old',
+      status: 'PENDING',
+      providerReference: 'temp_123_support-',
+    });
+
+    const res = await service.initializePayment('support-1');
+
+    expect(prisma.payment.create).not.toHaveBeenCalled();
+    expect(provider.initializePayment).toHaveBeenCalledWith(
+      expect.objectContaining({ paymentId: 'payment-old' }),
+    );
+    expect(prisma.payment.update).toHaveBeenCalledWith({
+      where: { id: 'payment-old' },
+      data: { providerReference: 'chk_1', status: 'PROCESSING' },
+    });
+    expect(res.paymentId).toBe('payment-old');
+  });
+
+  it('refuses a support whose checkout is already open', async () => {
+    const { service, provider } = setup({
+      id: 'payment-old',
+      status: 'PROCESSING',
+      providerReference: 'chk_open',
+    });
+
+    await expect(service.initializePayment('support-1')).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(provider.initializePayment).not.toHaveBeenCalled();
+  });
+
+  it('picks up the winner when two requests race to create the row', async () => {
+    const { service, prisma } = setup(null);
+    prisma.payment.create.mockRejectedValue(
+      new Prisma.PrismaClientKnownRequestError('dup', {
+        code: 'P2002',
+        clientVersion: 'x',
+      }),
+    );
+    prisma.payment.findUnique
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        id: 'payment-winner',
+        status: 'PENDING',
+        providerReference: 'temp_9_support-',
+      });
+
+    const res = await service.initializePayment('support-1');
+
+    expect(res.paymentId).toBe('payment-winner');
+  });
+});

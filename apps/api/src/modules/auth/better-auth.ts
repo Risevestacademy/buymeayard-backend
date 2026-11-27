@@ -1,19 +1,162 @@
-import { betterAuth } from 'better-auth';
+import { betterAuth, APIError } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { bearer, genericOAuth } from 'better-auth/plugins';
+import { syncSocialLink } from './social-link-sync';
+import { fetchYoutubeChannel } from './youtube-channel';
 import { PrismaClient } from '@prisma/client';
 import * as nodemailer from 'nodemailer';
-import { isMobileRequest } from '../../common/utils/client-detection.util';
+import { renderEmailTemplate } from './email-templates/render-email-template';
+import * as crypto from 'crypto';
+import {
+  isMobileRequest,
+  isMobileRedirectUrl,
+} from '../../common/utils/client-detection.util';
+import { isPasswordValid } from '../../common/decorators/is-valid-password.decorator';
+import { ErrorCodes } from '../../common/errors/error-codes';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { USER_EVENTS } from '../analytics/events/user.events';
+import { primaryRole } from './role.util';
+
+/**
+ * Safely resolves OAuth state during OAuth callback flows.
+ * Uses dynamic import to avoid CommonJS/ESM compatibility issues in Jest/NestJS.
+ */
+export async function getOAuthStateFromContext(
+  context?: any,
+): Promise<{ callbackURL?: string; errorURL?: string } | null> {
+  if (context?.oauthState) {
+    return context.oauthState;
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval
+    const dynamicImport = new Function('return import("better-auth/api")');
+    const api = await dynamicImport();
+    return (await api.getOAuthState()) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Session cookie attributes. `Lax` by default. A frontend on another site
+ * (e.g. http://localhost calling the deployed API) only gets the cookie with
+ * `SameSite=None`, which browsers accept only together with `Secure`, so set
+ * COOKIE_SAME_SITE=none on that API deployment only.
+ */
+export function resolveCookieAttributes(
+  baseUrl: string,
+  sameSiteEnv = process.env.COOKIE_SAME_SITE,
+): { sameSite: 'lax' | 'none'; secure: boolean } {
+  const sameSite =
+    sameSiteEnv?.trim().toLowerCase() === 'none' ? 'none' : 'lax';
+  return {
+    sameSite,
+    // http://localhost can't set Secure cookies in every browser
+    secure: sameSite === 'none' || baseUrl.startsWith('https://'),
+  };
+}
 
 export interface BetterAuthOptions {
   secret?: string;
   baseURL?: string;
 }
 
+export function generateAppleClientSecret(params: {
+  clientId: string;
+  teamId: string;
+  keyId: string;
+  privateKey: string;
+}): string {
+  const { clientId, teamId, keyId, privateKey } = params;
+  const normalizedKey = privateKey.replace(/\\n/g, '\n').trim();
+
+  const header = Buffer.from(
+    JSON.stringify({ alg: 'ES256', kid: keyId, typ: 'JWT' }),
+  ).toString('base64url');
+
+  const now = Math.floor(Date.now() / 1000);
+  const payload = Buffer.from(
+    JSON.stringify({
+      iss: teamId,
+      iat: now,
+      exp: now + 180 * 24 * 60 * 60, // 180 days (Apple maximum allowed)
+      aud: 'https://appleid.apple.com',
+      sub: clientId,
+    }),
+  ).toString('base64url');
+
+  const data = `${header}.${payload}`;
+  const sig = crypto
+    .sign('sha256', Buffer.from(data), {
+      key: normalizedKey,
+      dsaEncoding: 'ieee-p1363',
+    })
+    .toString('base64url');
+
+  return `${data}.${sig}`;
+}
+
+export function resolveAppleClientSecret(): string {
+  if (process.env.APPLE_CLIENT_SECRET) {
+    return process.env.APPLE_CLIENT_SECRET;
+  }
+  const clientId = process.env.APPLE_CLIENT_ID;
+  const teamId = process.env.APPLE_TEAM_ID;
+  const keyId = process.env.APPLE_KEY_ID;
+  const privateKey = process.env.APPLE_PRIVATE_KEY;
+
+  if (clientId && teamId && keyId && privateKey) {
+    try {
+      return generateAppleClientSecret({
+        clientId,
+        teamId,
+        keyId,
+        privateKey,
+      });
+    } catch (err) {
+      console.warn('[BetterAuth] Failed to generate Apple client secret:', err);
+      return '';
+    }
+  }
+  return '';
+}
+
+function isEventEmitter(val: unknown): val is EventEmitter2 {
+  return (
+    val !== null &&
+    typeof val === 'object' &&
+    typeof (val as Record<string, unknown>).emit === 'function'
+  );
+}
+
+/** Better Auth responses that carry a user and get role + onboarding flags. */
+const AUTH_RESPONSE_PATHS = [
+  '/sign-in/email',
+  '/sign-up/email',
+  '/sign-in/social',
+  '/get-session',
+];
+
 export function createBetterAuth(
   prisma: PrismaClient,
-  options?: BetterAuthOptions,
+  eventEmitterOrOptions?: EventEmitter2 | BetterAuthOptions,
+  maybeOptions?: BetterAuthOptions,
 ) {
+  let eventEmitter: EventEmitter2 | undefined;
+  let options: BetterAuthOptions | undefined;
+
+  if (isEventEmitter(eventEmitterOrOptions)) {
+    eventEmitter = eventEmitterOrOptions;
+    options = maybeOptions;
+  } else if (
+    eventEmitterOrOptions &&
+    typeof eventEmitterOrOptions === 'object'
+  ) {
+    options = eventEmitterOrOptions;
+    eventEmitter = undefined;
+  } else {
+    options = maybeOptions;
+  }
   const emailFrom =
     process.env.EMAIL_FROM || 'BuyMeAYard <buymeayard@gmail.com>';
   const smtpPort = parseInt(process.env.SMTP_PORT || '587');
@@ -24,6 +167,14 @@ export function createBetterAuth(
     creator: process.env.CREATOR_FRONTEND_URL || 'http://localhost:3001', // creators
     admin: process.env.ADMIN_FRONTEND_URL || 'http://localhost:3002', // admins
   };
+
+  // Hosted copy of email-templates/logo.png (email clients need an absolute URL)
+  const emailLogoUrl =
+    process.env.EMAIL_LOGO_URL ||
+    'https://res.cloudinary.com/dymntdsp9/image/upload/v1792739782/logo_mafsug.png';
+  const emailTokenExpiresIn = '1 hour';
+  // Set when frontends and the API share a parent domain (e.g. ".buymeayard.com")
+  const cookieDomain = process.env.COOKIE_DOMAIN?.trim() || undefined;
 
   /**
    * Resolves the frontend URL for password reset emails.
@@ -38,11 +189,14 @@ export function createBetterAuth(
       include: { role: true },
     });
     const roleNames = userRoles.map((r) => r.role.name);
-    if (roleNames.includes('ADMIN') || roleNames.includes('SUPER_ADMIN')) {
+    if (roleNames.includes('ADMIN')) {
       return frontendUrls.admin;
     }
     return frontendUrls.creator;
   };
+
+  const baseUrl =
+    options?.baseURL || process.env.BETTER_AUTH_URL || 'http://localhost:3000';
 
   const smtpTransport = nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp-relay.brevo.com',
@@ -105,8 +259,19 @@ export function createBetterAuth(
       'https://buymeayard-main-dev.up.railway.app',
       'https://buymeayard-creator-dev.up.railway.app',
       'https://buymeayard-admin-dev.up.railway.app',
+      'https://buymeayardbackend.onrender.com',
+      'https://api.buymeayard.com',
+      'https://creator.buymeayard.com',
+      'https://admin.buymeayard.com',
+      'https://appleid.apple.com',
       'buymeayard://',
       'buymeayard://*',
+      'bmay://',
+      'bmay://*',
+      'bmay-dev://',
+      'bmay-dev://*',
+      'bmay-preview://',
+      'bmay-preview://*',
       'exp://',
       'exp://*',
       ...(process.env.ADDITIONAL_TRUSTED_ORIGINS
@@ -118,32 +283,67 @@ export function createBetterAuth(
     }),
     account: {
       modelName: 'authAccount',
+      skipStateCookieCheck: true,
+      accountLinking: {
+        enabled: true,
+        // youtube is connect-only and returns no email, so trusting it cannot
+        // link a sign-in to someone else's account. Without this a connect fails
+        // with unable_to_link_account (the profile is not email-verified).
+        trustedProviders: ['google', 'apple', 'youtube'],
+        requireLocalEmailVerified: false,
+        // Creators connect social accounts whose email differs from their own.
+        allowDifferentEmails: true,
+      },
+    } as any,
+    onAPIError: {
+      errorURL:
+        process.env.CREATOR_FRONTEND_URL ||
+        process.env.FRONTEND_URL ||
+        undefined,
     },
     secret:
       options?.secret ||
       process.env.BETTER_AUTH_SECRET ||
       'super-secret-minimum-32-chars-key-for-development-change-me',
-    baseURL:
-      options?.baseURL ||
-      process.env.BETTER_AUTH_URL ||
-      'http://localhost:3000',
+    baseURL: baseUrl,
     basePath: '/api/v1/auth',
     socialProviders: {
       google: {
         clientId: process.env.GOOGLE_CLIENT_ID || '',
         clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+        disableSignUp: false,
       },
       apple: {
         clientId: process.env.APPLE_CLIENT_ID || '',
-        clientSecret: process.env.APPLE_CLIENT_SECRET || '',
+        clientSecret: resolveAppleClientSecret(),
+        disableSignUp: false,
       },
       twitter: {
         clientId: process.env.TWITTER_CLIENT_ID || '',
         clientSecret: process.env.TWITTER_CLIENT_SECRET || '',
+        disableSignUp: false,
       },
       facebook: {
         clientId: process.env.FACEBOOK_CLIENT_ID || '',
         clientSecret: process.env.FACEBOOK_CLIENT_SECRET || '',
+        // user_link returns the profile URL; Facebook must approve it for the app.
+        scope: ['public_profile', 'user_link'],
+        disableSignUp: false,
+      },
+      discord: {
+        clientId: process.env.DISCORD_CLIENT_ID || '',
+        clientSecret: process.env.DISCORD_CLIENT_SECRET || '',
+        disableSignUp: false,
+      },
+      twitch: {
+        clientId: process.env.TWITCH_CLIENT_ID || '',
+        clientSecret: process.env.TWITCH_CLIENT_SECRET || '',
+        disableSignUp: false,
+      },
+      tiktok: {
+        clientKey: process.env.TIKTOK_CLIENT_KEY || '',
+        clientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
+        disableSignUp: false,
       },
     },
     emailAndPassword: {
@@ -200,7 +400,13 @@ export function createBetterAuth(
         sendEmail(
           user.email,
           'Reset Your Password - BuyMeAYard',
-          `<p>Click the link below to reset your password:</p><p><a href="${frontendLink}">${frontendLink}</a></p>`,
+          renderEmailTemplate('reset-password', {
+            name: user.name || 'there',
+            logoUrl: emailLogoUrl,
+            appUrl: baseUrl,
+            resetUrl: frontendLink,
+            expiresIn: emailTokenExpiresIn,
+          }),
         ).catch((err) =>
           console.error('[Auth] Failed to send password reset email:', err),
         );
@@ -239,7 +445,13 @@ export function createBetterAuth(
         sendEmail(
           user.email,
           'Verify Your Email - BuyMeAYard',
-          `<p>Click the link below to verify your email address:</p><p><a href="${frontendLink}">${frontendLink}</a></p>`,
+          renderEmailTemplate('verify-email', {
+            name: user.name || 'there',
+            logoUrl: emailLogoUrl,
+            appUrl: frontendUrls.creator,
+            verificationUrl: frontendLink,
+            expiresIn: emailTokenExpiresIn,
+          }),
         ).catch((err) =>
           console.error('[Auth] Failed to send verification email:', err),
         );
@@ -254,79 +466,190 @@ export function createBetterAuth(
       updateAge: 60 * 60 * 24, // 1 day
     },
     advanced: {
-      crossSubDomainCookies: {
-        enabled: true,
+      // Only when frontends and the API share a parent domain. Without a
+      // domain better-auth falls back to the host (Domain=localhost locally),
+      // which browsers reject, so local dev keeps host-only cookies.
+      ...(cookieDomain
+        ? { crossSubDomainCookies: { enabled: true, domain: cookieDomain } }
+        : {}),
+      defaultCookieAttributes: resolveCookieAttributes(baseUrl),
+      // Behind Railway's proxy the client IP arrives in these headers; without
+      // them rate limiting shares one bucket per path across all users.
+      ipAddress: { ipAddressHeaders: ['x-forwarded-for', 'x-real-ip'] },
+    },
+    hooks: {
+      // Native Better Auth endpoints (used by the Better Auth client) bypass
+      // AuthController, so add the same role and onboarding flags the
+      // controller adds. A social OAuth sign-in ends in a browser redirect
+      // with no body, so its client gets them from /get-session afterwards;
+      // /sign-in/social only has a user in the native id-token flow.
+      after: async (ctx: any) => {
+        const path: string | undefined = ctx?.path;
+        if (!path || !AUTH_RESPONSE_PATHS.includes(path)) return {};
+        const body = ctx?.context?.returned;
+        const userId = body?.user?.id;
+        if (!body || typeof body !== 'object' || !userId) return {};
+        const profile = await prisma.creatorProfile.findUnique({
+          where: { userId },
+          select: { status: true },
+        });
+        const isCompleted = profile !== null && profile.status !== 'REGISTERED';
+        const roleRows = await prisma.userRole.findMany({
+          where: { userId },
+          select: { role: { select: { name: true } } },
+        });
+        const roles = roleRows.map((r) => r.role.name);
+        const flags = {
+          isOnboarded: isCompleted,
+          isOnboardingCompleted: isCompleted,
+          isProfileSetupCompleted: isCompleted,
+          role: primaryRole(roles),
+          roles,
+        };
+        return {
+          response: { ...body, ...flags, user: { ...body.user, ...flags } },
+        };
       },
-      defaultCookieAttributes: {
-        sameSite: 'none',
-        secure: true,
+      before: async (ctx: any) => {
+        if (
+          (ctx?.path === '/sign-in/social' ||
+            ctx?.path?.startsWith('/sign-in/social')) &&
+          ctx?.body
+        ) {
+          const body = ctx.body;
+          if (
+            body.callbackURL &&
+            isMobileRedirectUrl(body.callbackURL, ctx.headers) &&
+            !body.errorCallbackURL
+          ) {
+            body.errorCallbackURL = body.callbackURL;
+          }
+        }
+        if (
+          (ctx?.path === '/reset-password' ||
+            ctx?.path?.startsWith('/reset-password')) &&
+          ctx?.body?.newPassword
+        ) {
+          if (!isPasswordValid(ctx.body.newPassword)) {
+            // eslint-disable-next-line @typescript-eslint/only-throw-error
+            throw new APIError('BAD_REQUEST', {
+              code: 'INVALID_PASSWORD',
+              message:
+                'Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, one number, and one special character',
+            });
+          }
+        }
       },
     },
     databaseHooks: {
-      account: {
+      user: {
         create: {
-          after: async (account) => {
-            try {
-              if (
-                account.providerId === 'email' ||
-                account.providerId === 'google' ||
-                account.providerId === 'apple'
-              ) {
-                return; // We don't link these as public social links for now (unless Google is for YouTube)
-              }
+          before: async (_user: any, context?: any) => {
+            const reqHeaders = context?.headers || context?.request?.headers;
+            const oauthState = await getOAuthStateFromContext(context);
+            const callbackURL =
+              context?.body?.callbackURL ||
+              context?.query?.callbackURL ||
+              context?.context?.callbackURL ||
+              oauthState?.callbackURL;
+            const isMobile =
+              (reqHeaders && isMobileRequest(reqHeaders)) ||
+              (callbackURL && isMobileRedirectUrl(callbackURL, reqHeaders));
 
-              let url = '';
-              const provider = account.providerId;
-              const accountId = account.accountId; // The user ID on the social platform
-
-              switch (provider) {
-                case 'twitter':
-                  url = `https://x.com/intent/user?user_id=${accountId}`;
-                  break;
-                case 'facebook':
-                  url = `https://facebook.com/${accountId}`;
-                  break;
-                case 'instagram':
-                  url = `https://instagram.com/${accountId}`;
-                  break;
-                case 'tiktok':
-                  url = `https://tiktok.com/@${accountId}`;
-                  break;
-                case 'youtube':
-                  url = `https://youtube.com/channel/${accountId}`;
-                  break;
-                default:
-                  url = `https://${provider}.com/${accountId}`;
-              }
-
-              const profile = await prisma.creatorProfile.findUnique({
-                where: { userId: account.userId },
+            if (isMobile) {
+              // eslint-disable-next-line @typescript-eslint/only-throw-error
+              throw new APIError('FORBIDDEN', {
+                code: ErrorCodes.REGISTRATION_WEB_ONLY,
+                message:
+                  'Account registration is only available on web. Please visit our website to create an account.',
               });
-
-              if (profile) {
-                await prisma.creatorSocialLink.create({
-                  data: {
-                    creatorId: profile.id,
-                    platform: provider,
-                    url: url,
-                  },
-                });
-                console.log(
-                  `[Auth] Synced ${provider} social link for user ${account.userId}`,
-                );
-              }
-            } catch (err) {
-              console.error(`[Auth] Failed to sync social link:`, err);
+            }
+          },
+          after: async (user: any) => {
+            // The creator welcome email is sent on USER_EVENTS.ONBOARDED, not here
+            if (eventEmitter) {
+              eventEmitter.emit(USER_EVENTS.CREATED, {
+                userId: user.id,
+                email: user.email,
+                name: user.name ?? undefined,
+              });
             }
           },
         },
       },
-      user: {
+      /**
+       * Session Creation Lifecycle Hook:
+       * In Better Auth, `session.create` is invoked exclusively when a new user authentication
+       * session is established (email/password sign-in, social OAuth callback, or new device login).
+       * Token refreshes do NOT trigger `session.create` — Better Auth updates the existing session's
+       * `expiresAt` via `session.update`.
+       * Emitting `USER_EVENTS.LOGIN` here provides complete coverage across all sign-in vectors without
+       * false positives from session refreshes.
+       */
+      session: {
         create: {
-          after: async (user) => {
-            // No roles or profiles are assigned at registration.
-            // Users complete onboarding explicitly via PUT /api/v1/creators/me/onboarding.
-            console.log(`[Auth] New user registered: ${user.id}`);
+          before: async (session: any, context?: any) => {
+            const reqHeaders = context?.headers || context?.request?.headers;
+            const oauthState = await getOAuthStateFromContext(context);
+            const callbackURL =
+              context?.body?.callbackURL ||
+              context?.query?.callbackURL ||
+              context?.context?.callbackURL ||
+              oauthState?.callbackURL;
+
+            const isMobile =
+              (reqHeaders && isMobileRequest(reqHeaders)) ||
+              (callbackURL && isMobileRedirectUrl(callbackURL, reqHeaders));
+
+            if (isMobile) {
+              const userRole = await prisma.userRole.findFirst({
+                where: {
+                  userId: session.userId,
+                  role: { name: 'CREATOR' },
+                },
+              });
+              if (!userRole) {
+                // eslint-disable-next-line @typescript-eslint/only-throw-error
+                throw new APIError('FORBIDDEN', {
+                  code: ErrorCodes.MOBILE_ACCESS_DENIED,
+                  message:
+                    'The mobile app is only available for creators. Please use the web platform or apply to become a creator.',
+                });
+              }
+            }
+          },
+          after: async (session: any) => {
+            if (eventEmitter) {
+              try {
+                const user = await prisma.user.findUnique({
+                  where: { id: session.userId },
+                  select: { email: true },
+                });
+                eventEmitter.emit(USER_EVENTS.LOGIN, {
+                  userId: session.userId,
+                  email: user?.email ?? '',
+                  ipAddress: session.ipAddress ?? undefined,
+                  userAgent: session.userAgent ?? undefined,
+                  sessionId: session.id ?? undefined,
+                });
+              } catch {
+                // Non-blocking for session creation
+              }
+            }
+          },
+        },
+      },
+      account: {
+        create: {
+          after: async (account) => {
+            await syncSocialLink(prisma, account);
+          },
+        },
+        update: {
+          after: async (account) => {
+            if (account?.userId && account.providerId) {
+              await syncSocialLink(prisma, account);
+            }
           },
         },
       },
@@ -336,22 +659,55 @@ export function createBetterAuth(
       genericOAuth({
         config: [
           {
+            // Instagram API with Instagram Login (business and creator accounts).
             providerId: 'instagram',
             clientId: process.env.INSTAGRAM_CLIENT_ID || '',
             clientSecret: process.env.INSTAGRAM_CLIENT_SECRET || '',
-            authorizationUrl: 'https://api.instagram.com/oauth/authorize',
+            authorizationUrl: 'https://www.instagram.com/oauth/authorize',
             tokenUrl: 'https://api.instagram.com/oauth/access_token',
-            userInfoUrl: 'https://graph.instagram.com/me?fields=id,username',
-            scopes: ['user_profile'],
+            scopes: ['instagram_business_basic'],
+            getUserInfo: async (tokens) => {
+              const res = await fetch(
+                `https://graph.instagram.com/me?fields=user_id,username&access_token=${encodeURIComponent(tokens.accessToken ?? '')}`,
+              );
+              if (!res.ok) return null;
+              const body = (await res.json()) as {
+                user_id?: string;
+                username?: string;
+              };
+              if (!body.user_id) return null;
+              return {
+                id: body.user_id,
+                name: body.username,
+                emailVerified: false,
+              };
+            },
+            disableSignUp: true,
           },
           {
-            providerId: 'tiktok',
-            clientId: process.env.TIKTOK_CLIENT_KEY || '',
-            clientSecret: process.env.TIKTOK_CLIENT_SECRET || '',
-            authorizationUrl: 'https://www.tiktok.com/v2/auth/authorize/',
-            tokenUrl: 'https://open.tiktokapis.com/v2/oauth/token/',
-            userInfoUrl: 'https://open.tiktokapis.com/v2/user/info/',
-            scopes: ['user.info.basic'],
+            providerId: 'youtube',
+            clientId: process.env.GOOGLE_CLIENT_ID || '',
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+            discoveryUrl:
+              'https://accounts.google.com/.well-known/openid-configuration',
+            scopes: ['https://www.googleapis.com/auth/youtube.readonly'],
+            // A channel can live on a different Google account (or a brand
+            // account) than the one the browser is signed in with.
+            prompt: 'select_account consent',
+            // Discovery makes this an OIDC provider, so Better Auth reads the
+            // account id from a `sub` claim we do not return. Use the channel id.
+            // Without it every connect fails with unable_to_get_user_info.
+            accountSubject: ({ profile }) => String(profile.id),
+            getUserInfo: async (tokens) => {
+              const channel = await fetchYoutubeChannel(tokens.accessToken);
+              if (!channel) return null;
+              return {
+                id: channel.id,
+                name: channel.name,
+                emailVerified: false,
+              };
+            },
+            disableSignUp: true,
           },
         ],
       }),

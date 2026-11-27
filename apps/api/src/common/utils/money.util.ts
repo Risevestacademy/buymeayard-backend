@@ -18,6 +18,32 @@ export class MoneyUtil {
   }
 
   /**
+   * Copies `value` with every number stored under one of `keys` converted from
+   * minor to major units, at any depth. For raw database rows whose money
+   * fields all carry stable names. Dates and Decimals are left alone.
+   */
+  static toMajorDeep<T>(value: T, keys: readonly string[]): T {
+    if (Array.isArray(value)) {
+      return value.map((v) => MoneyUtil.toMajorDeep(v, keys)) as T;
+    }
+    if (
+      value === null ||
+      typeof value !== 'object' ||
+      Object.getPrototypeOf(value) !== Object.prototype
+    ) {
+      return value;
+    }
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      out[k] =
+        typeof v === 'number' && keys.includes(k)
+          ? MoneyUtil.toMajorUnits(v)
+          : MoneyUtil.toMajorDeep(v, keys);
+    }
+    return out as T;
+  }
+
+  /**
    * Calculates platform fee and creator amount from total minor units and percentage fee.
    */
   static calculateSplit(

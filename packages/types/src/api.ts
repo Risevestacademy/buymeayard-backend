@@ -3,16 +3,19 @@ export interface ApiResponse<T = any> {
   meta?: Record<string, any>;
 }
 
+export interface ApiPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
 export interface ApiPaginatedResponse<T = any> {
-  data: T[];
-  meta: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-    hasNextPage: boolean;
-    hasPreviousPage: boolean;
+  data: {
+    items: T[];
+    pagination: ApiPagination;
   };
+  meta?: Record<string, any>;
 }
 
 export interface ApiErrorDetail {

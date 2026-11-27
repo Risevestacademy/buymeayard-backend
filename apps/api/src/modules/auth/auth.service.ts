@@ -4,6 +4,8 @@ import { fromNodeHeaders } from '../../common/utils/headers.util';
 import type { IncomingHttpHeaders } from 'http';
 import { PrismaService } from '../../infrastructure/database/prisma.service';
 import { createBetterAuth, AuthInstance } from './better-auth';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { primaryRole } from './role.util';
 
 @Injectable()
 export class AuthService implements OnModuleInit {
@@ -13,10 +15,11 @@ export class AuthService implements OnModuleInit {
   constructor(
     private readonly prisma: PrismaService,
     private readonly configService: ConfigService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   onModuleInit() {
-    this.auth = createBetterAuth(this.prisma, {
+    this.auth = createBetterAuth(this.prisma, this.eventEmitter, {
       secret: this.configService.get<string>('BETTER_AUTH_SECRET'),
       baseURL: this.configService.get<string>('BETTER_AUTH_URL'),
     });
@@ -78,22 +81,43 @@ export class AuthService implements OnModuleInit {
     errorCallbackURL?: string;
     newUserCallbackURL?: string;
     headers?: Headers;
-  }): Promise<{ url: string; redirect: boolean }> {
+  }): Promise<{ url: string; redirect: boolean; headers?: Headers }> {
     const defaultCallback =
       this.configService.get<string>('BETTER_AUTH_URL') ||
       'http://localhost:3000';
 
+    const callbackURL = params.callbackURL || defaultCallback;
+    const errorCallbackURL = params.errorCallbackURL || callbackURL;
+
     const res = await (this.getAuth().api as any).signInSocial({
       body: {
         provider: params.provider,
-        callbackURL: params.callbackURL || defaultCallback,
-        errorCallbackURL: params.errorCallbackURL,
+        callbackURL,
+        errorCallbackURL,
         newUserCallbackURL: params.newUserCallbackURL,
       },
       ...(params.headers ? { headers: params.headers } : {}),
+      asResponse: true,
     });
 
-    return res as { url: string; redirect: boolean };
+    if (res instanceof Response) {
+      const data = (await res.json().catch(() => ({}))) as {
+        url?: string;
+        redirect?: boolean;
+      };
+      const location = res.headers.get('location') || data.url || '';
+      return {
+        url: location,
+        redirect: data.redirect ?? true,
+        headers: res.headers,
+      };
+    }
+
+    return {
+      url: res?.url,
+      redirect: res?.redirect ?? true,
+      headers: res?.headers,
+    };
   }
 
   async signOut(params?: { headers?: Headers }): Promise<globalThis.Response> {
@@ -135,15 +159,26 @@ export class AuthService implements OnModuleInit {
     });
   }
 
+  /**
+   * Hashes a password with better-auth's configured hasher so it can be
+   * verified by the standard email/password sign-in flow.
+   */
+  async hashPassword(password: string): Promise<string> {
+    const ctx = await this.getAuth().$context;
+    return ctx.password.hash(password);
+  }
+
   async changePassword(params: {
     currentPassword: string;
     newPassword: string;
+    revokeOtherSessions?: boolean;
     headers: Headers;
   }): Promise<globalThis.Response> {
     return this.getAuth().api.changePassword({
       body: {
         currentPassword: params.currentPassword,
         newPassword: params.newPassword,
+        revokeOtherSessions: params.revokeOtherSessions,
       },
       headers: params.headers,
       asResponse: true,
@@ -201,13 +236,52 @@ export class AuthService implements OnModuleInit {
    * Returns onboarding and profile setup completion flags for a user.
    */
   async getUserAuthFlags(userId: string): Promise<{
+    isOnboarded: boolean;
     isOnboardingCompleted: boolean;
     isProfileSetupCompleted: boolean;
   }> {
     const isCompleted = await this.getIsOnboarded(userId);
     return {
+      isOnboarded: isCompleted,
       isOnboardingCompleted: isCompleted,
       isProfileSetupCompleted: isCompleted,
     };
+  }
+
+  /**
+   * Returns the user's roles and the primary one (`role`) for clients.
+   */
+  async getUserRoleInfo(
+    userId: string,
+  ): Promise<{ role: string | null; roles: string[] }> {
+    const rows = await this.prisma.userRole.findMany({
+      where: { userId },
+      select: { role: { select: { name: true } } },
+    });
+    const roles = rows.map((r) => r.role.name);
+    return { role: primaryRole(roles), roles };
+  }
+
+  /**
+   * Look up an active session and user by session token.
+   */
+  async getSessionByToken(token: string) {
+    return this.prisma.session.findUnique({
+      where: { token },
+      include: {
+        user: true,
+      },
+    });
+  }
+
+  /**
+   * Invalidate / delete a session by session token.
+   */
+  async revokeSessionByToken(token: string) {
+    return this.prisma.session
+      .delete({
+        where: { token },
+      })
+      .catch(() => null);
   }
 }
