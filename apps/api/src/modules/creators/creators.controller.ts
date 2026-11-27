@@ -494,10 +494,8 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
    * Live gift alerts (Server-Sent Events). The creator ID comes from the
    * session, never from the URL, so one creator can't listen to another's.
    *
-   * IMPORTANT: the global TransformInterceptor leaves an object alone only if
-   * it has a `data` key and two or fewer keys. Every message here has exactly
-   * `type` and `data`, so it passes through. Adding a third key (such as `id`)
-   * would make the interceptor wrap the message and break the stream.
+   * The global TransformInterceptor skips SSE routes, so messages are sent
+   * as they are. NairaResponseInterceptor still converts `netAmount` to naira.
    */
   @Sse('me/alerts/stream')
   @ApiBearerAuth()

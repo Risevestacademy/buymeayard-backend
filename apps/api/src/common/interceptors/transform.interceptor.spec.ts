@@ -1,4 +1,5 @@
-import { of, lastValueFrom } from 'rxjs';
+import { Sse } from '@nestjs/common';
+import { of, lastValueFrom, toArray } from 'rxjs';
 import { TransformInterceptor } from './transform.interceptor';
 import { buildPagination } from '../utils/pagination.util';
 
@@ -19,5 +20,25 @@ describe('TransformInterceptor', () => {
       },
       meta: {},
     });
+  });
+
+  it('leaves Server-Sent Events messages alone, whatever keys they have', async () => {
+    class Stream {
+      @Sse('stream')
+      handle() {
+        return of();
+      }
+    }
+    const message = { type: 'gift', data: { supportId: 's1' }, id: '1' };
+
+    const res = await lastValueFrom(
+      new TransformInterceptor()
+        .intercept({ getHandler: () => Stream.prototype.handle } as never, {
+          handle: () => of(message),
+        })
+        .pipe(toArray()),
+    );
+
+    expect(res).toEqual([message]);
   });
 });
