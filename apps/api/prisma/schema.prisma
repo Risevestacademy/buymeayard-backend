@@ -665,17 +665,19 @@ model ContentReport {
 /// A "Report a creator" submission. Supporters are guests, so the reporter is
 /// identified only by an optional email.
 model CreatorReport {
-  id             String    @id @default(uuid())
-  creatorId      String
-  reporterEmail  String?
-  reason         String // FRAUD_OR_SCAM, IMPERSONATION, INAPPROPRIATE_CONTENT, COPYRIGHT, HARASSMENT, OTHER
-  description    String
-  status         String    @default("PENDING") // PENDING, UNDER_REVIEW, RESOLVED, REJECTED
-  reviewedBy     String?
-  reviewedAt     DateTime?
-  resolutionNote String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id              String    @id @default(uuid())
+  creatorId       String
+  reporterEmail   String?
+  reason          String // BULLYING_AND_HARASSMENT, ILLEGAL_ACTIVITY, SEXUAL_CONTENT, HATE_SPEECH, MISLEADING_INFORMATION, SCAM_OR_FRAUD, INTELLECTUAL_PROPERTY, OTHER (older rows may hold FRAUD_OR_SCAM, IMPERSONATION, INAPPROPRIATE_CONTENT, COPYRIGHT, HARASSMENT)
+  description     String
+  evidenceLinks   String[]  @default([])
+  evidenceFileUrl String?
+  status          String    @default("PENDING") // PENDING, UNDER_REVIEW, RESOLVED, REJECTED
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  resolutionNote  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   creator CreatorProfile @relation(fields: [creatorId], references: [id], onDelete: Cascade)
 
