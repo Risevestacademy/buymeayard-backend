@@ -24,6 +24,7 @@ import { CreatorsController } from './creators.controller';
 import { CreatorsService } from './creators.service';
 import { SupportsService } from '../supports/supports.service';
 import { PaymentsService } from '../payments/payments.service';
+import { SupportAlertsService } from '../supports/support-alerts.service';
 import { Reflector } from '@nestjs/core';
 
 describe('Creators Endpoints (HTTP Integration)', () => {
@@ -287,6 +288,7 @@ describe('Creators Endpoints (HTTP Integration)', () => {
         { provide: CreatorsService, useValue: creatorsService },
         { provide: SupportsService, useValue: {} },
         { provide: PaymentsService, useValue: {} },
+        { provide: SupportAlertsService, useValue: {} },
         Reflector,
       ],
     }).compile();

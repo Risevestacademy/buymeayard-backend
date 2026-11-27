@@ -17,6 +17,8 @@ import {
   Param,
   ParseUUIDPipe,
   Query,
+  Sse,
+  MessageEvent,
   UploadedFile,
   UseInterceptors,
   ParseFilePipe,
@@ -86,6 +88,8 @@ import {
   DashboardContributionDto,
   DashboardRecentContributionsQueryDto,
 } from './dto/creator-dashboard.dto';
+import { Observable, interval, map, merge } from 'rxjs';
+import { SupportAlertsService } from '../supports/support-alerts.service';
 
 const CREATOR_UNAVAILABLE_ERRORS: ApiErrorDoc[] = [
   {
@@ -117,6 +121,7 @@ export class CreatorsController {
     private readonly creatorsService: CreatorsService,
     private readonly supportsService: SupportsService,
     private readonly paymentsService: PaymentsService,
+    private readonly supportAlerts: SupportAlertsService,
   ) {}
 
   @Public()
@@ -483,6 +488,40 @@ Payout history comes from \`GET /creators/me/payouts\`. Quick flags are also on 
     @CurrentUser('id') userId: string,
   ): Promise<DashboardBalanceDto> {
     return this.creatorsService.getDashboardBalance(userId);
+  }
+
+  /**
+   * Live gift alerts (Server-Sent Events). The creator ID comes from the
+   * session, never from the URL, so one creator can't listen to another's.
+   *
+   * The global TransformInterceptor skips SSE routes, so messages are sent
+   * as they are. NairaResponseInterceptor still converts `netAmount` to naira.
+   */
+  @Sse('me/alerts/stream')
+  @ApiBearerAuth()
+  @ApiCookieAuth('better-auth.session_token')
+  @ApiOperation({
+    summary: 'Live gift alerts (SSE)',
+    description:
+      "Opens a Server-Sent Events stream. A `gift` event is sent each time a supporter's gift is paid: `{ supportId, supporterName, materialName, yards, netAmount, message }`, with `netAmount` in naira. A `heartbeat` event is sent every 25 seconds to keep the connection open. Alerts are not stored, so a creator who is offline misses them. Use the contributions list for history.",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'An event stream (`text/event-stream`) that stays open.',
+  })
+  @ApiErrors(UNAUTHORIZED_ERROR)
+  streamGiftAlerts(
+    @CurrentUser('id') userId: string,
+  ): Observable<MessageEvent> {
+    const gifts$ = this.supportAlerts
+      .streamFor(userId)
+      .pipe(map((alert): MessageEvent => ({ type: 'gift', data: alert })));
+
+    const heartbeat$ = interval(25_000).pipe(
+      map((): MessageEvent => ({ type: 'heartbeat', data: '' })),
+    );
+
+    return merge(gifts$, heartbeat$);
   }
 
   @Get('me/analytics/earnings')
